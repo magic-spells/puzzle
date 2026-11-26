@@ -226,7 +226,7 @@ func TestLoadRejections(t *testing.T) {
 	}{
 		{"missing file", map[string]string{"en.json": `{}`}, cfg("en", "en", "es"), `lists "es", but app/locales/es.json does not exist`},
 		{"case mismatch hint", map[string]string{"en.json": `{}`, "pt-br.json": `{}`}, cfg("en", "en", "pt-BR"), "rename it to pt-BR.json"},
-		{"invalid JSON", map[string]string{"en.json": "{\n  \"a\": \"x\",\n}"}, cfg("en", "en"), "app/locales/en.json:3: invalid JSON"},
+		{"invalid JSON", map[string]string{"en.json": "{\n  \"a\": \"x\",}"}, cfg("en", "en"), "app/locales/en.json:2: invalid JSON"},
 		{"not an object", map[string]string{"en.json": `["a"]`}, cfg("en", "en"), "must be a JSON object"},
 		{"number value", map[string]string{"en.json": "{\n\"cart\": { \"count\": 3 }\n}"}, cfg("en", "en"), `app/locales/en.json:2: "cart.count": a translation must be a string`},
 		{"boolean value", map[string]string{"en.json": `{"a": true}`}, cfg("en", "en"), "got a boolean"},

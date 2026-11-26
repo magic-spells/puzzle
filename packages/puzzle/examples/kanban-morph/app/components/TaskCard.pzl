@@ -15,10 +15,6 @@
 import { PuzzleView } from '@magic-spells/puzzle';
 
 export default class TaskCard extends PuzzleView {
-  data(params, props) {
-    return { task: props.task };
-  }
-
   events = {
     down: (event) => {
       if (this.props.task.__placeholder) return;

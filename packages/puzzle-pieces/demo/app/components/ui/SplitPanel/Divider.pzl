@@ -22,7 +22,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 //   class     merged onto <split-divider>
 
 export default class SplitPanelDivider extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     return {
       disabled: props.disabled ? true : false,
       dividerClass: props.class || false,

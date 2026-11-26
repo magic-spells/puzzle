@@ -45,7 +45,7 @@ const TRIGGER =
   '[&[aria-expanded=true]_[data-chevron]]:rotate-180';
 
 export default class Trigger extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     return {
       // `false` is the compiler's omit sentinel — an enabled button renders no
       // disabled attribute at all.

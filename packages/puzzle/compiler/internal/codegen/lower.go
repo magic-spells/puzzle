@@ -2,6 +2,8 @@ package codegen
 
 import (
 	"fmt"
+	"maps"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -56,9 +58,11 @@ import (
 // same tree as TypeScript with three differences: no member guard is added (an
 // authored `?.` stays), a standard library call is `__puzzle_fn.name(…)` so the
 // shim's signatures type it (an app function is `__puzzle_app_fn("name")(…)`,
-// untyped), and a method call whose arguments hold an arrow takes
-// its receiver through `__puzzle_check_list(…)`, which gives the arrow's
-// parameters a type when the receiver is an untyped data value.
+// untyped), and a method call whose arguments hold an arrow takes its receiver,
+// and an Object global its argument, through `__puzzle_check_list(…)`, which
+// types an untyped data value as any[]: the arrow's parameters are any, and so
+// are the values `Object.values`/`entries` return (not the unknown TypeScript
+// infers from an any argument).
 
 // ---- scope ------------------------------------------------------------------
 
@@ -175,33 +179,6 @@ func (r *localRead) addField(name string) {
 	r.fields = append(r.fields, name)
 }
 
-// merge folds other into f, preserving first-read order.
-func (f *exprFacts) merge(other *exprFacts) {
-	if f == nil || other == nil {
-		return
-	}
-	for _, r := range other.roots {
-		f.addRoot(r)
-	}
-	if other.volatileRead {
-		f.volatileRead = true
-	}
-	if other.libRead {
-		f.libRead = true
-	}
-	for name, read := range other.locals {
-		dst := f.local(name)
-		for _, fl := range read.fields {
-			dst.addField(fl)
-		}
-		dst.deep = dst.deep || read.deep
-		dst.bareInCall = dst.bareInCall || read.bareInCall
-		dst.whole = dst.whole || read.whole
-		dst.opaque = dst.opaque || read.opaque
-		dst.renderRead = dst.renderRead || read.renderRead
-	}
-}
-
 // ---- the function library ---------------------------------------------------
 
 // LibraryFunctionNames is the standard function library a bare call `name(…)`
@@ -250,9 +227,9 @@ const (
 	targetCheck
 )
 
-// exprWriter receives lowered text. The render emitter only concatenates;
+// ExprWriter receives lowered text. The render emitter only concatenates;
 // puzzle check maps every authored token back to its .pzl byte offset.
-type exprWriter interface {
+type ExprWriter interface {
 	WriteString(s string)
 	WriteMapped(s string, sourceOffset int)
 }
@@ -271,7 +248,7 @@ type paramBinding struct{ name, js string }
 // lowerer lowers one expression position. It is cheap and single-use: the
 // compiler makes one per value.
 type lowerer struct {
-	w      exprWriter
+	w      ExprWriter
 	target lowerTarget
 	scope  scopeMap
 	facts  *exprFacts
@@ -293,12 +270,12 @@ type lowerer struct {
 	c *compiler
 }
 
-func newLowerer(w exprWriter, target lowerTarget, scope scopeMap, facts *exprFacts) *lowerer {
+func newLowerer(w ExprWriter, target lowerTarget, scope scopeMap, facts *exprFacts) *lowerer {
 	return &lowerer{w: w, target: target, scope: scope, facts: facts}
 }
 
 // renderLowerer returns a render-target lowerer for the compiler's current position.
-func (c *compiler) renderLowerer(w exprWriter, scope scopeMap, facts *exprFacts) *lowerer {
+func (c *compiler) renderLowerer(w ExprWriter, scope scopeMap, facts *exprFacts) *lowerer {
 	l := newLowerer(w, targetRender, scope, facts)
 	l.c = c
 	for _, site := range c.loops {
@@ -322,7 +299,6 @@ const (
 	refParam
 	refBinding
 	refEvent
-	refThis
 )
 
 // resolve reports what name refers to here and the JS it is written as.
@@ -339,11 +315,6 @@ func (l *lowerer) resolve(name string) (refKind, string) {
 	}
 	if name == "event" && l.event != "" {
 		return refEvent, l.event
-	}
-	if name == "this" {
-		// Unreachable: the parser rejects `this`, and checkTemplateExprs is the
-		// safety net. Never read it as the data field `__d.this`.
-		return refThis, "undefined"
 	}
 	return refData, "__d." + name
 }
@@ -529,10 +500,11 @@ func (l *lowerer) ident(id *expr.Identifier) {
 	}
 	switch kind {
 	case refData:
+		if l.c != nil {
+			l.c.noteImport(id)
+		}
 		l.w.WriteString("__d.")
 		l.w.WriteMapped(id.Name, id.Start.Offset)
-	case refThis:
-		l.w.WriteString(js)
 	default:
 		if js == id.Name {
 			l.w.WriteMapped(js, id.Start.Offset)
@@ -543,9 +515,8 @@ func (l *lowerer) ident(id *expr.Identifier) {
 }
 
 // verbatimChain reports whether member steps off n are written as authored,
-// with no guard: a handler's DOM event chain (§9 k) and the compiler's own
-// `ViewNode` import (the synthetic loop key). In the check target every chain
-// is written as authored.
+// with no guard: a handler's DOM event chain (§9 k). In the check target every
+// chain is written as authored.
 func (l *lowerer) verbatimChain(n expr.Node) bool {
 	if l.target == targetCheck {
 		return true
@@ -555,14 +526,8 @@ func (l *lowerer) verbatimChain(n expr.Node) bool {
 	if !ok {
 		return false
 	}
-	kind, js := l.resolve(id.Name)
-	switch kind {
-	case refEvent:
-		return true
-	case refBinding:
-		return id.Name == "ViewNode" && js == "ViewNode"
-	}
-	return false
+	kind, _ := l.resolve(id.Name)
+	return kind == refEvent
 }
 
 // chainRoot is the primary a member/call chain starts at.
@@ -629,7 +594,7 @@ func (l *lowerer) call(c *expr.Call) {
 		l.libraryCall(callee, c.Args)
 	case *expr.Global:
 		l.global(callee)
-		if callee.Namespace == "Object" && len(c.Args) > 0 && l.target != targetCheck {
+		if callee.Namespace == "Object" && len(c.Args) > 0 {
 			l.objectGlobalArgs(c.Args)
 			return
 		}
@@ -734,13 +699,20 @@ func (l *lowerer) args(args []expr.Node) {
 // defaulted to `{}`: JavaScript throws on a null or undefined argument, and a
 // missing value never throws in a template (D173 V4), so `Object.keys(x)` with
 // `x` missing is `[]`. Any other value — a string, a number, a list — reaches
-// the global unchanged. The render target only: the check target adds no
-// guards, as it adds no `?.` — and TypeScript 5.6+ reports a `??` whose left
-// side can never be nullish (`Object.keys({ a: 1 } ?? {})`, TS2869).
+// the global unchanged. The check target adds no guards, as it adds no `?.` —
+// and TypeScript 5.6+ reports a `??` whose left side can never be nullish
+// (`Object.keys({ a: 1 } ?? {})`, TS2869); it passes the first argument
+// through `__puzzle_check_list` instead, so untyped data walks as any.
 func (l *lowerer) objectGlobalArgs(args []expr.Node) {
 	l.w.WriteString("(")
-	l.logicalOperand("??", args[0], precOr)
-	l.w.WriteString(" ?? {}")
+	if l.target == targetCheck {
+		l.w.WriteString("__puzzle_check_list(")
+		l.top(args[0])
+		l.w.WriteString(")")
+	} else {
+		l.logicalOperand("??", args[0], precOr)
+		l.w.WriteString(" ?? {}")
+	}
 	for _, a := range args[1:] {
 		l.w.WriteString(", ")
 		l.top(a)
@@ -1087,7 +1059,7 @@ func (l *lowerer) handler(n expr.Node, src string, bareAsReference bool) (eventV
 		ev := l.handlerArgs(args)
 		l.writeHandler(name, args, call, eventParam, bareAsReference)
 		dataFree := len(ev.roots) == 0 && !ev.libRead
-		out := eventValue{refs: sortedKeys(ev.locals)}
+		out := eventValue{refs: slices.Sorted(maps.Keys(ev.locals))}
 		out.cacheable = len(out.refs) == 0 && dataFree
 		out.rowCacheable = len(out.refs) > 0 && dataFree
 		return out, nil
@@ -1173,22 +1145,6 @@ func (l *lowerer) writeHandler(name *expr.Identifier, args []expr.Node, call boo
 	l.event = savedEvent
 }
 
-func sortedKeys(m map[string]*localRead) []string {
-	if len(m) == 0 {
-		return nil
-	}
-	out := make([]string, 0, len(m))
-	for k := range m {
-		out = append(out, k)
-	}
-	for i := 1; i < len(out); i++ {
-		for j := i; j > 0 && out[j] < out[j-1]; j-- {
-			out[j], out[j-1] = out[j-1], out[j]
-		}
-	}
-	return out
-}
-
 // compileEvent compiles an @event attribute's value and reports its caching
 // verdicts. facts, when non-nil, collects what the value reads during render
 // (the row's `roots` mask includes handler-argument roots — D170 emission
@@ -1207,13 +1163,6 @@ func (c *compiler) compileEvent(at *parser.EventAttr, scope scopeMap, facts *exp
 
 // ---- puzzle check -----------------------------------------------------------
 
-// CheckWriter is what puzzle check writes its TypeScript into: generated text,
-// and authored text mapped to its byte offset in the .pzl source.
-type CheckWriter interface {
-	WriteString(s string)
-	WriteMapped(s string, sourceOffset int)
-}
-
 func checkScope(names map[string]bool) scopeMap {
 	out := make(scopeMap, len(names))
 	for k := range names {
@@ -1226,26 +1175,14 @@ func checkScope(names map[string]bool) scopeMap {
 // resolving names exactly as the render code does: scope holds the template
 // bindings (loop items and counters, snippet parameters), every other name
 // reads `__d`.
-func WriteCheckValue(w CheckWriter, n expr.Node, scope map[string]bool) {
+func WriteCheckValue(w ExprWriter, n expr.Node, scope map[string]bool) {
 	newLowerer(w, targetCheck, checkScope(scope), nil).value(n)
-}
-
-// WriteCheckSelectorValue preserves selector-only module references while
-// template locals and arrow parameters retain their usual lexical precedence.
-func WriteCheckSelectorValue(w CheckWriter, n expr.Node, scope map[string]bool, modules map[string]string) {
-	selection := checkScope(scope)
-	for name, ref := range modules {
-		if _, local := selection[name]; !local {
-			selection[name] = ref
-		}
-	}
-	newLowerer(w, targetCheck, selection, nil).value(n)
 }
 
 // WriteCheckEvent writes an @event value as TypeScript for puzzle check. src
 // is the authored value, for the error message of a value that is not a
 // handler form.
-func WriteCheckEvent(w CheckWriter, n expr.Node, src string, scope map[string]bool) error {
+func WriteCheckEvent(w ExprWriter, n expr.Node, src string, scope map[string]bool) error {
 	_, err := newLowerer(w, targetCheck, checkScope(scope), nil).handler(n, src, true)
 	return err
 }

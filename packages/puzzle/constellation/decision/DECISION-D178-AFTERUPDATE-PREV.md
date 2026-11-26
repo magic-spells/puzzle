@@ -12,8 +12,8 @@ connections:
 
 `afterUpdate()` is where a view syncs things Puzzle does not render (a map, a
 chart, scroll, focus) after an update that came from outside the view.
-Deciding *what* changed means comparing against the old value, and today the
-view has to stash that value on the instance itself.
+Deciding *what* changed means comparing against the old value, which the view
+would otherwise have to stash on the instance itself.
 
 ## Decision
 
@@ -31,7 +31,7 @@ afterUpdate(prev) {
   result). It leaves out `refs`, `element` and `ctx`. Type: `PrevViewState`.
 - **The snapshot is taken as each render lands**, in `#renderNowInner` (the
   one place the runtime calls the hook), and handed to the next update. Taking
-  it when an update starts would be too late: `setData()` writes the data
+  it when an update starts would be too late: `setState()` writes the data
   immediately and `refresh()` swaps props, params and route before `data()`
   runs. The mount render is snapshotted too, so the first `afterUpdate` gets a
   real `prev`.
@@ -42,7 +42,7 @@ afterUpdate(prev) {
   records keep identity across their own mutations (D170). `!==` detects a
   *different* record; to catch an edit to the same one, return the field from
   `data()` (`title: post.title`) and compare that.
-- **With an async `data()`**, a `setData` render that lands while a
+- **With an async `data()`**, a `setState` render that lands while a
   `refresh({ props })` is pending reports the prop change with the old data;
   the refresh's render then reports the data change with no prop change. Each
   change is reported exactly once. React to `prev.data`, not props, when the
@@ -64,7 +64,6 @@ afterUpdate(prev) {
 
 ## Consequences
 
-
 For a view that defines the hook: one frozen object and one shallow copy of
-its data per render. About 30 bytes gzip in every bundle. Built in PR #208;
-tests in `tests/view.test.js` and `tests/router-ancestor-transaction.test.js`.
+its data per render. Tests: `tests/view.test.js` and
+`tests/router-ancestor-transaction.test.js`.

@@ -1,6 +1,6 @@
 ---
 name: ImageZoom wrapper over image-zoom
-status: built
+status: verified
 framework: puzzle
 props:
   - name: src
@@ -37,16 +37,16 @@ notes:
       natural-size/base-scale fields in disconnectedCallback (and ideally drop a pending
       once-listener), which would make #isReady() false until the new source loads. Do NOT paper
       over it in the wrapper — per DECISION-WRAP-WEB-COMPONENTS, piece-only extras go upstream
-      first. The window is short and needs a gesture inside it, so it is not a blocker for the 0.8.0
-      piece.
+      first. The window is short and needs a gesture inside it, so it is not a blocker.
+verified_at: '2026-11-24T18:13:21.786Z'
+verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
 ---
 
-Single-file wrapper over `@magic-spells/image-zoom` 0.1.0 (0.8.0,
-feat/piece-image-zoom). Pinch-to-zoom and pan for one image: two-finger pinch,
-one-finger pan once zoomed, double-tap / double-click toggle between `min` and `max`,
-sqrt-damped rubber band past either end with an animated snap back. Nothing is ported —
-the piece renders the real `<image-zoom>` element, binds `min`/`max`, and upgrades it
-with a dynamic import in `mounted()`.
+Single-file wrapper over `@magic-spells/image-zoom` 0.1.0. Pinch-to-zoom and pan for one
+image: two-finger pinch, one-finger pan once zoomed, double-tap / double-click toggle between
+`min` and `max`, sqrt-damped rubber band past either end with an animated snap back. Nothing
+is ported — the piece renders the real `<image-zoom>` element, binds `min`/`max`, and
+upgrades it with a dynamic import in `mounted()`.
 
 Why wrap: the package is a pointer/touch state machine (a pinch and a pan handing each
 other fingers, midpoint-anchored scaling, translate clamping against the contained image
@@ -75,11 +75,15 @@ notice. Zoom returns to `min` on a swap — what a gallery wants anyway.
 
 ## Not controlled
 
+
 Zoom is the element's for the whole duration of a gesture, so there is no `scale` prop —
 a bound one would fight every pinch frame the patcher rendered through. The piece reports
-instead (`@change(scale, { translateX, translateY })`, `@zoomStart(scale)`,
-`@zoomEnd(scale)`) and hands the upgraded element out through `@ready(element)` for
-`reset()` / `zoomTo()`. Same shape as the wrapped overlays.
+instead (`@change(scale)`, `@zoomStart(scale)`, `@zoomEnd(scale)`) and hands the upgraded
+element out through `@ready(element)` for `reset()` / `zoomTo()` and the `translateX` /
+`translateY` getters. Same shape as the wrapped overlays.
+
+`@change` carries the scale only: a component `@event` forwards ONE payload (framework D16).
+Read the pan from the element's getters.
 
 ## Gotchas
 
@@ -89,9 +93,10 @@ instead (`@change(scale, { translateX, translateY })`, `@zoomStart(scale)`,
   an un-upgraded element, so the first fit's `image-zoom:change` is never missed.
 - `zoomed` / `gesturing` / `transitioning` are written BY the component; the template
   binds none of them.
-- `@import "@magic-spells/image-zoom/css" layer(components)` is REQUIRED: the overflow
-  clip, the aspect ratio, the absolute `transform-origin: 0 0` image box and the
-  `touch-action` switch that hands a one-finger swipe back to page scroll all live there.
-  Unlayered it would outrank the `aspect-*` / `rounded-*` / `bg-*` utilities on the host.
+- `@import "@magic-spells/image-zoom/css" layer(components)` is REQUIRED (`puzzle add piece`
+  prints the line): the overflow clip, the aspect ratio, the absolute `transform-origin: 0 0`
+  image box and the `touch-action` switch that hands a one-finger swipe back to page scroll
+  all live there. Unlayered it would outrank the `aspect-*` / `rounded-*` / `bg-*` utilities
+  on the host.
 - No keyboard zoom upstream — the piece is an enhancement over a normal image, never the
   only way to see detail. `label` writes `role="group"` + `aria-label` only when given.

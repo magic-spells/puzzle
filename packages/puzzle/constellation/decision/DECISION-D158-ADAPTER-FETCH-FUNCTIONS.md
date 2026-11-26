@@ -12,8 +12,8 @@ connections:
   - COMPONENT-PUZZLE-MODEL
   - DOC-SPEC
   - DOC-RELEASE-SURFACE
-verified_at: '2026-08-24T21:39:23.520Z'
-verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
+verified_at: '2026-11-24T18:05:31.213Z'
+verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
 code_refs:
   - client-runtime/datastore/adapter.js
 ---
@@ -42,7 +42,7 @@ static adapter = {
 
 | verb | called by | default | must return |
 |---|---|---|---|
-| `loadMany(fetch, options?)` | `store.loadMany`, tracked `findMany` fault (D161) | `GET endpoint?options` | array, or a `Response` |
+| `loadMany(fetch, options?)` | `store.loadMany`, tracked `findMany` fault (D161) | `GET endpoint?options` | array, `{ records, meta }` ([[DECISION-D193-SERVER-QUERIES]]), or a `Response` |
 | `loadOne(fetch, id)` | `store.loadOne`, tracked `findOne` fault | `GET endpoint/id` | record object, or a `Response` |
 | `create(fetch, record)` | `save()` on never-synced | `POST endpoint` | record with pk, nullish ("no echo"), or a `Response` |
 | `update(fetch, record)` | `save()` on synced | `PUT endpoint/pk` | same as create |
@@ -72,11 +72,9 @@ export default adapter.defaults({
 
 **Automatic fault eligibility is narrower than dispatch.** A tracked find faults only when the *model* declares server intent (its own verb function or `endpoint`); an app default supplies the dialect but does not make a local-only model server-backed. Explicit loads and writes use the full precedence.
 
-**LOADED vs EXHAUSTIVE.** Any successful no-options `loadMany` marks the type LOADED (a tracked `findMany` stops re-faulting). Only the endpoint-generated transport (endpoint declared, no model function, no dialect function for the verb) marks it EXHAUSTIVE, so a `findOne` miss owes no detail request. An authored `loadMany` may return a paginated first page; marking it exhaustive would report real records as missing.
+**LOADED vs EXHAUSTIVE.** Any successful no-options `loadMany` marks the type LOADED (a tracked `findMany` stops re-faulting), unless an `invalidate(type)` came after it was sent. Only the endpoint-generated transport (endpoint declared, no model function, no dialect function for the verb) marks it EXHAUSTIVE, so a `findOne` miss owes no detail request. An authored `loadMany` may return a paginated first page; marking it exhaustive would report real records as missing.
 
 `endpoint` is required only by a verb that needs it (per-verb "no adapter declared" error). Unknown non-function keys other than `endpoint` and D95 `mock` warn once per model in dev.
-
-Gotcha: in adapter.js, `responsePk == null && pk in body` looks unreachable after the pk guard but is not (the two read `body[pk]` separately, so an unstable getter reaches it); it protects pk-index integrity. Don't delete it.
 
 ## Alternatives
 

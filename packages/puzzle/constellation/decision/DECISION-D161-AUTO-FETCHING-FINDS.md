@@ -14,8 +14,9 @@ connections:
   - COMPONENT-SSG
   - DOC-DATASTORE
   - DOC-SPEC-DATA
-verified_at: '2026-08-24T05:28:09.597Z'
-verified_sha: 22f27a91b0f62867d3a819c30f4456c66a811a6d
+  - DECISION-D193-SERVER-QUERIES
+verified_at: '2026-11-24T18:05:31.213Z'
+verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
 code_refs:
   - client-runtime/datastore/adapter.js
   - client-runtime/datastore/store.js
@@ -58,19 +59,19 @@ An awaited `loadOne` inside `data()` loops (its own upsert notifies the subscrip
 **Relationships never fault.** `belongsTo`/`hasMany` getters use local-only lookups that record the same subscription keys — no N+1 storms.
 
 **Read state** (adapter-owned WeakMap keyed by Store; the no-adapter bundle carries none):
-- In-flight dedup by `recordKey` identity (single records) or by type (collections).
+- In-flight dedup by `recordKey` identity for single records (`_faultOne`); one `_faultMany` dedups a collection by its type and a [[DECISION-D193-SERVER-QUERIES]] query by its canonical key.
 - A never-persisted negative LRU (`MAX_ABSENT` 1000). Only a normalized 404 `PuzzleAdapterError` records absence; network/5xx/401/403/shape errors reject the run and poison nothing. Explicit `loadOne` bypasses the negative cache and clears the requested id on success.
 - Only the automatic path rejects a response whose pk differs from the requested id; explicit `loadOne` accepts it (slug endpoints).
 - The codecs unwrap a handle before keying.
-- **LOADED vs EXHAUSTIVE** (`loaded` / `complete` sets; exhaustive ⊆ loaded). Any successful no-options `loadMany` (empty array included) marks LOADED. Only the endpoint-generated REST transport marks EXHAUSTIVE, so a `findOne` miss owes no request; an authored or dialect `loadMany` may be a paginated first page. Options-bearing loads mark nothing.
+- **LOADED vs EXHAUSTIVE** (`loaded` / `complete` sets; exhaustive ⊆ loaded). Any successful no-options `loadMany` (empty array included) marks LOADED, unless an `invalidate(type)` came after it was sent. Only the endpoint-generated REST transport marks EXHAUSTIVE, so a `findOne` miss owes no request; an authored or dialect `loadMany` may be a paginated first page. Options-bearing loads mark nothing.
 
 **Removal outranks reads that predate it.** `delete()` and `destroy()` record absence stamped with the next dispatch-counter value (the D138 sequence). A response for that identity whose read was dispatched before the removal is dropped before any `_upsert` side effect; a collection load keeps its other rows and still marks the type. A read dispatched after the removal clears absence normally. Re-creating the identity clears absence and inherits the stamp as its load generation. A hydrated absence carries the lowest stamp.
 
-**The settle window is a delivery contract.** A store notification landing during a run folds into it (`_settleDirty`) and is delivered by an extra pass before commit. A run that ends without committing (superseded by a D146 prepared commit, stale, failed) hands it back through `onStoreChange()`, or the change is lost. The Store stamps notifications with a monotonic sequence; the committing pass records the sequence at its start (`_settleMark`), and a batch at or below the mark is skipped. `#commit` also stamps `Store._flushSeq` (non-zero only during `_deliverNotifications`) for a refresh that began mid-delivery, so a child woken twice by one flush skips the second (D170). The stamp is a MAX, never an assignment; it lives in core `#commit`, so adapter-free apps get it too.
+**The settle window is a delivery contract.** A store notification landing during a run folds into it (`_settleDirty`) and is delivered by an extra pass before commit. A run that ends without committing (superseded by a D146 prepared commit, stale, failed) hands it back through `onStoreChange()`, or the change is lost. The Store stamps notifications with a monotonic sequence; the committing pass records the sequence at its start (`_settleMark`), and a batch at or below the mark is skipped. Core refresh and prepare read the same `_notifySeq` before `data()` runs and `#commit` stamps it, so a view that has already read a change — mutate then `refresh()`, mutate then mount, a child woken twice by one flush (D170) — skips that batch's delivery. The stamp is a MAX, never an assignment; it lives in core `#commit`, so adapter-free apps get it too.
 
 **Staleness governs both outcomes.** The token/destroyed/leaving check that discards a superseded run's result also discards its failure — nothing reaches D145, `errorView` or committed state.
 
-**Prerender** fetches at build time through the same loop; a non-404 fault failure fails the build naming the route. Node has no page origin: an absolute `apiURL` is fetched for real; a model with no `endpoint` and no read verb never faults (seed it in `beforeMount({ store })`); an app-relative URL fails with a diagnostic naming both remedies. The seam is global `fetch`, since an authored verb can hardcode a path. Static output transfers read state (`{ v, complete, loaded, absent }`) in the data-island envelope so `mountStatic` doesn't refetch; loaded-only state is enough to emit it; an older kernel reading `complete` alone stays correct. Hybrid transfers nothing (takeover re-runs `data()`). HMR snapshots carry read state, never in-flight promises.
+**Prerender** fetches at build time through the same loop; a non-404 fault failure fails the build naming the route. Node has no page origin: an absolute `apiURL` is fetched for real; a model with no `endpoint` and no read verb never faults (seed it in `beforeMount({ store })`); an app-relative URL fails with a diagnostic naming both remedies. The seam is global `fetch`, since an authored verb can hardcode a path. Static output transfers read state (`{ v, complete, loaded, absent }`, plus `queries` when any exist) in the data-island envelope so `mountStatic` doesn't refetch; any non-empty list is enough to emit it; an older kernel reading `complete` alone stays correct. Hybrid transfers nothing (takeover re-runs `data()`). HMR snapshots carry read state, never in-flight promises.
 
 ## Gotchas
 
@@ -87,8 +88,8 @@ An awaited `loadOne` inside `data()` loops (its own upsert notifies the subscrip
 - Fetching from untracked reads (handlers) — silent work with no guaranteed subscriber.
 - Warn-and-commit at the round cap — breaks `null`-means-missing.
 - An ambient request slot on the Store, or fencing Puzzle's reentry points — post-await segments are indistinguishable from foreign code, so timers and callbacks still leak; identity attribution covers them by construction.
-- Passing the store into the hook (`data(params, props, { store })`) — a signature change everywhere, with `ctx.store` still a trap beside it.
+- Passing the store into the hook (a `store` key on `data()`'s input object) — a second way to reach one store, with `ctx.store` still a trap beside it.
 
 ## Consequences
 
-Deferred deliberately: server-side query/pagination pass-through on `findMany` (fetch-all-once per type until someone hits the wall), TTL/`reload(type)` invalidation, request cancellation.
+Deferred deliberately: TTL and other freshness timers, request cancellation. Server-side queries and pagination on `findMany` and explicit `store.invalidate()` are [[DECISION-D193-SERVER-QUERIES]]; without a `query`, `findMany` still fetches a type's whole collection once.

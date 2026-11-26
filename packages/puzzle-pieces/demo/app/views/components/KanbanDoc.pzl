@@ -110,7 +110,7 @@
           </li>
           <li>
             <kbd class="rounded border border-border bg-surface px-1.5 py-0.5 font-mono text-xs text-ink">Esc</kbd>
-            cancels a pickup (pointer drags cancel on Escape too, with no move emitted).
+            drops a held card where it is, like Space (pointer drags cancel on Escape, with no move emitted).
           </li>
         </ul>
       </section>
@@ -153,7 +153,7 @@ const installCmd = 'puzzle add piece kanban';
 const usageImport = `import Kanban from '@/components/ui/Kanban.pzl';`;
 const usageMarkup = `<Kanban columns={ columns } @move={ onMove } label="Sprint board"/>`;
 
-const codeHero = `const columns = [
+const codeHero = `const INITIAL_COLUMNS = [
   { id: 'todo', title: 'To do', cards: [
     { id: 'c1', title: 'Design empty states', badge: 'Design', assignee: 'Ada Lovelace' },
     { id: 'c2', title: 'Fix drag on Safari', badge: 'Bug', badgeVariant: 'danger', meta: 'Due Fri' },
@@ -168,20 +168,21 @@ const codeHero = `const columns = [
 
 <Kanban columns={ columns } @move={ onMove } label="Sprint board"/>
 
+created() { this.setState({ columns: INITIAL_COLUMNS }); }
+
 // toIndex is the position in the DESTINATION column AFTER the card is removed
 // from its source — remove-then-insert and you match what the user dropped on.
 events = {
   // @move forwards ONE payload object — destructure the move details from it.
   onMove: ({ cardId, toColumnId, toIndex }) => {
-    const cols = this.getData().board.map((c) => ({ ...c, cards: c.cards.slice() }));
+    const cols = this.getData().columns.map((c) => ({ ...c, cards: c.cards.slice() }));
     let card = null;
     for (const c of cols) {
       const i = c.cards.findIndex((k) => k.id === cardId);
       if (i !== -1) { card = c.cards.splice(i, 1)[0]; break; }
     }
     cols.find((c) => c.id === toColumnId).cards.splice(toIndex, 0, card);
-    this.setData({ board: cols });
-    this.refresh();
+    this.setState({ columns: cols });
   },
 };`;
 
@@ -244,10 +245,10 @@ const STATIC_BOARD = [
 
 export default class KanbanDoc extends PuzzleView {
   created() {
-    this.setData({ board: INITIAL_BOARD, lastMove: 'none' });
+    this.setState({ board: INITIAL_BOARD, lastMove: 'none' });
   }
 
-  data(params, props) {
+  data() {
     const d = this.getData();
     return {
       ...d,
@@ -290,8 +291,7 @@ export default class KanbanDoc extends PuzzleView {
       if (!dest) return;
       const at = Math.max(0, Math.min(toIndex, dest.cards.length));
       dest.cards.splice(at, 0, card);
-      this.setData({ board: cols, lastMove: `${card.title} → ${dest.title}` });
-      this.refresh();
+      this.setState({ board: cols, lastMove: `${card.title} → ${dest.title}` });
     },
   };
 }

@@ -24,9 +24,15 @@
  * - `encode(path, base)` — the write-side URL encoder (path routing: `base + path`).
  * - `readPath(base)` — the read-side URL parser, `null` = "not a route"
  *   (path routing reads `location.pathname + location.search` inline).
- * - `clickFragment(fragment, e, base, router)` — a `'#…'` href was clicked.
- * - `clickLink(url, e, base, router)` — a same-origin absolute URL was clicked;
- *   returns true when the mode owns the decision and the interceptor must stop.
+ * - `fragmentPath(fragment, base)` — the in-app path a `'#…'` href names, or
+ *   `null` (path routing leaves every `'#…'` href to the browser).
+ * - `linkPath(url, base)` — the in-app path a same-origin absolute URL names, or
+ *   `null`; present means the mode owns absolute URLs and path routing's own
+ *   base/locale rules never run.
+ *
+ * Both link seams are pure answers, never actions: the click interceptor and
+ * link prefetch (D195) ask the same question of a link, and only the click
+ * acts on the answer (preventDefault + push).
  * - `urlless` — the mode carries NO URL and takes NO document-level side effects
  *   (D42): no popstate listener, no scroll, no focus, no title/head. A urlless
  *   mode MUST also implement `start()`, `commit()`, `go()`, `clearPending()` and
@@ -34,8 +40,6 @@
  */
 
 import { normalizeRoutePath } from './routePath.js';
-
-/** @import { Router } from './router.js' */
 
 /**
  * The opaque descriptor `hashRouter()` / `memoryRouter()` return. `create()` is
@@ -50,8 +54,8 @@ import { normalizeRoutePath } from './routePath.js';
  * @typedef {object} RouterModeInstance
  * @property {(path: string, base: string) => string} encode
  * @property {(base: string) => string | null} [readPath]
- * @property {(fragment: string, e: MouseEvent, base: string, router: Router) => void} [clickFragment]
- * @property {(url: URL, e: MouseEvent, base: string, router: Router) => boolean} [clickLink]
+ * @property {(fragment: string, base: string) => string | null} [fragmentPath]
+ * @property {(url: URL, base: string) => string | null} [linkPath]
  * @property {boolean} [urlless]
  * @property {() => string} [start]
  * @property {() => void} [reset]
@@ -101,14 +105,7 @@ const hashMode = {
 	readPath(base) {
 		const hash = location.hash;
 		if (hash === '' || hash === '#') return '/';
-		if (base) {
-			if (hash === '#' + base) return '/';
-			if (hash.startsWith('#' + base + '?')) return '/' + hash.slice(1 + base.length);
-			if (hash.startsWith('#' + base + '/')) return hash.slice(1 + base.length);
-			return null; // '#/...' outside the base is a non-route fragment (D51)
-		}
-		if (hash.startsWith('#/')) return hash.slice(1);
-		return null;
+		return pathFromHash(hash, base);
 	},
 
 	/**
@@ -120,70 +117,45 @@ const hashMode = {
 		return '#' + base + path;
 	},
 
-	/**
-	 * A relative `'#…'` href: `'#/...'` IS a route here — intercept it; a bare
-	 * `'#anchor'` is still an in-page anchor and falls through to the browser.
-	 *
-	 * @param {string} fragment
-	 * @param {MouseEvent} e
-	 * @param {string} base
-	 * @param {Router} router
-	 */
-	clickFragment(fragment, e, base, router) {
-		tryHashFragment(fragment, e, base, router);
-	},
+	// A relative `'#…'` href: `'#/...'` IS a route here; a bare `'#anchor'` is
+	// still an in-page anchor and falls through to the browser. (A hoisted
+	// function declaration, so it exists when this object is built.)
+	fragmentPath: pathFromHash,
 
 	/**
 	 * A same-origin absolute URL: only a SAME-PAGE url carrying a route fragment
-	 * is an in-app navigation. A differing pathname is a real navigation away
-	 * from the app shell — never push its pathname. Either way the hash mode owns
-	 * the decision, so the interceptor stops here (returns true).
+	 * is an in-app path. A differing pathname is a real navigation away from the
+	 * app shell — never its pathname. Either way the hash mode owns the decision,
+	 * so path routing's base/locale rules never see the URL.
 	 *
 	 * @param {URL} url
-	 * @param {MouseEvent} e
 	 * @param {string} base
-	 * @param {Router} router
+	 * @returns {string | null}
 	 */
-	clickLink(url, e, base, router) {
-		if (url.pathname === location.pathname) tryHashFragment(url.hash, e, base, router);
-		return true;
+	linkPath(url, base) {
+		return url.pathname === location.pathname ? pathFromHash(url.hash, base) : null;
 	},
 };
 
 /**
- * Route a clicked fragment if it names an in-app path (D34/D51). With a base the
+ * The in-app path a hash fragment names (D34/D51), or `null`. With a base the
  * fragment must be exactly `'#' + base` (→ `'/'`), the base followed directly by
- * a query, or under `'#' + base + '/'`; base-less, any `'#/...'` is a route. A
- * bare `'#anchor'` matches nothing and is left to the browser. preventDefault is
- * called HERE, before push.
+ * a query, or under `'#' + base + '/'` (so `/app` never matches `/application`);
+ * base-less, any `'#/...'` is a route. A bare `'#'` or `'#anchor'` matches
+ * nothing. Pure — shared by hashMode.readPath, fragmentPath and linkPath.
  *
  * @param {string} fragment
- * @param {MouseEvent} e
  * @param {string} base
- * @param {Router} router
+ * @returns {string | null}
  */
-function tryHashFragment(fragment, e, base, router) {
+function pathFromHash(fragment, base) {
 	if (base) {
-		if (fragment === '#' + base) {
-			e.preventDefault();
-			router.push('/');
-			return;
-		}
-		if (fragment.startsWith('#' + base + '?')) {
-			e.preventDefault();
-			router.push('/' + fragment.slice(1 + base.length));
-			return;
-		}
-		if (fragment.startsWith('#' + base + '/')) {
-			e.preventDefault();
-			router.push(fragment.slice(1 + base.length));
-		}
-		return;
+		if (fragment === '#' + base) return '/';
+		if (fragment.startsWith('#' + base + '?')) return '/' + fragment.slice(1 + base.length);
+		if (fragment.startsWith('#' + base + '/')) return fragment.slice(1 + base.length);
+		return null; // '#/...' outside the base is a non-route fragment (D51)
 	}
-	if (fragment.startsWith('#/')) {
-		e.preventDefault();
-		router.push(fragment.slice(1));
-	}
+	return fragment.startsWith('#/') ? fragment.slice(1) : null;
 }
 
 /**

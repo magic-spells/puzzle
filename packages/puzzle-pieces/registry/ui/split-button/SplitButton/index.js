@@ -5,7 +5,7 @@
 //   <SplitButton>
 //     <SplitButton.Action variant="primary" @press={ save }>Save</SplitButton.Action>
 //     <SplitButton.Menu variant="primary" label="More save actions" @select={ run }>
-//       <SplitButton.Item value="save-as" @press={ run }>Save as…</SplitButton.Item>
+//       <SplitButton.Item value="save-as">Save as…</SplitButton.Item>
 //     </SplitButton.Menu>
 //   </SplitButton>
 //

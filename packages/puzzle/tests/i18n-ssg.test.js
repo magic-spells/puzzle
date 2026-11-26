@@ -272,7 +272,6 @@ describe('prerender with translations', () => {
 		const out = injectShell(SHELL, {
 			targetId: 'app',
 			content: '<p>x</p>',
-			title: null,
 			head: null,
 			island: island + '\\u003c/script>' + '</script>',
 		});
@@ -339,7 +338,6 @@ describe('prerender with translations', () => {
 		const plain = injectStaticShell(TRICKY_SHELL, {
 			targetId: 'app',
 			content: '<p>x</p>',
-			title: null,
 			head: null,
 			slug: 'index',
 			data: {},
@@ -368,7 +366,6 @@ describe('prerender with translations', () => {
 		const out = injectStaticShell(SHELL, {
 			targetId: 'app',
 			content: '<p>x</p>',
-			title: null,
 			head: null,
 			slug: 'index',
 			data: {},
@@ -383,7 +380,6 @@ describe('a viewer in a non-default locale', () => {
 		const html = injectStaticShell(SHELL, {
 			targetId: 'app',
 			content: pages[0].html,
-			title: null,
 			head: null,
 			slug: 'index',
 			data: pages[0].data ?? {},

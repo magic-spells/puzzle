@@ -207,6 +207,10 @@ type Options struct {
 	// — container mappings, OAuth redirect URIs, proxy configs — and silently
 	// moving to a neighbour breaks whatever depends on the number.
 	StrictPort bool
+	// Host is the address to bind (`--host`). Empty or "localhost" keeps the
+	// server on loopback; "0.0.0.0" exposes it on every interface and the
+	// banner adds the LAN URLs. See serve.ListenHost.
+	Host string
 	// Open, when true, best-effort opens the app in the default browser once
 	// the server is listening.
 	Open bool
@@ -277,7 +281,7 @@ func Serve(root string, opts Options) error {
 	// needs a second watcher). Using build.PublicDir keeps the watched dir in
 	// lockstep with the dir the copier actually reads.
 	watchDirs := []string{appDir}
-	if pub := build.PublicDir(absRoot); pub != "" && !withinDir(appDir, pub) {
+	if pub := build.PublicDir(absRoot); pub != "" && !serve.WithinDir(appDir, pub) {
 		watchDirs = append(watchDirs, pub)
 	}
 	// puzzle.config.js is watched too, but NOT to rebuild: the config is loaded
@@ -381,7 +385,7 @@ func Serve(root string, opts Options) error {
 		}
 	} else {
 		var builderErr error
-		builder, builderErr = build.NewWatchBuilder(absRoot, build.WatchOptions{Fixtures: opts.Fixtures, Splitting: splitting, I18n: cfg.I18n})
+		builder, builderErr = build.NewWatchBuilder(absRoot, build.WatchOptions{Env: cfg.Env, Fixtures: opts.Fixtures, Splitting: splitting, I18n: cfg.I18n})
 		if builderErr != nil {
 			// No incremental context: degrade fully to the non-incremental one-shot
 			// build.Build per change (slower, but correct — including its own Tailwind).
@@ -499,20 +503,11 @@ func Serve(root string, opts Options) error {
 		// with a reserved output (app.js/app.js.map/styles.css) while the server
 		// runs must surface as a visible build error, not a silent clobber.
 		endPublicValidation := prof.Phase("public validation")
-		if err := build.ValidatePublic(absRoot, splitting, cfg.I18n); err != nil {
-			endPublicValidation()
-			logBuildFailure(stderr, err)
-			message := err.Error()
-			srv.rememberBuildError(message)
-			srv.hub.broadcast(hubMessage{event: buildErrorEvent, payload: message})
-			if opts.onRebuild != nil {
-				opts.onRebuild(err)
-			}
-			return err
-		}
+		err := build.ValidatePublic(absRoot, splitting, cfg.I18n)
 		endPublicValidation()
-		var err error
 		switch {
+		case err != nil:
+			// Reported below, like any build failure.
 		case staticBuilder != nil:
 			// The real static pipeline, incrementally: persistent esbuild contexts
 			// for the app, prerender, and per-page passes, composed into a fresh
@@ -592,10 +587,6 @@ func Serve(root string, opts Options) error {
 			}
 			timer.Reset(debounceInterval)
 		}
-	} else if staticMode {
-		// The one-shot static fallback composes styles inside its own build, and
-		// runs Tailwind itself — no warm child exists to call this.
-		stylesChanged = func() { _ = rebuild(nil, false, nil) }
 	} else {
 		stylesChanged = func() {
 			if err := pl.recompose(); err != nil {
@@ -662,7 +653,7 @@ func Serve(root string, opts Options) error {
 	// dead port. A port already in use is not a failure — listenDev scans upward
 	// for a free one — but an exhausted scan still lands here.
 	endServerBind := startupProfile.Phase("server bind")
-	ln, err := serve.Listen(opts.Port, opts.StrictPort)
+	ln, err := serve.ListenHost(opts.Host, opts.Port, opts.StrictPort)
 	endServerBind()
 	if err != nil {
 		return fmt.Errorf("dev server: %w", err)
@@ -722,14 +713,14 @@ func Serve(root string, opts Options) error {
 		quitCh = keys.Listen(ctx, os.Stdin)
 	}
 
-	url := fmt.Sprintf("http://localhost:%d/", port)
+	url, network := serve.Banner(opts.Host, port)
 	outputStatus := ""
 	if staticMode {
 		outputStatus = "static (prerendered pages, no router)"
 	}
 	startupProfile.Report(os.Stderr)
 	startupReported = true
-	printReady(stdout, url, watchLabel(absRoot, appDir), stylesStatus, outputStatus, time.Since(serveStart), quitCh != nil)
+	printReady(stdout, url, network, watchLabel(absRoot, appDir), stylesStatus, outputStatus, time.Since(serveStart), quitCh != nil)
 	if opts.OnReady != nil {
 		opts.OnReady()
 	}
@@ -777,7 +768,7 @@ type server struct {
 	// so every page it serves carries the client.
 	mode     string
 	hub      *hub
-	proxies  map[string]string
+	proxies  map[string]config.Proxy
 	proxyLog io.Writer
 	// Unlike the fan-out hub, this is retained state for clients that connect
 	// after a failed build or refresh while it remains broken (D92).
@@ -788,7 +779,7 @@ type server struct {
 	ctx context.Context
 }
 
-func newServer(dist, mode string, ctx context.Context, proxies map[string]string) *server {
+func newServer(dist, mode string, ctx context.Context, proxies map[string]config.Proxy) *server {
 	return &server{dist: dist, mode: mode, hub: newHub(), proxies: proxies, proxyLog: os.Stderr, ctx: ctx}
 }
 
@@ -846,22 +837,27 @@ func (s *server) handler() http.Handler {
 	return mux
 }
 
-func (s *server) reverseProxy(prefix, targetURL string) http.Handler {
-	target, _ := url.Parse(targetURL) // validated by config.LoadConfig
+func (s *server) reverseProxy(prefix string, p config.Proxy) http.Handler {
+	target, _ := url.Parse(p.Target) // validated by config.LoadConfig
 	proxy := httputil.NewSingleHostReverseProxy(target)
 
 	// NewSingleHostReverseProxy normally prepends a path carried by the target
 	// URL. dev.proxy has no rewrite semantics, so keep the browser's path and
 	// query byte-for-byte while still letting the standard director set the
-	// backend scheme, host, and forwarding headers.
+	// backend scheme, host, and forwarding headers. The Host header stays the
+	// browser's unless the entry sets changeOrigin. WebSocket upgrades take this
+	// director too.
 	director := proxy.Director
 	proxy.Director = func(r *http.Request) {
 		requestPath, requestRawPath, requestQuery := r.URL.Path, r.URL.RawPath, r.URL.RawQuery
 		director(r)
 		r.URL.Path, r.URL.RawPath, r.URL.RawQuery = requestPath, requestRawPath, requestQuery
+		if p.ChangeOrigin {
+			r.Host = target.Host
+		}
 	}
 	proxy.ErrorHandler = func(w http.ResponseWriter, _ *http.Request, _ error) {
-		fmt.Fprintf(s.proxyLog, "proxy %s → %s refused — is the backend running?\n", prefix, targetURL)
+		fmt.Fprintf(s.proxyLog, "proxy %s → %s refused — is the backend running?\n", prefix, p.Target)
 		http.Error(w, "puzzle dev: backend unavailable", http.StatusBadGateway)
 	}
 	return proxy
@@ -1229,20 +1225,10 @@ func injectReload(html []byte) []byte {
 	return append(html, []byte("\n"+reloadScript+"\n")...)
 }
 
-// withinDir reports whether target resolves inside dir (path-traversal guard).
-// It is purely lexical — see withinDirResolved for the symlink-aware backstop.
-func withinDir(dir, target string) bool {
-	rel, err := filepath.Rel(dir, target)
-	if err != nil {
-		return false
-	}
-	return rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
-}
-
 // withinAnyDir reports whether target lies inside any of dirs.
 func withinAnyDir(dirs []string, target string) bool {
 	for _, d := range dirs {
-		if withinDir(d, target) {
+		if serve.WithinDir(d, target) {
 			return true
 		}
 	}
@@ -1318,24 +1304,6 @@ func isJunkChange(path string) bool {
 		}
 	}
 	return false
-}
-
-// withinDirResolved reports whether target, after symlink resolution, is inside
-// dir (also symlink-resolved). It backstops the lexical withinDir: a symlink
-// under dist pointing outside passes that check, but http.ServeFile would follow
-// it. Resolving dir too normalizes a symlinked prefix (e.g. macOS /tmp →
-// /private/tmp) so a legitimate in-root file is not wrongly rejected. A
-// resolution error (e.g. the path vanished) is treated as outside — fail closed.
-func withinDirResolved(dir, target string) bool {
-	realDir, err := filepath.EvalSymlinks(dir)
-	if err != nil {
-		return false
-	}
-	realTarget, err := filepath.EvalSymlinks(target)
-	if err != nil {
-		return false
-	}
-	return withinDir(realDir, realTarget)
 }
 
 // reloadCoalesceDelay collapses the double reload (esbuild rebuild + Tailwind
@@ -1558,7 +1526,7 @@ func pollFile(ctx context.Context, path string, interval time.Duration, onChange
 	}
 }
 
-func printReady(p *ui.Printer, url, watching, stylesText, outputText string, elapsed time.Duration, showQuitHint bool) {
+func printReady(p *ui.Printer, url string, network []string, watching, stylesText, outputText string, elapsed time.Duration, showQuitHint bool) {
 	fmt.Fprintln(os.Stdout)
 	fmt.Fprintf(
 		os.Stdout,
@@ -1568,6 +1536,9 @@ func printReady(p *ui.Printer, url, watching, stylesText, outputText string, ela
 		p.Bold(formatReadyMillis(elapsed)),
 	)
 	printInfoLine(p, "Local:", p.Cyan(url))
+	for _, u := range network {
+		printInfoLine(p, "Network:", p.Cyan(u))
+	}
 	printInfoLine(p, "Watching:", p.Dim(watching))
 	if stylesText != "" {
 		printInfoLine(p, "Styles:", p.Dim(stylesText))
@@ -1626,13 +1597,13 @@ func logBuildFailure(p *ui.Printer, err error) {
 // carried, not just styles. dev.proxy is the one that misleads: with no proxy
 // registered the SPA history fallback answers /api/* with index.html, so the app
 // reports a JSON parse error on "<!doctype html>" with nothing tying it back to
-// the config. Both losses are named so cause and effect connect.
+// the config. The losses are named so cause and effect connect.
 //
 // LoadConfig returns no error when there is no config file at all, so a
 // zero-config app never sees this warning.
 func configFallbackWarning(err error) string {
 	return fmt.Sprintf(
-		"%v — continuing with defaults: no Tailwind pipeline and no dev.proxy (proxied paths will fall through to the SPA shell); fix the config and restart",
+		"%v — continuing with defaults: no Tailwind pipeline, no env values and no dev.proxy (proxied paths will fall through to the SPA shell); fix the config and restart",
 		err,
 	)
 }

@@ -230,5 +230,3 @@ export function warnOnceForSpec(spec, message) {
 }
 
 function noop() {}
-
-export default playAnimation;

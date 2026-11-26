@@ -96,7 +96,9 @@ func ensureWorkTmp(absRoot string) (string, error) {
 		// whose output is otherwise correct.
 		_ = os.WriteFile(ignore, []byte(workDirGitignore), 0o644)
 	}
-	return dir, nil
+	// esbuild resolves symlinks in its working dir but not in its outdir, so an
+	// outdir under here must be the resolved spelling (macOS /tmp, /var).
+	return resolvePath(dir), nil
 }
 
 // SweepWorkDirs removes the transient directories a previous, interrupted build

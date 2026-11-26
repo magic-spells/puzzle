@@ -6,8 +6,27 @@ language: go
 summary: In-memory pzl onLoad transform, CSS collection, and diagnostics.
 connections:
   - COMPONENT-ESBUILD-PLUGIN
-verified_at: '2026-08-24T21:11:50.859Z'
-verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
+verified_at: '2026-11-24T18:02:16.140Z'
+verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
+notes:
+  - kind: state
+    text: >-
+      `ScanUsage` + `SetUsage` are the only usage entry points; `SetUsage` builds the function set
+      itself, with `escape` always present.
 ---
 
-Source binding for the owning component card. Behavioral intent stays in the connected component; this card anchors that plan to `compiler/internal/plugin/plugin.go`.
+# plugin.go
+
+The esbuild `onLoad` plugin for `*.pzl` ([[COMPONENT-ESBUILD-PLUGIN]]), all in
+memory per file: split sections → `codegen.Compile` → JS. Parse/codegen errors
+become positioned esbuild messages, and a failed file emits nothing.
+Every positioned `.pzl` plugin message uses `sourceLocation` for its code frame.
+
+- `<style>` blocks go into a mutex-guarded map (esbuild runs `onLoad`
+  concurrently) and are joined sorted by path, so `CSS()` output is deterministic.
+- `relName` falls back to the absolute path for a `.pzl` outside the app root
+  (symlinks, monorepos); callers must accept absolute paths
+  ([[FILE-BUILD-PRERENDER-PAGES]]).
+- A production SPA build compiles without the `Class.__pzlModule` stamp
+  (`SetStripStamps`): only development diagnostics and the prerender passes read
+  it. Every pass that shares one `CompileCache` must use the same setting.

@@ -24,7 +24,7 @@ const slot = () => new ViewNode(SLOT_TAG);
 const scopedMarker = (name, args) => new ViewNode(SLOT_TAG, { name, args });
 const snippet = (fits, params, fn) => new ViewNode(SNIPPET_TAG, { fits, params, fn });
 const tick = () => new Promise((r) => setTimeout(r, 0));
-// A bind write is setData + refresh(): the re-render lands on an animation frame
+// A bind write is setState + refresh(): the re-render lands on an animation frame
 // after data() re-runs, so drain both queues a few times.
 const frame = () =>
 	new Promise((r) =>
@@ -392,7 +392,7 @@ describe('router SSG takeover (M2)', () => {
 	it('trailing slash on a :param route does not leak into the capture', async () => {
 		let seenParams = null;
 		class UserView extends PuzzleView {
-			data(params) {
+			data({ params }) {
 				seenParams = params;
 				return {};
 			}
@@ -649,6 +649,35 @@ describe('router SSG takeover (M2)', () => {
 		expect(el.hasAttribute('data-puzzle-ssg')).toBe(false);
 		expect(el.querySelector('.rejecting-page')).not.toBe(null);
 		expect(el.querySelector('.rejecting-leaf')).toBe(null);
+	});
+
+	it('keeps the prerendered page when the routed data() fails at takeover, even with an errorView', async () => {
+		let failOnClient = false;
+		class Page extends PuzzleView {
+			data() {
+				if (failOnClient) throw new Error('api down');
+				return { label: 'BUILD-CONTENT' };
+			}
+			render() {
+				return h('main', { class: 'page' }, [text(this.getData().label)]);
+			}
+		}
+		class AppError extends PuzzleView {
+			render() {
+				return h('p', { class: 'app-error' }, [text('error')]);
+			}
+		}
+		const routes = [{ path: '/', name: 'page', view: Page }];
+		const { pages } = await prerender({ target: '#app', routes }, { mode: 'hybrid' });
+		const el = ssgContainer(pages[0].html);
+		const prerendered = el.innerHTML;
+		failOnClient = true;
+		const app = boot({ target: '#app', routes, routerMode: memoryRouter(), errorView: AppError, onError() {} });
+
+		await app.mount();
+
+		expect(el.innerHTML).toBe(prerendered);
+		expect(el.querySelector('.app-error')).toBe(null);
 	});
 
 	it('mounts the hybrid page when a nested component CONSTRUCTOR throws', async () => {

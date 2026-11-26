@@ -1,5 +1,5 @@
 <puzzle-view>
-  <div class={ rootClass }>
+  <div class={ rootClass } @focusout={ onFocusOut(event) }>
     {#if label}
       <label for={ triggerId } class="mb-1.5 block text-sm font-medium text-ink">{ label }</label>
     {/if}
@@ -84,7 +84,7 @@ import { parseISODate, toDate } from '../../lib/date-math.js';
 // they port later). The behavior design carries over — the WAI-ARIA date-picker
 // dialog pattern, locale-aware trigger label, auto-flip positioning, hidden form
 // input, and the opt-in trigger↔panel morph — but the code shape is Puzzle-native:
-// no custom elements, declarative @event listeners, setData/getData local state,
+// no custom elements, declarative @event listeners, setState/getData local state,
 // callback props out, and the actual month grid delegated to <Calendar/>.
 //
 //   <DatePicker value={ iso } @change={ setDate } />
@@ -147,7 +147,7 @@ import { parseISODate, toDate } from '../../lib/date-math.js';
 //     replaces only the button's INNER content — DatePicker retains the field/popover
 //     and Calendar retains its button, ARIA, grid roles, keyboard behavior, and classes.
 //     Normal markup, components, and control flow are allowed; nested
-//     <Children>/<Slot>/<Snippet> markers and `ref=` are compile errors.
+//     <Children>/<Outlet>/<Slot>/<Snippet> markers and `ref=` are compile errors.
 //     The content is stamped INSIDE the day <button>, so it must be NON-INTERACTIVE:
 //     no nested <button>, <a href>, <input>, or any other focusable control. Nesting
 //     one is invalid HTML and it breaks the grid's roving-tabindex/gridcell model
@@ -155,12 +155,11 @@ import { parseISODate, toDate } from '../../lib/date-math.js';
 //     spans, icons, dots, badges.
 //
 // CALLBACKS
-//   @change(isoValue, date)  re-emitted from Calendar on day selection; DatePicker
-//                            then closes and returns focus to the trigger. `date` is
-//                            a local-time Date.
+//   @change(isoValue)        re-emitted from Calendar on day selection; DatePicker
+//                            then closes and returns focus to the trigger.
 //   @show() / @hide()        fire on the user's open/close INTENT (trigger, Escape,
 //                            outside-click, or a committed selection) — like Dialog's
-//                            @close, so a controlled parent can flip `open`.
+//                            @hide, so a controlled parent can flip `open`.
 //
 // POSITIONING & FOCUS. Placement is decided synchronously from the trigger's viewport
 // room the moment it opens (the Calendar panel has a fixed height), so the first render
@@ -172,7 +171,7 @@ import { parseISODate, toDate } from '../../lib/date-math.js';
 // instead.) Escape closes and returns focus to the trigger — Calendar lets days-view
 // Escape bubble up to this handler, while its months/years views consume Escape to back
 // out hierarchically. Outside-click dismisses via a document pointerdown listener that
-// lives only while open.
+// lives only while open; tabbing out of the panel closes it too.
 //
 // MORPH. When `morph` is on (and motion isn't reduced) a MorphEngine animates the
 // trigger↔panel transform. The panel opens CENTERED on the trigger — horizontally and
@@ -211,7 +210,7 @@ const TRIGGER_ERROR = 'border-danger outline-danger focus-visible:outline-danger
 const PANEL_CARD =
   'absolute z-50 overflow-hidden rounded-xl border border-border bg-surface shadow-lg';
 const PANEL_DROPDOWN = 'left-0';
-const PANEL_MORPH = 'inset-x-0 mx-auto w-fit';
+const PANEL_MORPH = 'inset-x-0 mx-auto w-fit invisible';
 
 export default class DatePicker extends PuzzleView {
   created() {
@@ -221,7 +220,7 @@ export default class DatePicker extends PuzzleView {
     this._pendingRestoreFocus = true; // whether the next close returns focus to the trigger
     // Local UI state (used only in uncontrolled mode + for placement). Never returned
     // from data() as `open` when controlled — `props.open` wins there.
-    this.setData({ uncontrolledOpen: false, placement: 'bottom', morphTop: 0 });
+    this.setState({ uncontrolledOpen: false, placement: 'bottom', morphTop: 0 });
   }
 
   // Outside-click close: attached only while open (see _onOpened / _onClosed). Guarded
@@ -277,7 +276,7 @@ export default class DatePicker extends PuzzleView {
 
   // ---- render model --------------------------------------------------------
 
-  data(params, props) {
+  data({ props }) {
     const prev = this.getData();
     const open = this._effectiveOpen();
     const base = props.id || `pieces-date-picker-${this._uid}`;
@@ -317,13 +316,12 @@ export default class DatePicker extends PuzzleView {
       disabled: !!props.disabled,
       name: props.name || false,
       hiddenValue: hasValue ? value : '',
-      placement,
       rootClass: props.class || '',
       triggerClass: [TRIGGER_BASE, error ? TRIGGER_ERROR : TRIGGER_OK].join(' '),
       panelClass: this._wantMorph(props)
         ? [PANEL_CARD, PANEL_MORPH].join(' ')
         : [PANEL_CARD, PANEL_DROPDOWN, placement === 'top' ? 'bottom-full mb-1' : 'top-full mt-1'].join(' '),
-      panelStyle: this._wantMorph(props) ? `top:${prev.morphTop ?? 0}px;` : '',
+      panelStyle: this._wantMorph(props) ? `top:${prev.morphTop}px;` : '',
       // The in-panel label header restates the field label while the morph panel
       // covers it; the plain dropdown leaves the field label visible, so none.
       panelHeader: this._wantMorph(props) ? props.label || '' : '',
@@ -375,18 +373,17 @@ export default class DatePicker extends PuzzleView {
     // Stash the pre-decided side FIRST so it's in place before the parent's @show
     // handler (controlled mode) synchronously flips `open` and re-renders.
     if (this._controlled()) {
-      this.setData({ placement });
+      this.setState({ placement });
     } else {
-      this.setData({ uncontrolledOpen: true, placement });
+      this.setState({ uncontrolledOpen: true, placement });
     }
 
     const { show } = this.props;
     if (typeof show === 'function') show();
 
-    // Uncontrolled: we own `open`, so render the newly-open state ourselves.
-    // Controlled: the parent's prop flip drives the render. Either way
+    // Uncontrolled: the uncontrolledOpen write re-runs data() with the next
+    // render. Controlled: the parent's prop flip drives the render. Either way
     // _syncOpenEffects (afterUpdate) runs the open side-effects.
-    if (!this._controlled()) this.refresh();
   }
 
   _requestClose({ restoreFocus = true } = {}) {
@@ -412,15 +409,14 @@ export default class DatePicker extends PuzzleView {
       // `open` (→ _onClosed) once it has animated away.
       this._morph.hide();
     } else {
-      this.setData({ uncontrolledOpen: false });
-      this.refresh();
+      this.setState({ uncontrolledOpen: false });
     }
   }
 
   // ---- open / close side-effects (driven by the effective-open transition) --
 
   // Fires whenever effective-open actually changes, so it covers both the uncontrolled
-  // setData flip and a controlled parent flipping the prop. Mirrors Dialog's syncOpen().
+  // setState flip and a controlled parent flipping the prop. Mirrors Dialog's syncOpen().
   _syncOpenEffects() {
     const open = this._effectiveOpen();
     if (open && !this._wasOpen) {
@@ -464,7 +460,9 @@ export default class DatePicker extends PuzzleView {
       // `autofocus` already put focus on the active day cell at the pre-decided side.
       const corrected = this._measurePlacement();
       if (corrected !== this.getData().placement) {
-        this.setData({ placement: corrected });
+        this.setState({ placement: corrected });
+        // refresh() on purpose: a correction measured off the rendered panel has to
+        // paint this frame, and a setState() render would land a frame late.
         this.refresh();
       }
     });
@@ -489,7 +487,9 @@ export default class DatePicker extends PuzzleView {
     );
     top += clamped - screenTop;
 
-    this.setData({ morphTop: Math.round(top) });
+    this.setState({ morphTop: Math.round(top) });
+    // refresh() on purpose: the morph engine measures the panel next, so the
+    // new top must already be in the DOM.
     this.refresh();
   }
 
@@ -498,7 +498,7 @@ export default class DatePicker extends PuzzleView {
     // trigger `visibility:hidden` forever; stop() is a no-op on an idle engine.
     this._morph?.stop();
     document.removeEventListener('pointerdown', this._onDocPointer);
-    this.setData({ placement: 'bottom', morphTop: 0 });
+    this.setState({ placement: 'bottom', morphTop: 0 });
     if (this._pendingRestoreFocus) {
       this.element?.querySelector('[data-datepicker-trigger]')?.focus();
     }
@@ -515,8 +515,7 @@ export default class DatePicker extends PuzzleView {
       this._focusActiveCell();
     });
     engine.on('hidden', () => {
-      this.setData({ uncontrolledOpen: false });
-      this.refresh();
+      this.setState({ uncontrolledOpen: false });
     });
     return engine;
   }
@@ -546,6 +545,12 @@ export default class DatePicker extends PuzzleView {
       }
     },
 
+    // Tab out closes. A null relatedTarget (non-focusable click, re-rendered cell) is not leaving.
+    onFocusOut: (event) => {
+      const to = event.relatedTarget;
+      if (to && !this.element.contains(to)) this._requestClose({ restoreFocus: false });
+    },
+
     // Escape from the panel. Calendar's days view lets Escape bubble here (its months/years
     // views consume it to back out). Close and return focus to the trigger.
     onEscape: (event) => {
@@ -556,9 +561,9 @@ export default class DatePicker extends PuzzleView {
 
     // Calendar committed a day: forward the value up (parent owns `value`), then close and
     // return focus to the trigger.
-    onCalendarChange: (iso, date) => {
+    onCalendarChange: (iso) => {
       const { change } = this.props;
-      if (typeof change === 'function') change(iso, date);
+      if (typeof change === 'function') change(iso);
       this._requestClose({ restoreFocus: true });
     },
   };

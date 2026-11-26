@@ -1,9 +1,9 @@
 <puzzle-view>
   <figure class={ figureClass } aria-label={ label }>
-    <div class="relative shrink-0" data-plot style={ plotStyle } @pointerleave={ onLeave(event) }>
+    <div class="relative shrink-0" data-plot style={ plotStyle }>
       <svg width={ size } height={ size } class="block" aria-hidden="true">
         {#for m in marks}
-          <path d={ m.d } class={ m.class } key={ m.key } @pointermove={ onHover(m, event) } />
+          <path d={ m.d } class={ m.class } key={ m.key } @pointermove={ onHover(m, event) } @pointerleave={ onLeave } />
         {/for}
       </svg>
 
@@ -92,8 +92,6 @@ import { arcPath, formatTick } from '../../lib/chart-math.js';
 // sweep clockwise; a small pad angle (≈2px at the outer radius) opens a surface gap
 // between neighbors. Hover keeps the pointed slice at full opacity and dims the rest.
 
-let uid = 0;
-
 const GAP = 2; // px surface gap between slices (converted to a pad angle)
 
 const TIP_CLASS =
@@ -129,14 +127,13 @@ function slicePaths(cx, cy, rO, rI, a0, a1) {
 
 export default class PieChart extends PuzzleView {
   created() {
-    this._uid = ++uid;
-    this.setData({
+    this.setState({
       hoveredId: null,
       tip: { visible: false, x: 0, y: 0, flipX: false, label: '', value: '', percent: '' },
     });
   }
 
-  data(params, props) {
+  data({ props }) {
     const local = this.getData();
     const size = Number(props.size) || 240;
     const donut = props.donut !== false;
@@ -172,11 +169,9 @@ export default class PieChart extends PuzzleView {
     }
 
     const total = items.reduce((a, d) => a + d.value, 0);
-    const cx = size / 2;
-    const cy = size / 2;
-    const rOuter = size / 2;
-    const rInner = donut ? rOuter * 0.62 : 0;
-    const padAngle = items.length > 1 ? GAP / rOuter : 0;
+    const r = size / 2; // centre x, centre y and outer radius
+    const rInner = donut ? r * 0.62 : 0;
+    const padAngle = items.length > 1 ? GAP / r : 0;
 
     const marks = [];
     const legend = [];
@@ -192,12 +187,12 @@ export default class PieChart extends PuzzleView {
 
       const id = `slice-${i}`;
       const dim = hoveredId != null && hoveredId !== id;
-      const cls = `${FILL[i % 8]} transition-opacity ${dim ? 'opacity-60' : 'opacity-100'}`;
+      const cls = `${FILL[i]} transition-opacity ${dim ? 'opacity-60' : 'opacity-100'}`;
       const percent = pctStr(frac);
       const value = String(fmt(d.value));
 
       if (a1 > a0) {
-        slicePaths(cx, cy, rOuter, rInner, a0, a1).forEach((dPath, p) => {
+        slicePaths(r, r, r, rInner, a0, a1).forEach((dPath, p) => {
           marks.push({
             key: `${id}-${p}`,
             id,
@@ -214,16 +209,14 @@ export default class PieChart extends PuzzleView {
         key: `lg-${i}`,
         label: d.label,
         value,
-        swatchClass: `inline-block size-3 shrink-0 rounded-sm ${SWATCH[i % 8]}`,
+        swatchClass: `inline-block size-3 shrink-0 rounded-sm ${SWATCH[i]}`,
       });
       tableRows.push({ key: `tr-${i}`, label: d.label, value, percent });
     });
 
     const showTotal = donut && !!props.totalLabel;
 
-    const tip = local.tip || {
-      visible: false, x: 0, y: 0, flipX: false, label: '', value: '', percent: '',
-    };
+    const { tip } = local;
     const tipStyle =
       `left:${tip.x}px;top:${tip.y}px;` +
       `transform:translate(${tip.flipX ? 'calc(-100% - 14px)' : '14px'},-50%);`;
@@ -259,14 +252,12 @@ export default class PieChart extends PuzzleView {
     onHover: (mark, event) => {
       const tip = this._tipFromEvent(event, mark.tipLabel, mark.tipValue, mark.tipPercent);
       if (!tip) return;
-      this.setData({ hoveredId: mark.id, tip });
-      this.refresh();
+      this.setState({ hoveredId: mark.id, tip });
     },
 
     onLeave: () => {
       const tip = this.getData().tip;
-      this.setData({ hoveredId: null, tip: { ...tip, visible: false } });
-      this.refresh();
+      this.setState({ hoveredId: null, tip: { ...tip, visible: false } });
     },
   };
 }

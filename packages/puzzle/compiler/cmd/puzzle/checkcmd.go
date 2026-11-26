@@ -4,8 +4,11 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/magic-spells/puzzle/compiler/internal/build"
 	"github.com/magic-spells/puzzle/compiler/internal/check"
+	"github.com/magic-spells/puzzle/compiler/internal/codemod"
 	"github.com/magic-spells/puzzle/compiler/internal/ui"
+	"github.com/magic-spells/puzzle/packages/puzzle-lang/textutil"
 	"github.com/spf13/cobra"
 )
 
@@ -18,39 +21,87 @@ one for you).
 
 Each .pzl becomes a virtual file under .puzzle/check/: a lang="ts" script is
 checked as written, and every template expression is re-emitted as typed
-statements so a typo in { user.nmae } is a type error. Diagnostics are reported
-at their real .pzl line and column.
+statements. A value read from data() is untyped, so the template check catches
+an event handler missing from events, and a handler (in a lang="ts" component)
+or standard function called with the wrong number of arguments or an argument
+of a known type that does not fit — not a misspelled data field. Diagnostics
+are reported at their real .pzl line and column.
 
 A plain-JavaScript component gets its template expressions checked but its
-script body left alone — inference noise on untyped JavaScript is opt-in.`,
+script body left alone — inference noise on untyped JavaScript is opt-in.
+
+Before type-checking, check looks for code written for an older Puzzle that
+0.10 renamed (D199): the router <Slot/> (now <Outlet/>, or <Children/> in a
+component), this.setData( (now setState), positional data(params, props)
+(now data({ params, props })), and the formatters config key and
+app/formatters.js (now functions). It lists each site and stops; --fix
+rewrites them in place, then type-checks. Sites it cannot rewrite safely are
+listed for you to finish by hand.`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		dir := "."
-		if len(args) == 1 {
-			dir = args[0]
+		dir := dirArg(args)
+		fix, _ := cmd.Flags().GetBool("fix")
+		out := ui.New(os.Stdout)
+		// a CLI on the other side of a breaking release from the project's install
+		// must not rewrite or check its code.
+		if _, err := build.PairRuntime(dir); err != nil {
+			return err
 		}
-		js, _ := cmd.Flags().GetBool("js")
-		if js {
-			return fmt.Errorf("--js is not yet implemented")
+		// the upgrade pass (D199) runs first: code written for an older release
+		// would otherwise surface as type errors that do not say what changed.
+		if err := runCodemod(dir, fix, out); err != nil {
+			return err
+		}
+		if fix && !check.HasTypeScript(dir) {
+			// a fix has done its job even where the app has no TypeScript to
+			// type-check with, so that case is a note, not a failure.
+			fmt.Fprintf(os.Stdout, "%s skipped the type check: npm install -D typescript to run it\n", out.Dim("·"))
+			return nil
 		}
 		files, err := check.Run(dir)
 		if err != nil {
 			return err
 		}
-		out := ui.New(os.Stdout)
-		fmt.Fprintf(os.Stdout, "%s no type errors in %s\n", out.Green("✓"), pluralFiles(files))
+		fmt.Fprintf(os.Stdout, "%s no type errors in %d .pzl file%s\n", out.Green("✓"), files, textutil.Plural(files))
 		return nil
 	},
 }
 
-func pluralFiles(n int) string {
-	if n == 1 {
-		return "1 .pzl file"
+// runCodemod runs the 0.10 codemod over the app. a dry run with sites to
+// rewrite prints them and returns an error, so check exits non-zero before it
+// type-checks; with fix it rewrites them and reports what changed.
+func runCodemod(dir string, fix bool, out *ui.Printer) error {
+	res, err := codemod.Run(dir, fix)
+	if err != nil {
+		return err
 	}
-	return fmt.Sprintf("%d .pzl files", n)
+	if notes := codemod.Format(res.Notes); notes != "" {
+		fmt.Fprintf(os.Stdout, "%s left for you to finish (D199):\n%s", out.Yellow("!"), notes)
+	}
+	if len(res.Changes) == 0 {
+		if fix {
+			fmt.Fprintf(os.Stdout, "%s nothing to upgrade\n", out.Green("✓"))
+		}
+		return nil
+	}
+	n := len(res.Changes)
+	if fix {
+		fmt.Fprintf(os.Stdout, "%s upgraded %d site%s in %d file%s for 0.10:\n%s", out.Green("✓"), n, textutil.Plural(n), res.Files, textutil.Plural(res.Files), codemod.Format(res.Changes))
+		return nil
+	}
+	fmt.Fprint(os.Stdout, codemod.Format(res.Changes))
+	return fmt.Errorf("%d site%s written for an older Puzzle (D199) — run npx puzzle check --fix to rewrite %s", n, textutil.Plural(n), them(n))
+}
+
+// them is the pronoun for a count.
+func them(n int) string {
+	if n == 1 {
+		return "it"
+	}
+	return "them"
 }
 
 func init() {
-	checkCmd.Flags().Bool("js", false, "Also check JavaScript script bodies (not yet implemented)")
+	checkCmd.Flags().Bool("fix", false, "rewrite code written for an older Puzzle (the 0.10 renames), then type-check")
 	rootCmd.AddCommand(checkCmd)
 }

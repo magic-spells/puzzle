@@ -4,5 +4,6 @@
   "files": ["Marquee.pzl"],
   "registryDependencies": [],
   "dependencies": ["@magic-spells/scrolling-content@^2.1.0"],
+  "styles": ["@magic-spells/scrolling-content/css"],
   "targetDir": "app/components/ui"
 }

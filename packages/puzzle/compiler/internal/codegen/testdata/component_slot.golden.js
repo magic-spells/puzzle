@@ -44,4 +44,3 @@ Slots.prototype.render = function () {
     ]),
   ]);
 };
-Slots.__pzlModule = 'component_slot.pzl';

@@ -58,7 +58,7 @@
           <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[12px] text-ink">ResizeObserver</code>
           on the content watches for growth and keeps the newest message in view. Scroll up past
           the 40px band and pinning disengages: the auto-follow stops and the
-          <span class="font-medium text-ink">Jump to latest</span> pill fades in. Clicking it
+          <span class="font-medium text-ink">Jump to latest</span> pill appears. Clicking it
           smooth-scrolls to the bottom (instantly under
           <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[12px] text-ink">prefers-reduced-motion</code>)
           and re-pins.
@@ -107,16 +107,16 @@ const usageMarkup = `<ChatScroller height={ 360 } @pin={ setPinned }></ChatScrol
 
 const codeHero = `// The scroller owns scrolling; the parent owns the messages. Appending
 // while pinned auto-follows; scroll up and the "Jump to latest" pill appears.
-data() {
-  return { log: seededMessages() /* ~15 rows */ };
+created() {
+  this.setState({ log: seededMessages() /* ~15 rows */ });
 }
 events = {
   addMessage: () => {
     const log = this.getData().log.slice();
     log.push({ author: 'You', time: 'now', body: 'Sounds good!' });
-    this.setData({ log });
+    this.setState({ log });
   },
-  setPinned: (atBottom) => this.setData({ pinned: atBottom }),
+  setPinned: (atBottom) => this.setState({ pinned: atBottom }),
 };
 
 <ChatScroller height={ 360 } @pin={ setPinned }>
@@ -130,7 +130,7 @@ events = {
 const codePinning = `// "Pinned" = within 40px of the bottom. Mirror it in the parent to drive
 // UI like an unread badge.
 events = {
-  setPinned: (isPinned) => this.setData({ pinned: isPinned }),
+  setPinned: (isPinned) => this.setState({ pinned: isPinned }),
 };
 
 <ChatScroller @pin={ setPinned }> … </ChatScroller>`;
@@ -174,7 +174,7 @@ function decorate(list) {
 }
 
 export default class ChatScrollerDoc extends PuzzleView {
-  data(params, props) {
+  data() {
     const prev = this.getData();
     const log = prev && prev.log ? prev.log : SEED.slice();
     const pinned = prev && typeof prev.pinned === 'boolean' ? prev.pinned : true;
@@ -204,9 +204,9 @@ export default class ChatScrollerDoc extends PuzzleView {
       const log = this.getData().log.slice();
       const n = log.filter((m) => m.author === 'You').length + 1;
       log.push({ author: 'You', time: 'now', body: `Reply #${n} — auto-scrolled into view.` });
-      this.setData({ log });
+      this.setState({ log });
     },
-    setPinned: (isPinned) => this.setData({ pinned: isPinned }),
+    setPinned: (isPinned) => this.setState({ pinned: isPinned }),
   };
 }
 </script>

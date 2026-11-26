@@ -96,7 +96,7 @@ const codeShapes = `<Skeleton variant="text" class="w-2/3" />
 <Skeleton variant="block" class="h-12 w-full" />`;
 
 export default class SkeletonDoc extends PuzzleView {
-  data(params, props) {
+  data() {
     return {
       installCmd,
       usageImport,

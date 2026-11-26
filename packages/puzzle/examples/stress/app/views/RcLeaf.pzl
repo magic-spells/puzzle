@@ -40,12 +40,12 @@ import { intParam, sleep } from '../scenario-utils.js';
 // ---------------------------------------------------------------------------
 
 export default class RcLeaf extends PuzzleView {
-  async data(params) {
+  async data({ params }) {
     rcMetrics.dataRuns[RC_LEAF_LEVEL] += 1;
 
     // The loader. Read off the frozen route snapshot rather than location, so a
     // navigation that is still gating reads ITS OWN query and not the committed
-    // one (constellation/doc/DOC-SPEC.md §route snapshot, D47).
+    // one (constellation/doc/DOC-SPEC.md §19 route snapshot, D47).
     const delay = intParam(this.route?.query?.delay, 0, 0, 2000);
     if (delay > 0) await sleep(delay);
 

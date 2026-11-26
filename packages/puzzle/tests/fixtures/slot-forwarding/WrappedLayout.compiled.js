@@ -1,8 +1,14 @@
 
+
+
+
+
+
+        
 import { PuzzleView } from '@magic-spells/puzzle';
 import Card from './Card.pzl';
 
-// A routed layout that wraps its router-filled <Slot/> inside a component
+// A routed layout that wraps its router-filled <Outlet/> inside a component
 // invocation — the default-slot forwarding case (v1.38, D71). Pre-D71 this
 // mounted a literal lowercase slot element and the routed view never appeared.
 export default class WrappedLayout extends PuzzleView {}
@@ -18,4 +24,3 @@ WrappedLayout.prototype.render = function () {
     ]),
   ]);
 };
-WrappedLayout.__pzlModule = 'WrappedLayout.pzl';

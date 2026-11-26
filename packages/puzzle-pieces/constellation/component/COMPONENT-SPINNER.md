@@ -25,18 +25,10 @@ connections:
 notes:
   - kind: gotcha
     text: >-
-      Review fix-up (PR #146): (1) Colour classes must use tokens the 0.7 pieces.css already
-      declared — `puzzle add` never rewrites an existing theme, so spark's `from-brand-on-tint` (new
-      in 0.8) rendered transparent-to-brand in 0.7 apps; it is now `from-brand/60 to-brand`, and
-      test/loading-pieces.test.js pins the 0.7.0 --color-* list and fails on any newer token in
-      Spinner or ShimmerText. (2) Trace track is `stroke-border-strong` (border was invisible in
-      dark), and the segment is head−tail+7 with a 260ms lag so it never shrinks to a dot. (3) The
-      mod()/animation rules sit inside `@supports (width: mod(1px, 1px))`; without mod() the segment
-      falls back to a static `16 84` dash instead of a full brand outline. (4) Every root is
-      `align-middle` so all variants share one line box in running text (inline-grid/flex roots used
-      to sit low); vertical-align is ignored on flex/grid items, so flex-parent placements don't
-      move. (5) Utilities in `class` win except on properties an animation drives (dots root
-      opacity, snap root rotate).
+      Utilities in `class` win except on properties an animation drives (the dots root's opacity,
+      the snap root's rotate). Every root is `align-middle` so all variants share one line box in
+      running text; vertical-align is ignored on flex/grid items, so placements inside a flex parent
+      do not move.
 ---
 
 One file, one root: every variant is a single inline `<span role="status" aria-label>` (default label 'Loading'); the moving parts inside are aria-hidden. `ring` is the default and keeps the pre-0.8 classes byte-for-byte (plus `motion-reduce:animate-pulse`), so existing `<Spinner/>` calls are unchanged. Button's own loading ring is a separate inline span in Button.pzl and was not touched. Keyframes live in the file's `<style>` block — see [[DECISION-CSS-ONLY-MOTION]].

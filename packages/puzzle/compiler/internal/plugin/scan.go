@@ -53,7 +53,7 @@ type Usage struct {
 	HasRawAt         bool
 	HasSnippets      bool
 	HasComponentSlot bool
-	// HasConditionalSlot: a <Slot>/<Children> marker can leave and re-enter
+	// HasConditionalSlot: an <Outlet>/<Children> marker can leave and re-enter
 	// the tree (see conditionalSlot), which keeps the routed-outlet parking code.
 	HasConditionalSlot bool
 	// HasListenerOptions: some element listener carries the `passive` or
@@ -171,24 +171,13 @@ func (u Usage) Features() Features {
 // undeclared package, a pruned directory, a linked folder outside every
 // node_modules) is caught by the plugin after the pass instead: when it uses a
 // feature this build compiled out, the build fails naming the file and the
-// feature (Plugin.featureMismatches). See DOC-COMPILER-DESIGN §b.
+// feature (Plugin.featureMismatches). See DECISION-D89-FEATURE-USAGE-TREESHAKE, "What the scan reads".
 //
 // A long-lived dev builder calls UsageScanner.Scan (scanmemo.go) instead, which
 // is this same walk with a per-file memo in front of the parse; both share
 // scanFileUsage so they cannot answer differently.
 func ScanUsage(scanRoot string) (Usage, error) {
 	return NewUsageScanner().Scan(scanRoot)
-}
-
-// ScanFormatters preserves the original formatter-only API for focused callers
-// and tests. Build orchestration uses ScanUsage so every tree-shaking input is
-// refreshed together.
-func ScanFormatters(scanRoot string) (map[string]bool, error) {
-	usage, err := ScanUsage(scanRoot)
-	if err != nil {
-		return nil, err
-	}
-	return usage.Formatters, nil
 }
 
 // lazyCallRe matches a call to something NAMED lazy — `lazy(`, `lazy (`, and
@@ -380,7 +369,7 @@ func collectUsage(n parser.Node, usage *Usage, allow map[string]bool) {
 	}
 }
 
-// conditionalSlot reports whether a <Slot>/<Children> marker sits where its
+// conditionalSlot reports whether an <Outlet>/<Children> marker sits where its
 // position can leave the tree and come back: under {#if}/{#case}/{#for}, in a
 // snippet body or a marker fallback, under a <Component> selection, or under an
 // element or component carrying a `key` or a spread. under starts true for a skeleton (the

@@ -230,6 +230,63 @@ describe('save() — non-OK response', () => {
 		expect(todo._synced).toBe(false);
 		expect(store.findOne('todo', 't1')).toBe(todo);
 	});
+
+	it('an unreadable body fails the save: a 2xx is not mistaken for a 204, a 500 keeps its status', async () => {
+		// The connection drops after the headers: text() rejects.
+		const unreadable = (init) => ({
+			...makeRes(init),
+			text: async () => {
+				throw new TypeError('network error');
+			},
+		});
+		mockFetch(unreadable({ status: 201 }));
+		const store = apiStore();
+		const todo = store.createRecord('todo', { id: 't1', text: 'x' });
+
+		await expect(todo.save()).rejects.toThrow('network error');
+		expect(todo._synced).toBe(false);
+
+		mockFetch(unreadable({ ok: false, status: 500 }));
+		await expect(todo.save()).rejects.toMatchObject({ name: 'PuzzleAdapterError', status: 500 });
+		expect(todo._synced).toBe(false);
+	});
+});
+
+describe('save()/delete() — a failure nobody awaits', () => {
+	// Pins the write path's reporting: `_write` hands the caller its own derived
+	// promise, never the chain's internally handled `run`, so a fire-and-forget
+	// save or delete that fails rejects unhandled, while an awaited one is the
+	// caller's to handle.
+	it('is an unhandled rejection; an awaited one is not', async () => {
+		mockFetch({ ok: false, status: 500, statusText: 'Server Error', body: '' });
+		const store = apiStore();
+		const fresh = store.createRecord('todo', { id: 't1', text: 'x' });
+		const synced = store.upsert('todo', { id: 't2', text: 'y' });
+		const tick = () => new Promise((r) => setTimeout(r, 0));
+		// Vitest fails the run on an unhandled rejection; take its listeners off for
+		// these writes and count the reports here instead.
+		const vitestListeners = process.listeners('unhandledRejection');
+		const unhandled = [];
+		process.removeAllListeners('unhandledRejection');
+		process.on('unhandledRejection', (reason) => unhandled.push(reason));
+		try {
+			fresh.save();
+			synced.delete();
+			await tick();
+			await tick();
+			expect(unhandled.map((err) => err.status)).toEqual([500, 500]);
+
+			unhandled.length = 0;
+			await expect(fresh.save()).rejects.toMatchObject({ status: 500 });
+			await expect(synced.delete()).rejects.toMatchObject({ status: 500 });
+			await tick();
+			await tick();
+			expect(unhandled).toEqual([]);
+		} finally {
+			process.removeAllListeners('unhandledRejection');
+			for (const listener of vitestListeners) process.on('unhandledRejection', listener);
+		}
+	});
 });
 
 describe('save() — 2xx response merge', () => {

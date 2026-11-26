@@ -24,7 +24,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 import ListingCard from '@/components/ListingCard.pzl';
 
 export default class Wishlist extends PuzzleView {
-  data(params, props) {
+  data() {
     // Store query with a filter predicate (SPEC §8) — auto-subscribes to the
     // listing records, so toggling a heart re-runs this and re-renders the grid.
     const saved = this.ctx.store.findMany('listing', { filter: (l) => l.saved });

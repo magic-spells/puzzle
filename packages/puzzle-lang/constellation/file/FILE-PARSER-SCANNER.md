@@ -4,8 +4,8 @@ status: verified
 path: parser/scan.go
 language: go
 summary: Shared balanced JS-like scanner and top-level splitting helpers.
-verified_at: '2026-09-25T10:41:32.868Z'
-verified_sha: a602784a9822fa3ff63123e597f72624b3c9ffff
+verified_at: '2026-11-24T18:14:05.661Z'
+verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
 connections:
   - FILE-PARSER
   - FILE-PARSER-SECTIONS

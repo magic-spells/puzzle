@@ -186,8 +186,9 @@ The comparison is apples-to-apples by construction:
 - **Same ops** — the mutation set lives in one place so neither scenario can
   drift into doing less work than the other.
 
-Windowing follows `examples/virtual-scroll`: fixed 36px rows, a computed visible
-slice, spacer divs above and below carrying the off-window geometry, and a
+Windowing follows `examples/virtual-scroll`: fixed-height rows (36px here,
+40px there), a computed visible slice, spacer divs above and below carrying the
+off-window geometry, and a
 `@scroll` handler that only re-renders when the start bucket actually changes.
 One deliberate difference from that example: it slices a plain array held on an
 instance field, whereas this **queries real store records every render**.
@@ -329,7 +330,8 @@ driver has already opted in.
 `N` mounted views each watch a distinct record out of `M`. Two modes, differing
 by a single line inside the child's `data()`:
 
-- `precision` — `store.findOne(type, id)`, subscribing to the key `sub|<id>`
+- `precision` — `store.findOne(type, id)`, subscribing to the record key
+  `sub <id>` (type, a space, then the id)
 - `fanout` — `store.findMany(type)`, subscribing to the key `sub`
 
 The op writes to a record **outside** the watched window, then counts how many
@@ -598,11 +600,11 @@ contract is broken, and `validate()` fails), or `shellDidMutate` reading 0 —
 which would mean the churn never ran and the zero above measured nothing.
 
 No components live inside an island here, and none may: the compiler rejects a
-component, `<Children/>` or `<Slot/>` anywhere in an island subtree.
+component, `<Children/>` or `<Outlet/>` anywhere in an island subtree.
 
 ## Scenario 8 — `formatters`
 
-**Probes:** what does the built-in formatter registry cost across a large
+**Probes:** what does the built-in function registry cost across a large
 re-render, and how much of it is `Intl` construction?
 
 10,000 rows through `{ datetime(row.createdAt, 'short') }` and
@@ -615,23 +617,23 @@ questions honestly:
 - `count-intl` — the formatted arm again with `Intl` patched and the registry
   entries wrapped. Its *counts* are exact; its *milliseconds* carry the probe.
 
-Timing a wrapped formatter would add two `performance.now()` calls to each of
+Timing a wrapped function would add two `performance.now()` calls to each of
 20,000 invocations — several milliseconds of pure instrument against the thing
 being measured. That is why the share comes from the A/B, not from the wrapper.
 
-### The formatters are ~23% of the re-render, down from 91%
+### The functions are ~23% of the re-render, down from 91%
 
 Production medians, 15 iterations, no instrumentation in either arm:
 
 | arm | script | to painted frame |
 | --- | ---: | ---: |
-| `rerender` (date + timeago) | **40.8ms** | 40.8ms |
+| `rerender` (datetime + timeago) | **40.8ms** | 40.8ms |
 | `rerender-raw` (control) | **31.4ms** | 31.4ms |
-| difference — the formatters | **9.4ms** | **23%** |
+| difference — the functions | **9.4ms** | **23%** |
 
 The same tree, the same 10,000-node patch, the same records. Before
 `builtins.js` cached its Intl objects this table read **376.1ms against
-32.4ms** — the formatters were **91.4%** of the formatted arm, ten times the
+32.4ms** — the functions were **91.4%** of the formatted arm, ten times the
 cost of rendering the rows they sat in — and this A/B is the measurement that
 priced the cache. In the CDP decomposition the two arms still have identical
 layout cost (~48ms each) and diverge only in `other`, the framework's own
@@ -649,13 +651,14 @@ probe arm.
 | `Intl.DateTimeFormat` | **0** |
 | `Intl.RelativeTimeFormat` | **0** |
 
-20,000 formatter calls, zero constructions: `date()` caches its
-`Intl.DateTimeFormat` per `(locale, options)`, `timeago()` its
+20,000 function calls, zero constructions: `datetime()` caches its
+`Intl.DateTimeFormat` per `(locale, options)` (the cache it shares with `date()`
+and `time()`), `timeago()` its
 `RelativeTimeFormat` outright, both built on first use — and everything this op
 runs is already warm from the arms before it. Before the cache this table read
 **10,000 and 10,000**, exactly one construction per call. The op is now the
 cache's regression pin; `fmtFormatterCalls` staying at 20,000 is what proves
-the formatters still ran.
+the functions still ran.
 
 The `Intl` patch lives in the scenario, on `globalThis.Intl` — the runtime is not
 modified. The point is to find out what it currently does, not to change it.
@@ -664,7 +667,7 @@ modified. The point is to find out what it currently does, not to change it.
 cache has regressed, or its key has fractured), `fmtFormatterCalls` diverging
 from 20,000 (the scenario is not measuring what it thinks), or `rerender-raw`
 costing the same as `rerender` (which would mean the formatted arm never ran
-the formatters).
+the functions).
 
 ## Scenario 9 — `listener-churn`
 
@@ -690,7 +693,9 @@ not, for the shapes real Puzzle code uses. `@click={ onSelect }` compiles to
 (D62). `keyed-list`'s rows are exactly this shape, and it was measured directly
 rather than argued from the compiler output — `benchmarks/probe-listener-churn.mjs`
 patches `Element.prototype` from the DRIVER, so any scenario can be counted
-without touching the app:
+without touching the app. Measured before D170; since D170 the `inline` arm's
+child `data()` runs equal the `stable` arm's (100 and 1,000), and the listener
+columns are unchanged:
 
 | `keyed-list/update-every-10th` | child `data()` runs | `addEventListener` | `removeEventListener` |
 | --- | ---: | ---: | ---: |
@@ -699,8 +704,8 @@ without touching the app:
 | n=10,000 `handlers=inline` | 10,000 | **0** | **0** |
 | n=10,000 `handlers=stable` | 1,000 | **0** | **0** |
 
-The `inline` row at n=10,000 is the decisive one: **all 10,000 rows re-ran
-`data()` and re-rendered, and not one listener was rebound.** So the honest
+The `inline` row at n=10,000 is the decisive one: **before D170 all 10,000 rows
+re-ran `data()` and re-rendered, and not one listener was rebound.** So the honest
 first answer is that there is nothing here to optimise in idiomatic code.
 
 Churn required a data-capturing call on a DOM **element** inside a loop —
@@ -886,7 +891,7 @@ which **520 wasted (93%)**, and 520 component prop bailouts.
 
 Read this together with the counters, not instead of them. 27 renders costing
 0.25ms means each render is ~9µs, because these ancestors render one span and a
-`<Slot/>`. The finding is a **multiplier**, and what it multiplies is whatever
+`<Outlet/>`. The finding is a **multiplier**, and what it multiplies is whatever
 the app's real layouts do per render. A nav bar that formats dates or queries the
 store pays that cost `d + 2` times per navigation, ~93% of it for nothing.
 
@@ -924,13 +929,13 @@ signature of a reused route ancestor. Since the deepest ancestor renders
 Both 20/sec and 10/sec were tried and both tripped it.
 
 When this was found, the cross-frame guard **suppressed** the tripped ancestor's
-renders for 1000ms. Its `<Slot/>` stopped updating, the routed child never
+renders for 1000ms. Its `<Outlet/>` stopped updating, the routed child never
 mounted, and the tree stayed broken until the next navigation because nothing
 retries a missed mount:
 
 ```
 [puzzle perf] __PUZZLE_PERF__: stopped RcLevel4 after 60 renders in one second (98% wasted)
-[puzzle] a routed child did not mount — does the parent view template include a <Slot/>?
+[puzzle] a routed child did not mount — does the parent view template include an <Outlet/>?
 ```
 
 **That was a defect, and it is fixed.** The cross-frame guard is a heuristic
@@ -976,13 +981,13 @@ record. Ops: `rerender`, `rerender-dirty`, `type-local`, `type-store`,
 
 The two typing targets are the A/B:
 
-- `.fs-draft` — `setData('draftText', …)`. The **local** layer: re-render only,
-  `data()` never re-runs.
+- `.fs-draft` — `setState('draftText', …)`. The **local** layer: `data()` never
+  reads `draftText`, so the write re-renders only and `data()` never re-runs.
 - `.fs-bound` — `record.update({ text })`. The **model** layer: validate,
   notify, `data()`, render.
 
 `draftText` is a key `data()` deliberately never returns. If it did,
-`#recompose()`'s `{ ...#local, ...#model }` would overlay the model value on the
+`#recompose()`'s `{ ...#state, ...#derived }` would overlay the model value on the
 local one and the first store flush would erase the draft mid-typing. That
 clobber is documented in the scenario rather than counted — its interesting form
 depends on flush timing and is not deterministic.
@@ -1011,7 +1016,7 @@ be an input, and which the runner's clamp guard would rightly reject).
 | --- | ---: | ---: | ---: | ---: | ---: |
 | `rerender` (clean) | 20 | 20 | **0** | **0** | 0 |
 | `rerender-dirty` (control) | 20 | 20 | 4,000 | **4,000** | 0 |
-| `type-local` (setData) | 200 | **0** | 0 | **0** | 0 |
+| `type-local` (setState) | 200 | **0** | 0 | **0** | 0 |
 | `type-store` (record.update) | 200 | 200 | 0 | 0 | **600** |
 | `type-event` (gate) | 2 | 1 | 0 | 0 | 3 |
 
@@ -1036,7 +1041,7 @@ no-syntax escape — is not usable here: it is not a valid `<select>` attribute,
 and on the inputs it would remove the interactivity that `type-event` and
 `opValidate()` rely on. The two typing targets need no escape at all; their
 author-written `@input` handlers suppress synthesis by themselves, which is also
-what keeps `.fs-draft` on the local layer and `.fs-bound` on the model layer.
+what keeps `.fs-draft` on the state layer and `.fs-bound` on the derived layer.
 
 ### Both controlled form properties write only on a real change
 
@@ -1044,13 +1049,13 @@ what keeps `.fs-draft` on the local layer and `.fs-bound` on the model layer.
 places, and both of them now compare against the live DOM first:
 
 ```js
-// patchAttrs — the input path
-if (name === 'value' && (el.nodeName === 'INPUT' || el.nodeName === 'TEXTAREA')) {
-  if (el.value !== stringify(value)) setAttr(el, name, value);
-}
+// syncControlValue — the input/textarea path, called from patchAttrs
+if (el.value !== stringify(value, 0, ' ') &&
+    (typeof value != 'number' || el.valueAsNumber !== value))
+  setAttr(el, 'value', value, owner);
 
 // reassertSelectValue — after patchChildren, for every <select>
-const next = stringify(attrs.value);
+const next = stringify(attrs.value, 0, ' ');
 if (el.value === next) return;
 el.value = next;
 ```
@@ -1113,9 +1118,10 @@ look at what their render writes before reaching for the data layer.
 
 ### A re-render during typing does not write `value`, and nothing was pinning that
 
-There is no caret mechanism in Puzzle. `selectionStart` and `setSelectionRange`
-appear nowhere in the repo, and `document.activeElement` appears nowhere in
-`client-runtime/`. Caret safety is *emergent* from `patchAttrs`'s live-DOM
+There is no caret mechanism in Puzzle. Nothing in `client-runtime/` reads
+`selectionStart` or calls `setSelectionRange`, and its only
+`document.activeElement` reads, in the router's post-navigation focus step,
+never touch a caret. Caret safety is *emergent* from `patchAttrs`'s live-DOM
 compare: mid-keystroke the bound value already equals the live property, so
 nothing is written and the caret is never disturbed. `tests/vdom.test.js` pins
 that on a hand-built tree; nothing pinned it end to end at scale.
@@ -1317,7 +1323,7 @@ templates, so one `flip` attribute anywhere in `examples/stress` turns the defin
 true for the *whole* bundle and pulls `flip.js` into every other scenario's code.
 Measured on the production bundle, by building the identical source three ways:
 
-| build | `app.js` | `flip.js` in it |
+| build | app bundle (`app-<hash>.js`) | `flip.js` in it |
 | --- | ---: | --- |
 | before this scenario existed | 181,133 B | no |
 | with the scenario, `flip` attribute stripped | 191,031 B | no |
@@ -1496,7 +1502,7 @@ covers that directly, on the same records and the same rows. A second scenario
 would measure the same code twice.
 
 `form-state` **is now built** (scenario 11 above), and it grew past the original
-one-line plan: "`setData` throughput under a typing burst" turned out to be the
+one-line plan: "`setState` throughput under a typing burst" turned out to be the
 *cheap* half of the question. The expensive half is what the rest of the form
 pays for that keystroke.
 
@@ -1552,8 +1558,9 @@ app/
 
 `RcLayout`, `RcNode` and `RcLeaf` live in `layouts/` and `views/` rather than
 `scenarios/` because `codegen.ModeForPath` compiles only those two directories
-as views — which is what makes `<Slot/>` legal in them. Everything under
-`scenarios/` is a component.
+as views. A routed view's `<Outlet/>` belongs there; in a component, `<Outlet/>`
+draws a D199 warning and is filled by call-site content, like `<Children/>`.
+Everything under `scenarios/` is a component.
 
 Each new scenario owns its own store type (`nest`, `storm`, `fmt`, `loop`,
 `form`) so no scenario can disturb another's data. `islands` deliberately has

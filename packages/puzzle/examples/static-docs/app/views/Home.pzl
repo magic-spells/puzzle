@@ -54,24 +54,21 @@ export default class HomeView extends PuzzleView {
   // Local view state, seeded in created() — runs at build time too, so the
   // prerendered HTML shows "Clicked 0 times".
   created() {
-    this.setData({ count: 0 });
+    this.setState({ count: 0 });
   }
 
   data() {
-    // `count` is read back out for the template. On increment we setData() then
-    // refresh() so this re-runs (SPEC §4: setData alone re-renders but does not
-    // re-run data()).
+    // `count` is read back out for the template. setState() re-renders on its own
+    // (SPEC §4), and nothing here derives from count, so no refresh() is needed.
     return { count: this.getData().count };
   }
 
   events = {
     increment: () => {
-      this.setData('count', this.getData().count + 1);
-      this.refresh();
+      this.setState('count', this.getData().count + 1);
     },
     reset: () => {
-      this.setData('count', 0);
-      this.refresh();
+      this.setState('count', 0);
     },
   };
 }

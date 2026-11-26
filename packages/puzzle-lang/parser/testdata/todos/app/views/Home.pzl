@@ -3,18 +3,18 @@
     <div class="p-5 border-b border-line">
       <form class="flex items-center gap-2.5" @submit={ addTodo(event) }>
         <!-- `value={ newTodoText }` is the whole binding. `newTodoText` is a
-             bare local key, so every keystroke lands in setData() and data()
+             bare local key, so every keystroke lands in setState() and data()
              re-runs — which is what keeps the disabled= below honest. -->
         <input
           type="text"
-          class="flex-1 h-12 px-4 rounded-xl bg-ink border border-hairline text-fg placeholder-faint focus:outline-none focus:border-accent/60 focus:ring-2 focus:ring-accent/20 transition-colors"
+          class="flex-1 h-12 px-4 rounded-xl bg-page border border-hairline text-ink placeholder-faint focus:outline-none focus:border-accent/60 focus:ring-2 focus:ring-accent/20 transition-colors"
           placeholder="What needs doing?"
           value={ newTodoText }
           autofocus
         />
         <button
           type="submit"
-          class="h-12 px-5 rounded-xl bg-accent text-ink font-semibold tracking-tight hover:bg-accent-2 disabled:bg-elevated disabled:text-faint disabled:cursor-not-allowed transition-colors"
+          class="h-12 px-5 rounded-xl bg-accent text-page font-semibold tracking-tight hover:bg-accent-2 disabled:bg-elevated disabled:text-faint disabled:cursor-not-allowed transition-colors"
           disabled={ !canAdd } >
           Add
         </button>
@@ -24,34 +24,34 @@
     {#if todos.length > 0}
       <div class="grid grid-cols-3 divide-x divide-line border-b border-line">
         <div class="py-5 text-center">
-          <div class="font-mono text-2xl tabular-nums text-fg">{ activeTodos.length }</div>
-          <div class="mt-1 text-[10px] uppercase tracking-[0.22em] text-faint">active</div>
+          <div class="font-mono text-2xl tabular-nums text-ink">{ activeTodos.length }</div>
+          <div class="mt-1 text-10 uppercase tracking-label text-faint">active</div>
         </div>
         <div class="py-5 text-center">
-          <div class="font-mono text-2xl tabular-nums text-fg">{ completedTodos.length }</div>
-          <div class="mt-1 text-[10px] uppercase tracking-[0.22em] text-faint">done</div>
+          <div class="font-mono text-2xl tabular-nums text-ink">{ completedTodos.length }</div>
+          <div class="mt-1 text-10 uppercase tracking-label text-faint">done</div>
         </div>
         <div class="py-5 text-center">
-          <div class="font-mono text-2xl tabular-nums text-fg">{ todos.length }</div>
-          <div class="mt-1 text-[10px] uppercase tracking-[0.22em] text-faint">total</div>
+          <div class="font-mono text-2xl tabular-nums text-ink">{ todos.length }</div>
+          <div class="mt-1 text-10 uppercase tracking-label text-faint">total</div>
         </div>
       </div>
 
       <div class="flex border-b border-line px-2">
         <button
-          class="relative flex-1 py-3.5 text-sm font-medium transition-colors {#if currentFilter === 'all'}text-accent{/if}{#if currentFilter !== 'all'}text-muted hover:text-fg{/if}"
+          class="relative flex-1 py-3.5 text-sm font-medium transition-colors {#if currentFilter === 'all'}text-accent{/if}{#if currentFilter !== 'all'}text-muted hover:text-ink{/if}"
           @click={ setFilter('all') }>
           All
           {#if currentFilter === 'all'}<span class="absolute inset-x-3 bottom-0 h-0.5 rounded-full bg-accent"></span>{/if}
         </button>
         <button
-          class="relative flex-1 py-3.5 text-sm font-medium transition-colors {#if currentFilter === 'active'}text-accent{/if}{#if currentFilter !== 'active'}text-muted hover:text-fg{/if}"
+          class="relative flex-1 py-3.5 text-sm font-medium transition-colors {#if currentFilter === 'active'}text-accent{/if}{#if currentFilter !== 'active'}text-muted hover:text-ink{/if}"
           @click={ setFilter('active') } >
           Active
           {#if currentFilter === 'active'}<span class="absolute inset-x-3 bottom-0 h-0.5 rounded-full bg-accent"></span>{/if}
         </button>
         <button
-          class="relative flex-1 py-3.5 text-sm font-medium transition-colors {#if currentFilter === 'completed'}text-accent{/if}{#if currentFilter !== 'completed'}text-muted hover:text-fg{/if}"
+          class="relative flex-1 py-3.5 text-sm font-medium transition-colors {#if currentFilter === 'completed'}text-accent{/if}{#if currentFilter !== 'completed'}text-muted hover:text-ink{/if}"
           @click={ setFilter('completed') } >
           Completed
           {#if currentFilter === 'completed'}<span class="absolute inset-x-3 bottom-0 h-0.5 rounded-full bg-accent"></span>{/if}
@@ -66,7 +66,7 @@
 
       <div class="p-5 flex flex-col sm:flex-row gap-2.5 justify-center">
         {#if completedTodos.length > 0}
-          <button class="px-4 py-2.5 rounded-xl border border-hairline text-muted hover:text-fg hover:border-white/20 text-sm font-medium transition-colors" @click={ clearCompleted }>
+          <button class="px-4 py-2.5 rounded-xl border border-hairline text-muted hover:text-ink hover:border-white/20 text-sm font-medium transition-colors" @click={ clearCompleted }>
             Clear completed ({ completedTodos.length })
           </button>
         {/if}
@@ -80,7 +80,7 @@
     {:else}
       <div class="py-16 px-8 text-center">
         <div class="text-4xl mb-4 opacity-40 grayscale">📝</div>
-        <h3 class="font-display text-2xl text-fg mb-1">Nothing here yet</h3>
+        <h3 class="font-display text-2xl text-ink mb-1">Nothing here yet</h3>
         <p class="text-sm text-muted">Add your first todo above to get started.</p>
       </div>
     {/if}
@@ -100,14 +100,14 @@ export default class TodoHome extends PuzzleView {
 
   // runs one time when object is created, before data() runs
   created() {
-    this.setData({
+    this.setState({
       newTodoText: '',
       currentFilter: 'all'
     });
   }
 
   // data() defines component model - runs on mount and when subscribed store data changes
-  data(params, props) {
+  data() {
     const store = this.ctx.store;
     const localData = this.getData();
 
@@ -152,7 +152,7 @@ export default class TodoHome extends PuzzleView {
       if (text) {
         const store = this.ctx.store;
         store.createRecord('todo', { text });
-        this.setData('newTodoText', '');
+        this.setState('newTodoText', '');
       }
     },
 
@@ -160,13 +160,9 @@ export default class TodoHome extends PuzzleView {
       todo.destroy();
     },
 
-    setFilter: (filter) => {
-      this.setData('currentFilter', filter);
-      // filteredTodos is derived in data(); setData() alone does not re-run
-      // data() (SPEC §4), so refresh() re-runs it to recompute the filtered
-      // list from the just-updated currentFilter.
-      this.refresh();
-    },
+    // filteredTodos is derived in data() from currentFilter, so this write
+    // re-runs data() before the next render (SPEC §4).
+    setFilter: (filter) => this.setState('currentFilter', filter),
 
     clearCompleted: () => {
       if (confirm('Clear all completed todos?')) {
@@ -186,12 +182,6 @@ export default class TodoHome extends PuzzleView {
   // Component lifecycle
   mounted() {
     console.log('Todo app mounted!');
-
-    // Focus the input when component mounts
-    const input = this.element.querySelector('input[type="text"]');
-    if (input) {
-      input.focus();
-    }
   }
 
   beforeUpdate() {

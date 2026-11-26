@@ -122,7 +122,7 @@ const codeBoth = `// orientation="both" scrolls on both axes with a thumb on eac
 </ScrollArea>`;
 
 export default class ScrollAreaDoc extends PuzzleView {
-  data(params, props) {
+  data() {
     return {
       ...this.getData(),
       installCmd,

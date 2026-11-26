@@ -6,8 +6,17 @@ language: javascript
 summary: Route compilation, guards, navigation, commit, transitions, scroll, and SSG takeover.
 connections:
   - COMPONENT-ROUTER
-verified_at: '2026-08-24T21:39:15.808Z'
-verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
+  - FILE-ROUTE-NAMES
+verified_at: '2026-11-24T18:13:21.008Z'
+verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
 ---
 
-Source binding for the owning component card. Behavioral intent stays in the connected component; this card anchors that plan to `client-runtime/router/router.js`.
+# router.js
+
+The `Router` class: route compilation, guards, load-then-commit navigation, transitions, scroll, and SSG/hybrid takeover. Behavior lives on [[COMPONENT-ROUTER]].
+
+- The nested-tree flatten is delegated to `routeTree.js` ([[FILE-ROUTE-TREE]]) and `router.views` plus the `agent` checks to `routeViews.js` ([[FILE-ROUTE-VIEWS]]). Named targets (`{ name, params }`) are resolved to a path by `routeNames.js` ([[FILE-ROUTE-NAMES]], D196) at the top of `url()`, `push()`, `replace()`, `prefetch()` and a guard's redirect verdict.
+- Link prefetch ([[DECISION-D195-LINK-PREFETCH]]) lives in the sibling `prefetch.js`, imported behind the `__PUZZLE_HAS_LAZY__` probe so an app without `lazy()` drops it; the router hands it `#linkPath` and its own `#prefetch(path, explicit)` loader, and `router.prefetch(target)` (a path or a named target) is the public form ([[COMPONENT-ROUTER]] owns the rules).
+- Route-path shape (`isDynamicSegment`, path canonicalization) lives in the sibling `routePath.js`, which `modes.js`, `ssg/assemble.js` and `ssg/index.js` also import, so the browser Router and the Node prerender agree on a path's spelling ([[DECISION-D126-PATH-SHAPE-AND-OUTPUT-OWNERSHIP]]).
+- It also exports pure URL helpers (`encodeURL`, `normalizeBase`, `localeBase`, `linkLocale`, `pathLocale`) that `ssg/assemble.js`, `ssg/index.js`, `static/index.js` and `i18n.js` import. So the module must stay importable under Node (no DOM access at module load) and must have no module-level side effects: a class static block, for example, would keep the whole `Router` in every `output: 'static'` bundle.
+- Development checks (`warnShadowedPaths`, `checkAgentRoutes`) run inside a `__PUZZLE_DEV__` block in the constructor so production drops them.

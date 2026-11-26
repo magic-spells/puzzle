@@ -125,7 +125,7 @@ function parseBody(body) {
 }
 
 export default class PostDetailView extends PuzzleView {
-  async data(params, props) {
+  async data({ params }) {
     // Skeleton view — join the memoized seed, then read synchronously.
     await seedStore(this.ctx.store);
 

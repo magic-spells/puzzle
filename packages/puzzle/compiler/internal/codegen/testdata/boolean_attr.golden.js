@@ -24,4 +24,3 @@ BooleanAttr.prototype.render = function () {
     ]),
   ]);
 };
-BooleanAttr.__pzlModule = 'boolean_attr.pzl';

@@ -3,7 +3,7 @@
     <h1 class="mb-3 text-4xl text-ink">Notes on building Puzzle</h1>
     <p class="max-w-[34rem] mx-auto mb-6 text-body text-[1.05rem]">
       A running blog about the framework itself — single-file components, the Go
-      compiler, the formatter system, and the reactive data layer.
+      compiler, the function library, and the reactive data layer.
     </p>
     <Button variant="primary" @press={ goToPosts }>Browse all posts</Button>
   </section>
@@ -37,7 +37,7 @@ export default class HomeView extends PuzzleView {
   // and the view commits only once every read came up warm (D161). So an empty
   // `recentPosts` here means the blog has no posts, not that they are on the
   // way — the {:else} branch says exactly that.
-  data(params, props) {
+  data() {
     const posts = this.ctx.store.findMany('post');
     // Just the three newest posts — no position-tagging needed. The template
     // loops with `{#for post in recentPosts, i}` (D29, v1.2), so PostCard gets

@@ -18,36 +18,23 @@ func (p *Plugin) SetRuntimeDir(dir string) {
 	p.runtimeDir = dir
 }
 
-// SetFormatters stores the app-wide built-in formatter union used by the
-// virtual manifest. escape is always present as the safety default.
-func (p *Plugin) SetFormatters(used map[string]bool) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
-	p.setFormattersLocked(used)
-}
-
-// SetUsage stores every build-wide usage bit discovered by ScanUsage. Formatter
-// manifest behavior stays identical; the booleans feed esbuild's literal DCE
-// defines.
+// SetUsage stores every build-wide usage bit discovered by ScanUsage: the
+// built-in function union for the virtual manifest (escape is always present as
+// the safety default) and the booleans that feed esbuild's literal DCE defines.
 func (p *Plugin) SetUsage(usage Usage) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	p.setFormattersLocked(usage.Formatters)
-	p.features = usage.Features()
-	p.usageSet = true
-	p.scanned = usage.PZLFiles
-}
-
-func (p *Plugin) setFormattersLocked(used map[string]bool) {
 	next := map[string]bool{"escape": true}
-	for name, ok := range used {
+	for name, ok := range usage.Formatters {
 		if ok {
 			next[name] = true
 		}
 	}
 	p.formatters = next
+	p.features = usage.Features()
+	p.usageSet = true
+	p.scanned = usage.PZLFiles
 }
 
 // Features returns the DCE define bits captured by the most recent SetUsage

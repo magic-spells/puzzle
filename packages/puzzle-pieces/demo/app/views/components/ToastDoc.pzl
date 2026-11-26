@@ -97,6 +97,7 @@ toast({ title: 'Sticky', message: 'This one stays until dismissed.', duration: 0
 clearToasts();`;
 
 const setupCode = `// app/layouts/AppLayout.pzl — mount the host once, near the root
+import Toaster from '@/components/ui/Toaster.pzl';
 <Toaster position="bottom-right" />
 
 // then, from any view or module
@@ -104,7 +105,7 @@ import { toast } from '@/components/ui/toast.js';
 toast('Saved!');`;
 
 export default class ToastDoc extends PuzzleView {
-  data(params, props) {
+  data() {
     return {
       installCmd,
       usageImport,

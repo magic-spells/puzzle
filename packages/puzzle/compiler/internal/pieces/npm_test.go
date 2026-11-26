@@ -173,24 +173,6 @@ func TestSortVersionsIsNumericNotLexicographic(t *testing.T) {
 	}
 }
 
-func TestSelectFallbackVersion(t *testing.T) {
-	published := []string{"0.4.0", "0.5.0", "0.5.3", "0.5.10", "0.6.0-rc.1", "0.7.0", "bogus"}
-	if got := selectFallbackVersion(published, "0.6.0"); got != "0.5.10" {
-		t.Errorf("selectFallbackVersion(…, 0.6.0) = %q, want 0.5.10 (newest lower minor, numerically)", got)
-	}
-	// A prerelease on the CLI's own line is not a release, so it is not a
-	// fallback candidate either.
-	if got := selectFallbackVersion(published, "0.6.9"); got != "0.5.10" {
-		t.Errorf("selectFallbackVersion ignoring prereleases = %q, want 0.5.10", got)
-	}
-	if got := selectFallbackVersion(published, "0.4.0"); got != "" {
-		t.Errorf("selectFallbackVersion with nothing older = %q, want \"\"", got)
-	}
-	if got := selectFallbackVersion(published, "nope"); got != "" {
-		t.Errorf("selectFallbackVersion with an unparseable CLI version = %q, want \"\"", got)
-	}
-}
-
 // An error message must not dump hundreds of releases. The newest n survive, and
 // the truncation is visible.
 func TestNewestPublished(t *testing.T) {
@@ -412,65 +394,6 @@ func TestNpmFetcherHonorsPin(t *testing.T) {
 	}
 }
 
-// A fresh compiler whose own pieces minor is not published yet is the ordinary
-// state right after a release, not a user error: resolution falls back to the
-// newest OLDER release and says which one, instead of failing every zero-config
-// `puzzle add piece`.
-func TestNpmFetcherFallsBackToNewestOlderRelease(t *testing.T) {
-	srv := fakeNpm(t, map[string]map[string]string{
-		"0.4.0":      {"package/registry/registry.json": `{"v":"0.4.0"}`},
-		"0.5.2":      {"package/registry/registry.json": `{"v":"0.5.2"}`},
-		"0.5.10":     {"package/registry/registry.json": `{"v":"0.5.10"}`},
-		"0.6.0-rc.1": {"package/registry/registry.json": `{"v":"0.6.0-rc.1"}`},
-	})
-	defer srv.Close()
-	f := newTestNpmFetcher(srv.URL, "0.6.0", "")
-	var notice bytes.Buffer
-	f.notice = &notice
-
-	data, err := f.Fetch("registry.json")
-	if err != nil {
-		t.Fatalf("Fetch(registry.json) returned error: %v", err)
-	}
-	// 0.5.10, not 0.5.2 — the fallback is chosen numerically, and the 0.6.0
-	// prerelease is never auto-selected.
-	if got := string(data); got != `{"v":"0.5.10"}` {
-		t.Errorf("Fetch(registry.json) = %q, want the newest older release 0.5.10", got)
-	}
-	if want := npmScheme + defaultNpmPackage + "@0.5.10"; f.Source() != want {
-		t.Errorf("Source() = %q, want %q — the lock must record what was actually fetched", f.Source(), want)
-	}
-	for _, want := range []string{"0.6.0", "0.5.10"} {
-		if !strings.Contains(notice.String(), want) {
-			t.Errorf("fallback notice %q does not name %q", notice.String(), want)
-		}
-	}
-}
-
-// An exact major.minor match still wins outright: the fallback never competes
-// with the lockstep release.
-func TestNpmFetcherPrefersExactMinorOverFallback(t *testing.T) {
-	srv := fakeNpm(t, map[string]map[string]string{
-		"0.5.10": {"package/registry/registry.json": `{"v":"0.5.10"}`},
-		"0.6.1":  {"package/registry/registry.json": `{"v":"0.6.1"}`},
-	})
-	defer srv.Close()
-	f := newTestNpmFetcher(srv.URL, "0.6.0", "")
-	var notice bytes.Buffer
-	f.notice = &notice
-
-	data, err := f.Fetch("registry.json")
-	if err != nil {
-		t.Fatalf("Fetch(registry.json) returned error: %v", err)
-	}
-	if got := string(data); got != `{"v":"0.6.1"}` {
-		t.Errorf("Fetch(registry.json) = %q, want the lockstep 0.6.1", got)
-	}
-	if notice.Len() != 0 {
-		t.Errorf("an exact match must print no fallback notice, got %q", notice.String())
-	}
-}
-
 // No release shares the CLI's major.minor: the error must name the boundary it
 // needs AND everything that is actually published.
 func TestNpmFetcherNoMatchNamesTheBoundary(t *testing.T) {
@@ -545,5 +468,36 @@ func TestAddThroughNpmFetcherRecordsProvenance(t *testing.T) {
 	}
 	if lock.Puzzle != version.Version {
 		t.Errorf("lock puzzle = %q, want %q", lock.Puzzle, version.Version)
+	}
+}
+
+// A 0.10 CLI with only pieces 0.9.0 published stops before writing anything,
+// for `add piece` and `add theme` alike, naming what it needs and the overrides
+// that work.
+func TestAddRefusesPiecesAcrossBreakingRelease(t *testing.T) {
+	srv := fakeNpm(t, map[string]map[string]string{
+		"0.9.0": {
+			"package/registry/registry.json":        `{"version":1,"pieces":[{"name":"button","files":["Button.pzl"]}]}`,
+			"package/registry/ui/button/Button.pzl": "<button><Slot/></button>",
+			"package/registry/theme/pieces.css":     "/* puzzle-pieces design tokens */",
+		},
+	})
+	defer srv.Close()
+
+	app := t.TempDir()
+	_, pieceErr := Add(Options{AppRoot: app, Names: []string{"button"}, Fetcher: newTestNpmFetcher(srv.URL, "0.10.0", "")})
+	_, themeErr := AddThemes(ThemeOptions{AppRoot: app, Names: []string{"default"}, Fetcher: newTestNpmFetcher(srv.URL, "0.10.0", "")})
+	for _, err := range []error{pieceErr, themeErr} {
+		if err == nil {
+			t.Fatal("a 0.10.0 CLI with only pieces 0.9.0 published = nil error, want a refusal")
+		}
+		for _, want := range []string{"puzzle 0.10.0", "need 0.10.x", "published: 0.9.0", "--registry", "PUZZLE_PIECES_REGISTRY"} {
+			if !strings.Contains(err.Error(), want) {
+				t.Errorf("error %q does not mention %q", err, want)
+			}
+		}
+	}
+	if entries, _ := os.ReadDir(app); len(entries) != 0 {
+		t.Errorf("a refused add wrote %d entries into the app, want none", len(entries))
 	}
 }

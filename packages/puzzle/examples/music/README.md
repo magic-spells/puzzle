@@ -26,24 +26,26 @@ puzzle build                     # production build → dist/
 ./puzzle build examples/music
 ```
 
-Because the app runs in **hash mode**, the built `dist/` hosts on any static
-host — GitHub Pages, S3, `file://` — with **zero rewrite rules**: the route
-rides in `location.hash` (`…/index.html#/album/x`), so the server only ever
-serves `index.html` and the flat seed JSON next to it.
+Because the app runs in **hash mode**, the built `dist/`, served from a domain
+root, hosts on any static host (GitHub Pages, S3) with **zero rewrite
+rules**: the route rides in `location.hash` (`…/index.html#/album/x`), so the
+server only ever serves `index.html`, its script and stylesheet, and the flat
+seed JSON next to it. It still needs a server: opened from `file://`, the app
+cannot load its module or fetch the seed JSON.
 
 ## What it showcases
 
 | Feature in the app | Framework surface |
 | --- | --- |
 | Route in `location.hash`, static-host friendly | **Hash routing** — `routerMode: hashRouter()`, imported from `@magic-spells/puzzle/router-modes` (SPEC §15, D34/D159) |
-| Links are written path-shaped (`{ link('/album/' + album.id) }`) and the function emits the mode-appropriate href, so switching `routerMode` needs no template changes | **Built-in `link` function** (D79) |
-| Home / Artist / Album paint a skeleton, then swap in real data | **Skeleton loading** — `<puzzle-skeleton>` + async `data()` (SPEC §16, D39); the store itself is seeded in the app's `beforeMount` hook (SPEC §30, D60) |
+| Links are written path-shaped (`{ link('/artist/' + artist.id) }`) or as named targets (`{ link({ name: 'album', params: { id: album.id } }) }`), and the function emits the mode-appropriate href, so switching `routerMode` needs no template changes | **Built-in `link` function** (D79) |
+| Home / Artist / Album paint a skeleton, then swap in real data | **Skeleton loading** — `<puzzle-skeleton>` + async `data()` (SPEC §16, D39); the store itself is seeded in the app's `beforeMount` hook (SPEC §34, D66) |
 | Icon set picks its glyph by name; repeat button picks its icon by mode | **`{#case}` / `{:when}`** multi-branch (D37) |
 | Time-of-day greeting on Home (night / morning / afternoon / evening) | **`{:else if}` chaining** (D40) |
 | AlbumCard's hover play button plays without following the card link | **Event modifiers** `@click:prevent:stop` (D38) |
 | Search clears on Escape; playlist title saves on Enter / cancels on Escape | **Key-filter modifiers** `@keydown:escape`, `@keydown:enter` (D38) |
 | Full-screen player slides up over the shell; views cross-fade on nav | **View + layout transition animations** (sequential, one animator per swap; SPEC §12, D28) |
-| Artist "Info" button grows into a centered dialog and flies back on close (back/forward too); Queue button morphs into the modal queue | **Shared-element morph** — router-driven `enableMorph` + `data-puzzle-morph` over a nested route, plus a hand-driven `MorphEngine` for the local-state queue (SPEC §12, D55) |
+| Artist "Info" button grows into a centered dialog and flies back on close (back/forward too); Queue button morphs into the modal queue | **Shared-element morph** — router-driven `enableMorph` + `data-puzzle-morph` over a nested route, plus a hand-driven `MorphEngine` for the local-state queue (SPEC §37, D55) |
 | Album / artist card grids cascade in; equalizer bars ripple | **Per-instance staggered enters** via `get animations()` + a `delay` keyed on the loop counter |
 | `{#for track in tracks, i}`, `{#for 1...5, i}` | **Loop counters** (D29) |
 | Player, toast, and playlists live only in the store (never fetched) | **Local-only store records** — no adapter, created at boot |
@@ -71,7 +73,7 @@ enableMorph(app);           // pairs data-puzzle-morph elements across route swa
 
 `/artist/:id` gains an overlay **child route** (`{ path: 'info', view:
 ArtistInfoDialog }`), so pushing it keeps `Artist.pzl` mounted and swaps the
-dialog into its `<Slot/>` — the button survives for the router to morph into the
+dialog into its `<Outlet/>` — the button survives for the router to morph into the
 dialog and, on close, fly back home. Because it's route-driven, the **browser
 back button morphs too**, and `/artist/:id/info` is a real deep link (the initial
 navigation renders the dialog plain — nothing to morph from yet). The dialog is a
@@ -114,7 +116,7 @@ dependency — an app that imports none of these paths bundles none of it.
 
 ```
 app/
-├── app.js              # PuzzleApp config (hash mode, formatters) + parallel seed in beforeMount (D60)
+├── app.js              # PuzzleApp config (hash mode, functions) + parallel seed in beforeMount (D66)
 ├── routes.js           # 8 top-level routes across two layouts (AppLayout vs PlayerLayout); /artist/:id nests the info overlay
 ├── storage.js          # localStorage load/save (one key: puzzle-sounds/v1)
 ├── models/
@@ -130,8 +132,8 @@ app/
 │   └── PlayerLayout.pzl# full-screen player chrome (a layout SWAP away from AppLayout)
 ├── views/
 │   ├── Library.pzl     # Home: greeting, quick picks, recently played, artist/album grids
-│   ├── Artist.pzl      # header glow, popular tracks, album grid; "Info" morph button + <Slot/>
-│   ├── ArtistIndexChild.pzl # empty index leaf for /artist/:id (fills the Slot when no dialog)
+│   ├── Artist.pzl      # header glow, popular tracks, album grid; "Info" morph button + <Outlet/>
+│   ├── ArtistIndexChild.pzl # empty index leaf for /artist/:id (fills the Outlet when no dialog)
 │   ├── ArtistInfoDialog.pzl # /artist/:id/info overlay: router-morphed dialog (D55)
 │   ├── Album.pzl       # header glow, track list
 │   ├── Playlist.pzl    # header glow, inline rename, remove/delete

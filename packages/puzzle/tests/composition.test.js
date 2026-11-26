@@ -7,7 +7,7 @@ import { PuzzleModel, Puzzle } from '../client-runtime/model.js';
 
 // Hand-written stand-ins for what the compiler emits (SPEC §4): render()
 // returns a ViewNode tree, a component vnode is `new ViewNode(Class, props,
-// slotChildren)`, and a `<Children/>`/`<Slot/>` becomes `new ViewNode(SLOT_TAG)`.
+// slotChildren)`, and a `<Children/>`/`<Outlet/>` becomes `new ViewNode(SLOT_TAG)`.
 const h = (tag, attrs = {}, children = []) => new ViewNode(tag, attrs, children);
 const text = (value) => new ViewNode('text', { value });
 const comp = (Class, props = {}, children = []) => new ViewNode(Class, props, children);
@@ -30,7 +30,7 @@ class Todo extends PuzzleModel {
 
 describe('composition — inline rendering (D20)', () => {
 	class Label extends PuzzleView {
-		data(params, props) {
+		data({ props }) {
 			return { label: props.label };
 		}
 		render() {
@@ -58,7 +58,7 @@ describe('composition — inline rendering (D20)', () => {
 
 describe('composition — prop reactivity (APP_ANATOMY §4)', () => {
 	class Label extends PuzzleView {
-		data(params, props) {
+		data({ props }) {
 			return { label: props.label };
 		}
 		render() {
@@ -68,7 +68,7 @@ describe('composition — prop reactivity (APP_ANATOMY §4)', () => {
 
 	class Host extends PuzzleView {
 		created() {
-			this.setData({ label: 'a', tick: 0 });
+			this.setState({ label: 'a', tick: 0 });
 		}
 		data() {
 			const d = this.getData();
@@ -87,7 +87,7 @@ describe('composition — prop reactivity (APP_ANATOMY §4)', () => {
 		expect(el.querySelector('.child').textContent).toBe('a');
 		expect(dataSpy).toHaveBeenCalledTimes(1);
 
-		host.setData('label', 'b');
+		host.setState('label', 'b');
 		host.flushUpdates();
 		expect(el.querySelector('.child').textContent).toBe('b');
 		expect(dataSpy).toHaveBeenCalledTimes(2);
@@ -101,7 +101,7 @@ describe('composition — prop reactivity (APP_ANATOMY §4)', () => {
 		expect(dataSpy).toHaveBeenCalledTimes(1);
 
 		// parent re-renders (tick changes) but the child's label prop is stable
-		host.setData('tick', 1);
+		host.setState('tick', 1);
 		host.flushUpdates();
 		expect(el.firstChild.firstChild.textContent).toBe('1'); // parent did re-render
 		expect(dataSpy).toHaveBeenCalledTimes(1); // child untouched
@@ -131,7 +131,7 @@ describe('composition — child removal tears down (APP_ANATOMY §4)', () => {
 
 	class Host extends PuzzleView {
 		created() {
-			this.setData({ show: true });
+			this.setState({ show: true });
 		}
 		data() {
 			return { show: this.getData().show };
@@ -148,7 +148,7 @@ describe('composition — child removal tears down (APP_ANATOMY §4)', () => {
 		expect(el.querySelector('.sub')).not.toBeNull();
 
 		const renderSpy = vi.spyOn(child, 'render');
-		host.setData('show', false);
+		host.setState('show', false);
 		host.flushUpdates();
 
 		expect(el.querySelector('.sub')).toBeNull();
@@ -176,7 +176,7 @@ describe('composition — child removal tears down (APP_ANATOMY §4)', () => {
 		}
 		class Wrap extends PuzzleView {
 			created() {
-				this.setData({ show: true });
+				this.setState({ show: true });
 			}
 			data() {
 				return { show: this.getData().show };
@@ -193,7 +193,7 @@ describe('composition — child removal tears down (APP_ANATOMY §4)', () => {
 		expect(el.querySelector('.leaf')).not.toBeNull();
 		expect(store.keysBySubscriber.size).toBeGreaterThan(0);
 
-		host.setData('show', false);
+		host.setState('show', false);
 		host.flushUpdates();
 
 		expect(el.querySelector('.leaf')).toBeNull();
@@ -208,7 +208,7 @@ describe('composition — keyed component list (APP_ANATOMY §4)', () => {
 		created() {
 			instances[this.props.id] = this;
 		}
-		data(params, props) {
+		data({ props }) {
 			return { id: props.id };
 		}
 		render() {
@@ -218,7 +218,7 @@ describe('composition — keyed component list (APP_ANATOMY §4)', () => {
 
 	class Host extends PuzzleView {
 		created() {
-			this.setData({ order: ['a', 'b', 'c'] });
+			this.setState({ order: ['a', 'b', 'c'] });
 		}
 		data() {
 			return { order: this.getData().order };
@@ -237,7 +237,7 @@ describe('composition — keyed component list (APP_ANATOMY §4)', () => {
 		const [instA, instB, instC] = ['a', 'b', 'c'].map((k) => instances[k]);
 		const [elA, elB, elC] = before;
 
-		host.setData('order', ['c', 'a', 'b']);
+		host.setState('order', ['c', 'a', 'b']);
 		host.flushUpdates();
 
 		const after = [...el.querySelectorAll('li')];
@@ -329,7 +329,7 @@ describe('composition — pre-first-commit slot-update guard (APP_ANATOMY §4, D
 
 		class Host extends PuzzleView {
 			created() {
-				this.setData({ tick: 0, slotText: 'first' });
+				this.setState({ tick: 0, slotText: 'first' });
 			}
 			data() {
 				const d = this.getData();
@@ -355,7 +355,7 @@ describe('composition — pre-first-commit slot-update guard (APP_ANATOMY §4, D
 
 		// parent re-renders with NEW slot content while the child's data() is pending;
 		// props stay shallow-equal ({}), so this is exactly the slot-only branch
-		host.setData({ tick: 1, slotText: 'second' });
+		host.setState({ tick: 1, slotText: 'second' });
 		host.flushUpdates();
 
 		expect(el.querySelector('.tick').textContent).toBe('1'); // parent DID re-render
@@ -405,7 +405,7 @@ describe('composition — replacing a settled async-data component (stale anchor
 		}
 		class Host extends PuzzleView {
 			created() {
-				this.setData({ which: 'alpha' });
+				this.setState({ which: 'alpha' });
 			}
 			data() {
 				return { which: this.getData().which };
@@ -433,7 +433,7 @@ describe('composition — replacing a settled async-data component (stale anchor
 		// reference must resolve from Alpha's LIVE root, not the now-detached comment
 		// anchor that mountComponent cached. Pre-fix this threw NotFoundError and emptied
 		// the container.
-		host.setData({ which: 'beta' });
+		host.setState({ which: 'beta' });
 		host.flushUpdates();
 
 		expect(errSpy).not.toHaveBeenCalled();

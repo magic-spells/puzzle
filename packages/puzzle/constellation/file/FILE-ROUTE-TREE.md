@@ -7,23 +7,12 @@ summary: The single source of the nested-routes → per-leaf flatten both the Ro
 connections:
   - COMPONENT-ROUTER
   - COMPONENT-SSG
-verified_at: '2026-08-24T21:11:50.859Z'
-verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
+verified_at: '2026-11-24T18:13:21.008Z'
+verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
 ---
 
 # routeTree.js
 
-The one implementation of the nested-routes → per-leaf flatten. The Router
-(compiling each leaf into a matcher entry) and the SSG prerenderer (enumerating
-pages to emit) must walk `children` by the **same** rules — same leaf set, same
-composed paths — or a navigable route fails to prerender, or a prerendered page
-never matches. It owns `joinPath` (an index child `''` composes to the parent
-path; otherwise a single-`/` join with the parent's trailing slash trimmed) and
-the depth-first per-leaf walk; each consumer keeps its own concerns (chain
-validation + regex compilation vs. inherited-layout extraction) inside the
-`makeLeaf` callback it passes in.
+The one nested-routes → per-leaf flatten (`walkRouteTree`, `joinPath`). The Router (its matcher table) and the SSG prerenderer (`enumerateRoutes`) both walk `children` through it, so they agree on the leaf set and composed paths — otherwise a navigable route fails to prerender, or a prerendered page never matches. Each consumer keeps its own work (chain validation and regex compilation vs. inherited-layout extraction) inside the `makeLeaf` callback it passes in.
 
-DOM-free and import-free, so it runs unchanged in the browser bundle and under
-Node's prerender pass. `tests/route-tree-shared.test.js` has a drift guard
-asserting SSG enumeration and the router table agree — never fork this logic
-back into either consumer.
+DOM-free and import-free, so it runs in the browser bundle and under Node. `tests/route-tree-shared.test.js` asserts that SSG enumeration and the router table agree — never fork the walk back into either consumer.

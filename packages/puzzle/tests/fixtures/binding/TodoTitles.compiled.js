@@ -1,4 +1,8 @@
 
+
+
+
+        
 import { PuzzleView } from '@magic-spells/puzzle';
 
 // A sibling view subscribed to the same records RecordForm binds: its data()
@@ -25,4 +29,3 @@ TodoTitles.prototype.render = function () {
     ]),
   ]);
 };
-TodoTitles.__pzlModule = 'TodoTitles.pzl';

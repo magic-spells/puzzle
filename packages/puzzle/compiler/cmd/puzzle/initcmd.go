@@ -17,9 +17,13 @@ import (
 // registered here (not in main.go) so the three CLI commands can live in
 // separate files; rootCmd is the package-level command in main.go.
 var initCmd = &cobra.Command{
-	Use:   "init <app-name>",
-	Short: "Scaffold a new Puzzle application",
-	Long: `Create a new Puzzle app in <parent>/<app-name>.
+	Use:     "init [app-name]",
+	Aliases: []string{"create"},
+	Short:   "Scaffold a new Puzzle application",
+	Long: `Create a new Puzzle app. The argument is the app's directory: a bare name
+(my-app) creates ./my-app, and a path (../apps/my-app) creates the app in that
+parent directory, the way create-vite does. Its last segment is the app name.
+puzzle create is the same command.
 
 The target directory must not already exist and be non-empty. The app name
 becomes an npm package name, so it must be lowercase letters, digits and
@@ -28,22 +32,36 @@ hyphens, starting with a letter.
 With no argument, prompts for the app name when run interactively (a TTY); in
 scripts and CI the argument is required. When interactive, --template and
 --typescript are also prompted for unless the flag was passed explicitly; in
-scripts and CI the flag defaults are used silently and nothing is prompted.`,
+scripts and CI the flag defaults are used silently and nothing is prompted.
+--yes (-y) skips every prompt on a TTY too and takes the defaults, so the app
+name must then be given.
+
+The older --dir <parent> flag still works as a hidden compatibility alias (to
+be deprecated in a later release): pass the path positionally instead. When
+both are given, the positional path is resolved against --dir (puzzle init foo
+--dir apps creates apps/foo); an absolute positional path together with --dir
+is an error.`,
 	// MaximumNArgs(1), not ExactArgs(1): the name may be omitted and prompted
 	// for interactively (see RunE). Zero args on a non-TTY still errors (D32
 	// scriptability — puzzle init must stay non-interactive under pipes/CI).
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		// Interactive means a real terminal on stdin. Every prompt below is gated
-		// on this exact check so a non-TTY (pipe, CI, `< /dev/null`) stays fully
-		// non-interactive: it never prompts, never hangs on stdin, and falls back
-		// to args/flag defaults (D32: init is non-interactive by contract except
-		// for these opt-in TTY prompts).
-		interactive := ui.IsTerminal(os.Stdin)
+		// Interactive means a real terminal on stdin, and no --yes. Every prompt
+		// below is gated on this exact check so a non-TTY (pipe, CI,
+		// `< /dev/null`) stays fully non-interactive: it never prompts, never
+		// hangs on stdin, and falls back to args/flag defaults (D32: init is
+		// non-interactive by contract except for these opt-in TTY prompts).
+		yes, _ := cmd.Flags().GetBool("yes")
+		interactive := ui.IsTerminal(os.Stdin) && !yes
 
+		dir, _ := cmd.Flags().GetString("dir")
 		var appName string
 		if len(args) == 1 {
-			appName = args[0]
+			parent, name, err := initTarget(args[0], dir)
+			if err != nil {
+				return err
+			}
+			dir, appName = parent, name
 		} else if interactive {
 			name, perr := promptAppName(os.Stdin, os.Stdout)
 			if perr != nil {
@@ -57,7 +75,6 @@ scripts and CI the flag defaults are used silently and nothing is prompted.`,
 		}
 
 		template, _ := cmd.Flags().GetString("template")
-		dir, _ := cmd.Flags().GetString("dir")
 		typescript, _ := cmd.Flags().GetBool("typescript")
 
 		// On a TTY, prompt for any question whose flag was not passed explicitly.
@@ -79,7 +96,7 @@ scripts and CI the flag defaults are used silently and nothing is prompted.`,
 		}
 
 		if !scaffold.ValidTemplate(template) {
-			return fmt.Errorf("invalid --template %q (available: %s)", template, strings.Join(scaffold.Templates, ", "))
+			return fmt.Errorf("invalid --template %q (available: %s)", template, strings.Join(scaffold.TemplateNames(), ", "))
 		}
 
 		// --typescript (D54) scaffolds the template's TypeScript variant: .pzl
@@ -110,11 +127,32 @@ scripts and CI the flag defaults are used silently and nothing is prompted.`,
 }
 
 func init() {
-	initCmd.Flags().String("template", scaffold.DefaultTemplate,
-		fmt.Sprintf("Starter template (%s)", strings.Join(scaffold.Templates, "|")))
-	initCmd.Flags().String("dir", "", "Parent directory to create the app in (default: current directory)")
+	initCmd.Flags().StringP("template", "t", scaffold.DefaultTemplate,
+		fmt.Sprintf("Starter template (%s)", strings.Join(scaffold.TemplateNames(), "|")))
+	// Hidden compatibility alias for the pre-path spelling (no notice in 0.10.x;
+	// to be deprecated in a later release). The positional path replaces it.
+	initCmd.Flags().String("dir", "", "Parent directory to create the app in (compatibility alias: pass a path as the argument)")
+	_ = initCmd.Flags().MarkHidden("dir")
+	initCmd.Flags().BoolP("yes", "y", false, "Skip the prompts and take the defaults (the app name is then required)")
 	initCmd.Flags().Bool("typescript", false, "Scaffold a TypeScript app: <script lang=\"ts\"> components, .ts modules, a strict tsconfig.json, and an npm run check script (puzzle check)")
 	rootCmd.AddCommand(initCmd)
+}
+
+// initTarget splits init's positional argument into the parent directory and
+// app name, create-vite style: the last path segment is the name and the rest is
+// the parent. The hidden --dir alias, when given, is the base a relative argument
+// resolves against, so the pre-path spelling `puzzle init foo --dir apps` keeps
+// meaning apps/foo; an absolute argument alongside --dir is ambiguous and
+// refused. The name itself is validated later by scaffold.Create.
+func initTarget(arg, dirFlag string) (parent, name string, err error) {
+	if strings.TrimSpace(arg) == "" {
+		return "", "", fmt.Errorf("app name required (usage: puzzle init <app-name>)")
+	}
+	if dirFlag != "" && filepath.IsAbs(arg) {
+		return "", "", fmt.Errorf("%s is an absolute path — drop --dir %s, or pass a relative path", arg, dirFlag)
+	}
+	target := filepath.Clean(filepath.Join(dirFlag, arg))
+	return filepath.Dir(target), filepath.Base(target), nil
 }
 
 // promptAppName reads an app name from r, re-prompting until it passes
@@ -141,25 +179,30 @@ func promptAppName(r io.Reader, w io.Writer) (string, error) {
 	}
 }
 
-// promptTemplate reads a template choice from r, re-prompting until it names a
-// known template (scaffold.Templates). Empty input selects scaffold.DefaultTemplate,
-// so pressing Enter keeps the same default the --template flag carries. Invalid
-// input prints the accepted set and loops; EOF / a read error ends the loop with
-// an error so a closed stdin never hangs (mirroring promptAppName). Reader/Writer
-// so tests can drive it with plain buffers.
+// promptTemplate lists the templates, one line each, then reads a choice from r,
+// re-prompting until it names a known template (scaffold.Templates). Empty
+// input selects scaffold.DefaultTemplate, so pressing Enter keeps the same
+// default the --template flag carries. Invalid input prints the accepted set
+// and loops; EOF / a read error ends the loop with an error so a closed stdin
+// never hangs (mirroring promptAppName). Reader/Writer so tests can drive it
+// with plain buffers.
 func promptTemplate(r io.Reader, w io.Writer) (string, error) {
+	names := scaffold.TemplateNames()
+	for _, t := range scaffold.Templates {
+		fmt.Fprintf(w, "    %-8s %s\n", t.Name, t.About)
+	}
 	scanner := bufio.NewScanner(r)
 	for {
-		fmt.Fprintf(w, "  Template (%s) [%s] › ", strings.Join(scaffold.Templates, "/"), scaffold.DefaultTemplate)
+		fmt.Fprintf(w, "  Template (%s) [%s] › ", strings.Join(names, "/"), scaffold.DefaultTemplate)
 		if !scanner.Scan() {
-			return "", fmt.Errorf("template required (usage: puzzle init --template <%s>)", strings.Join(scaffold.Templates, "|"))
+			return "", fmt.Errorf("template required (usage: puzzle init --template <%s>)", strings.Join(names, "|"))
 		}
 		choice := strings.TrimSpace(scanner.Text())
 		if choice == "" {
 			return scaffold.DefaultTemplate, nil
 		}
 		if !scaffold.ValidTemplate(choice) {
-			fmt.Fprintf(w, "  invalid template %q (available: %s)\n", choice, strings.Join(scaffold.Templates, ", "))
+			fmt.Fprintf(w, "  invalid template %q (available: %s)\n", choice, strings.Join(names, ", "))
 			continue
 		}
 		return choice, nil
@@ -222,6 +265,11 @@ func printInitSummary(out *ui.Printer, appName, template string, res *Result, ty
 	fmt.Fprintf(os.Stdout, "    %s %s\n", out.Dim("$"), "npm run dev")
 	if typescript {
 		fmt.Fprintf(os.Stdout, "    %s %s\n", out.Dim("$"), "npm run check")
+	}
+	// a static site is HTML pages: build them, then serve dist/ as a host would
+	if template == "static" {
+		fmt.Fprintf(os.Stdout, "    %s %s\n", out.Dim("$"), "npm run build")
+		fmt.Fprintf(os.Stdout, "    %s %s\n", out.Dim("$"), "npm run preview")
 	}
 	fmt.Fprintln(os.Stdout)
 }

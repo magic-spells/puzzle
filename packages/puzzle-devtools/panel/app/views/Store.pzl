@@ -13,7 +13,7 @@
 
     <div slot="first" class="h-full flex flex-col min-h-0 overflow-hidden border-r border-line bg-surface">
       <header class="shrink-0 flex items-center gap-2 min-h-8 px-2 py-1.5 border-b border-line">
-        <span class="font-mono text-[10px] font-semibold uppercase tracking-wider text-faint">Types</span>
+        <span class="font-mono text-10 font-semibold uppercase tracking-wider text-faint">Types</span>
         <button
           type="button"
           title="Re-request snapshot:records"
@@ -22,25 +22,25 @@
       </header>
 
       {#if error}
-        <p class="m-0 px-2 py-1 font-mono text-[10px] text-danger break-all">{ error }</p>
+        <p class="m-0 px-2 py-1 font-mono text-10 text-danger break-all">{ error }</p>
       {/if}
 
       <div class="flex-1 min-h-0 overflow-auto">
         {#if types.length === 0}
-          <p class="m-0 px-2 py-2 text-[11px] text-faint">No record types.</p>
+          <p class="m-0 px-2 py-2 text-11 text-faint">No record types.</p>
         {:else}
           <ul class="m-0 p-0 list-none">
             {#for type in types}
               <li key={ type.id }>
                 <div
                   data-type="{ type.id }"
-                  class="flex items-center gap-1.5 min-h-[22px] px-2 py-0.5 cursor-default { type.rowClass }"
+                  class="flex items-center gap-1.5 min-h-5.5 px-2 py-0.5 cursor-default { type.rowClass }"
                   @click={ selectType(type.id) }>
-                  <span class="font-mono text-[12px] truncate { type.nameClass }">{ type.id }</span>
+                  <span class="font-mono truncate { type.nameClass }">{ type.id }</span>
                   {#if type.dirty}
-                    <span class="font-mono text-[10px] text-warn" title="a flush named this type">•</span>
+                    <span class="font-mono text-10 text-warn" title="a flush named this type">•</span>
                   {/if}
-                  <span class="ml-auto font-mono text-[11px] tabular-nums text-faint">{ type.count }</span>
+                  <span class="ml-auto font-mono text-11 tabular-nums text-faint">{ type.count }</span>
                 </div>
               </li>
             {/for}
@@ -54,10 +54,10 @@
         <Empty description="Select a record type to browse its rows." class="py-8! px-4!" />
       {:else}
         <header class="shrink-0 flex items-baseline gap-2 min-h-9 px-3 py-2 leading-relaxed border-b border-line bg-surface">
-          <span class="font-mono text-[12px] font-semibold text-ink">{ activeType }</span>
-          <span class="font-mono text-[10px] tabular-nums text-faint">{ rowCount } rows</span>
+          <span class="font-mono font-semibold text-ink">{ activeType }</span>
+          <span class="font-mono text-10 tabular-nums text-faint">{ rowCount } rows</span>
           {#if hiddenColumns}
-            <span class="font-mono text-[10px] text-faint">+{ hiddenColumns } more columns in detail</span>
+            <span class="font-mono text-10 text-faint">+{ hiddenColumns } more columns in detail</span>
           {/if}
         </header>
 
@@ -71,11 +71,11 @@
                   {#for column in columns}
                     <th
                       key={ column }
-                      class="px-2 py-0.5 border-b border-line font-mono text-[10px] font-semibold uppercase tracking-wide text-faint whitespace-nowrap">
+                      class="px-2 py-0.5 border-b border-line font-mono text-10 font-semibold uppercase tracking-wide text-faint whitespace-nowrap">
                       { column }
                     </th>
                   {/for}
-                  <th class="px-2 py-0.5 border-b border-line font-mono text-[10px] font-semibold uppercase tracking-wide text-faint">sync</th>
+                  <th class="px-2 py-0.5 border-b border-line font-mono text-10 font-semibold uppercase tracking-wide text-faint">sync</th>
                 </tr>
               </thead>
               <tbody>
@@ -89,14 +89,14 @@
                       <td
                         key={ cell.label }
                         title="{ cell.full }"
-                        class="max-w-[16rem] truncate px-2 py-1 border-b border-line font-mono text-[11px] { cell.cls }">
+                        class="max-w-64 truncate px-2 py-1 border-b border-line font-mono text-11 { cell.cls }">
                         { cell.value }
                       </td>
                     {/for}
                     <td class="px-2 py-1 border-b border-line">
                       <Badge
                         variant={ row.syncedVariant }
-                        class="px-1! py-0! font-mono text-[9px]! uppercase tracking-wide">{ row.syncedLabel }</Badge>
+                        class="px-1! py-0! font-mono text-9! uppercase tracking-wide">{ row.syncedLabel }</Badge>
                     </td>
                   </tr>
                 {/for}
@@ -106,10 +106,10 @@
         </div>
 
         {#if hasDetail}
-          <section class="shrink-0 max-h-[55%] flex flex-col min-h-0 border-t border-line bg-surface">
+          <section class="shrink-0 max-h-11/20 flex flex-col min-h-0 border-t border-line bg-surface">
             <header class="shrink-0 flex items-baseline gap-2 min-h-8 px-3 py-1.5 leading-relaxed border-b border-line">
-              <span class="shrink-0 font-mono text-[11px] font-semibold text-ink">{ activeType } · { detailId }</span>
-              <span class="min-w-0 truncate text-[10px] text-muted">edits go through the app's real record.update()</span>
+              <span class="shrink-0 font-mono text-11 font-semibold text-ink">{ activeType } · { detailId }</span>
+              <span class="min-w-0 truncate text-10 text-muted">edits go through the app's real record.update()</span>
               <CopyButton
                 value={ recordJson }
                 size="sm"
@@ -117,30 +117,30 @@
               <button
                 type="button"
                 data-apply="1"
-                class="rounded border border-line bg-raised px-1.5 font-mono text-[10px] text-ink hover:border-accent hover:text-accent disabled:opacity-50"
+                class="rounded border border-line bg-raised px-1.5 font-mono text-10 text-ink hover:border-accent hover:text-accent disabled:opacity-50"
                 disabled={ applying }
                 @click={ apply }>
                 { applying ? 'Applying…' : 'Apply' }
               </button>
               <button
                 type="button"
-                class="rounded px-1 font-mono text-[10px] text-faint hover:text-ink"
+                class="rounded px-1 font-mono text-10 text-faint hover:text-ink"
                 title="Close"
                 @click={ closeDetail }>×</button>
             </header>
 
             {#if editError}
-              <p class="m-0 px-3 py-1 border-b border-line font-mono text-[10px] text-danger break-words">{ editError }</p>
+              <p class="m-0 px-3 py-1 border-b border-line font-mono text-10 text-danger break-words">{ editError }</p>
             {/if}
             {#if editOk}
-              <p class="m-0 px-3 py-1 border-b border-line font-mono text-[10px] text-ok">{ editOk }</p>
+              <p class="m-0 px-3 py-1 border-b border-line font-mono text-10 text-ok">{ editOk }</p>
             {/if}
 
             <dl class="m-0 flex-1 min-h-0 overflow-auto">
               {#for field in fields}
-                <div key={ field.label } data-field="{ field.label }" class="group flex items-center gap-2 min-h-[24px] px-3 py-1 border-b border-line">
+                <div key={ field.label } data-field="{ field.label }" class="group flex items-center gap-2 px-3 py-1 border-b border-line">
                   <dt
-                    class="w-24 max-w-[35%] shrink-0 truncate font-mono text-[11px] leading-[1.35] text-muted"
+                    class="w-24 max-w-7/20 shrink-0 truncate font-mono text-11 leading-kv text-muted"
                     title="{ field.label }">{ field.label }</dt>
                   <dd class="m-0 flex-1 min-w-0">
                     {#if field.kind === 'boolean'}
@@ -153,14 +153,14 @@
                       <input
                         type="text"
                         spellcheck="false"
-                        class="w-full rounded border border-line bg-canvas px-1 py-0 font-mono text-[11px] text-ink focus:border-accent focus:outline-none"
+                        class="w-full rounded border border-line bg-canvas px-1 py-0 font-mono text-11 text-ink focus:border-accent focus:outline-none"
                         value={ field.input }
                         @input={ editField(field.label, event) } />
                     {:else}
-                      <span class="block truncate font-mono text-[11px] text-faint" title="{ field.full }">{ field.value }</span>
+                      <span class="block truncate font-mono text-11 text-faint" title="{ field.full }">{ field.value }</span>
                     {/if}
                   </dd>
-                  <span class="w-14 shrink-0 text-right font-mono text-[9px] uppercase tracking-wide text-faint">{ field.kindLabel }</span>
+                  <span class="w-14 shrink-0 text-right font-mono text-9 uppercase tracking-wide text-faint">{ field.kindLabel }</span>
                   <CopyButton
                     value={ field.copy }
                     class="size-5! rounded-sm! shrink-0 opacity-0 group-hover:opacity-100 focus-visible:opacity-100" />
@@ -168,20 +168,20 @@
               {/for}
 
               <section data-history class="border-t border-line">
-                <h3 class="m-0 flex items-baseline gap-2 px-3 py-1 font-mono text-[9px] font-semibold uppercase tracking-wider text-faint">
+                <h3 class="m-0 flex items-baseline gap-2 px-3 py-1 font-mono text-9 font-semibold uppercase tracking-wider text-faint">
                   History
-                  <span class="tabular-nums">{ history.length }</span>
-                  <span class="ml-auto font-normal normal-case tracking-normal text-[9px] text-faint">changes seen while this card was open</span>
+                  <span class="tabular-nums">{ historyRows.length }</span>
+                  <span class="ml-auto font-normal normal-case tracking-normal text-9 text-faint">changes seen while this card was open</span>
                 </h3>
-                {#if history.length === 0}
-                  <p class="m-0 px-3 pb-1.5 text-[10px] italic text-faint">No changes yet.</p>
+                {#if historyRows.length === 0}
+                  <p class="m-0 px-3 pb-1.5 text-10 italic text-faint">No changes yet.</p>
                 {:else}
                   <ul class="m-0 p-0 pb-1 list-none">
-                    {#for entry in history}
+                    {#for entry in historyRows}
                       <li
                         key={ entry.key }
                         data-history-entry
-                        class="flex items-baseline gap-2 px-3 py-0.5 font-mono text-[10px]">
+                        class="flex items-baseline gap-2 px-3 py-0.5 font-mono text-10">
                         <span class="shrink-0 tabular-nums text-faint">{ entry.time }</span>
                         <span class="shrink-0 text-muted">{ entry.field }</span>
                         <span class="min-w-0 truncate text-faint line-through">{ entry.from }</span>
@@ -208,7 +208,7 @@ import CopyButton from '../components/ui/CopyButton.pzl';
 import Empty from '../components/ui/Empty.pzl';
 import SplitPanel from '../components/ui/SplitPanel.pzl';
 import { CONNECTION_ID, CONNECTION_STATE } from '../models/connection.js';
-import { api, applyRecordSnapshot } from '../bridge.js';
+import { api, applyRecordSnapshot, isConnected } from '../bridge.js';
 import { disconnectedEmpty } from '../emptystate.js';
 import {
   appendHistory,
@@ -237,12 +237,12 @@ import {
 const FLUSH_DEBOUNCE_MS = 200;
 const OK_MS = 2000;
 
-const ROW_SELECTED = 'bg-accent-soft dt-row-selected';
+const ROW_SELECTED = 'bg-accent-soft';
 const ROW_IDLE = 'hover:bg-raised';
 
 export default class StoreView extends PuzzleView {
   created() {
-    this.setData({
+    this.setState({
       activeType: null,
       selectedRowId: null,
       /** label -> raw input value, for the fields the user has touched. */
@@ -263,13 +263,13 @@ export default class StoreView extends PuzzleView {
     this._okTimer = null;
     // The last snapshot of the watched record: { type, id, row }. Kept OFF the
     // local state layer on purpose — it is diff bookkeeping, never rendered, and
-    // putting it in setData would re-render the card on every flush.
+    // putting it in setState would re-render the card on every flush.
     this._watched = null;
   }
 
   mounted() {
     // Tab activation: one unfiltered snapshot establishes the type list.
-    if (this.connected()) this.loadTypes();
+    if (isConnected()) this.loadTypes();
   }
 
   destroyed() {
@@ -304,12 +304,9 @@ export default class StoreView extends PuzzleView {
 
     const selectedRowId = local.selectedRowId;
     const selectedRow = findRow(records, shape.pk, selectedRowId);
-    const empty = disconnectedEmpty(state);
 
     return {
-      disconnected: !connected,
-      emptyTitle: empty.title,
-      emptyHint: empty.description,
+      ...disconnectedEmpty(state),
 
       types: buckets.map((type) => ({
         id: type.id,
@@ -330,19 +327,13 @@ export default class StoreView extends PuzzleView {
       fields: this.toFields(selectedRow, shape.pk, local.edits),
       // Pretty-printed so a pasted record is readable, not one long line.
       recordJson: selectedRow ? JSON.stringify(selectedRow, null, 2) : '',
-      history: (local.history ?? []).map((entry, index) => ({
+      historyRows: (local.history ?? []).map((entry, index) => ({
         key: `${entry.at}-${entry.field}-${index}`,
         time: stamp(entry.at),
         field: entry.field,
         from: preview(entry.from, 40),
         to: preview(entry.to, 40),
       })),
-
-      editError: local.editError,
-      editOk: local.editOk,
-      applying: local.applying,
-      loading: local.loading,
-      error: local.error,
     };
   }
 
@@ -362,7 +353,7 @@ export default class StoreView extends PuzzleView {
         // Cells are single-line and truncated; `full` is what hover reveals.
         value: preview(row?.[column], 80),
         full: preview(row?.[column], Infinity),
-        cls: column === shape.pk ? 'text-ink' : 'text-muted',
+        cls: column !== shape.pk ? 'text-muted' : isSelected ? 'text-accent font-semibold' : 'text-ink',
       })),
     };
   }
@@ -396,12 +387,6 @@ export default class StoreView extends PuzzleView {
 
   /* ---- requests ---------------------------------------------------------- */
 
-  /** True once `hello` landed with a protocol version this build renders. */
-  connected() {
-    const connection = this.ctx.store.findOne('connection', CONNECTION_ID);
-    return connection?.state === CONNECTION_STATE.CONNECTED;
-  }
-
   scheduleRefresh() {
     clearTimeout(this._flushTimer);
     this._flushTimer = setTimeout(() => {
@@ -415,27 +400,22 @@ export default class StoreView extends PuzzleView {
   }
 
   async loadTypes(type) {
-    if (this.isDestroyed || !this.connected()) return;
-    this.setData({ loading: true, error: '' });
-    this.refresh();
+    if (this.isDestroyed || !isConnected()) return;
+    this.setState({ loading: true, error: '' });
     try {
       const result = await api.snapshotRecords(type);
       if (this.isDestroyed) return;
       const names = applyRecordSnapshot(result, type ?? null);
       // First snapshot with nothing selected: land on something.
       if (!this.getData().activeType && names.length) {
-        this.setData('activeType', names[0]);
+        this.setState('activeType', names[0]);
       }
       // Every re-snapshot is a chance to see what changed under the open card.
       this.syncWatched();
     } catch (err) {
-      if (this.isDestroyed) return;
-      this.setData('error', err?.message ?? String(err));
+      this.setState('error', err?.message ?? String(err));
     } finally {
-      if (!this.isDestroyed) {
-        this.setData('loading', false);
-        this.refresh();
-      }
+      this.setState('loading', false);
     }
   }
 
@@ -470,7 +450,7 @@ export default class StoreView extends PuzzleView {
     if (sameTarget && previous.row && next) {
       const changes = diffRecord(previous.row, next);
       if (changes.length) {
-        this.setData('history', appendHistory(local.history ?? [], changes, Date.now()));
+        this.setState('history', appendHistory(local.history ?? [], changes, Date.now()));
       }
     }
 
@@ -480,24 +460,22 @@ export default class StoreView extends PuzzleView {
   /** Drop the changelog and its baseline — the card is now showing something else. */
   resetWatch() {
     this._watched = null;
-    this.setData('history', []);
+    this.setState('history', []);
   }
 
   flashOk(message) {
     clearTimeout(this._okTimer);
-    this.setData('editOk', message);
+    this.setState('editOk', message);
     this._okTimer = setTimeout(() => {
       this._okTimer = null;
-      if (this.isDestroyed) return;
-      this.setData('editOk', '');
-      this.refresh();
+      this.setState('editOk', '');
     }, OK_MS);
   }
 
   events = {
     selectType: (id) => {
       if (this.getData().activeType === id) return;
-      this.setData({
+      this.setState({
         activeType: id,
         selectedRowId: null,
         edits: {},
@@ -505,12 +483,11 @@ export default class StoreView extends PuzzleView {
         editOk: '',
       });
       this.resetWatch();
-      this.refresh();
     },
 
     selectRow: (key) => {
       const same = String(this.getData().selectedRowId ?? '\u0000') === String(key);
-      this.setData({
+      this.setState({
         selectedRowId: same ? null : key,
         edits: {},
         editError: '',
@@ -520,27 +497,26 @@ export default class StoreView extends PuzzleView {
       // so the first flush after this diffs against what is on screen NOW.
       this.resetWatch();
       this.syncWatched();
-      this.refresh();
     },
 
     closeDetail: () => {
-      this.setData({ selectedRowId: null, edits: {}, editError: '', editOk: '' });
+      this.setState({ selectedRowId: null, edits: {}, editError: '', editOk: '' });
       this.resetWatch();
-      this.refresh();
     },
 
-    // No refresh() on keystroke: the input already holds what was typed, and
-    // re-rendering a focused controlled input is how you lose a caret position.
+    // data() reads `edits`, so this write re-runs it and the field re-renders.
+    // The controlled value then equals what the input already holds, so the
+    // patch writes nothing and the caret stays put.
     editField: (label, event) => {
       const edits = { ...this.getData().edits };
       edits[label] = event.target.value;
-      this.setData('edits', edits);
+      this.setState('edits', edits);
     },
 
     editBool: (label, event) => {
       const edits = { ...this.getData().edits };
       edits[label] = event.target.checked;
-      this.setData('edits', edits);
+      this.setState('edits', edits);
     },
 
     apply: async () => {
@@ -559,41 +535,34 @@ export default class StoreView extends PuzzleView {
         const kind = valueKind(row[label]);
         const parsed = coerceInput(raw, kind);
         if (!parsed.ok) {
-          this.setData({ editError: `${label}: ${parsed.error}`, editOk: '' });
-          this.refresh();
+          this.setState({ editError: `${label}: ${parsed.error}`, editOk: '' });
           return;
         }
         if (parsed.value !== row[label]) patch[label] = parsed.value;
       }
 
       if (Object.keys(patch).length === 0) {
-        this.setData({ editError: 'nothing changed', editOk: '' });
-        this.refresh();
+        this.setState({ editError: 'nothing changed', editOk: '' });
         return;
       }
 
-      this.setData({ applying: true, editError: '', editOk: '' });
-      this.refresh();
+      this.setState({ applying: true, editError: '', editOk: '' });
       try {
         await api.editRecord(type, row[shape.pk], patch);
         if (this.isDestroyed) return;
         // The write succeeded in the app's store; re-read so the table shows what
         // the app actually holds (defaults, coercions, adapter round-trips)
         // rather than what we sent.
-        this.setData({ edits: {} });
+        this.setState({ edits: {} });
         this.flashOk('applied');
         await this.loadTypes(type);
       } catch (err) {
         // A §20 validation failure arrives here: panel-glue turns an `{ error }`
         // result into a rejection. The typed values stay in `edits` so the field
         // can be corrected instead of retyped.
-        if (this.isDestroyed) return;
-        this.setData('editError', err?.message ?? String(err));
+        this.setState('editError', err?.message ?? String(err));
       } finally {
-        if (!this.isDestroyed) {
-          this.setData('applying', false);
-          this.refresh();
-        }
+        this.setState('applying', false);
       }
     },
 

@@ -16,7 +16,6 @@ RawBlockLayoutInlineComponent.prototype.render = function () {
     new ViewNode('text', { value: '\n    ' }),
   ]);
 };
-RawBlockLayoutInlineComponent.__pzlModule = 'raw_block_layout_inline_component.pzl';
 
 RawBlockLayoutInlineComponent.prototype.renderSkeleton = function () {
   const __d = this.getData();

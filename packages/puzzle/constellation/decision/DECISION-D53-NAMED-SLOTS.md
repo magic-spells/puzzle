@@ -13,9 +13,10 @@ connections:
   - DOC-TEMPLATE-SYNTAX
   - DOC-SPEC
   - DOC-SPEC-TEMPLATE
-verified_at: '2026-07-12T00:15:03.604Z'
+verified_at: '2026-11-24T18:13:21.008Z'
 code_refs:
   - client-runtime/views/viewManager.js
+verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
 ---
 
 # D53 — Named slots: call-site `slot="…"`, runtime partition
@@ -28,7 +29,7 @@ Multi-region components (card header/footer, modal title/body/actions) declare `
 - **Call-site compile errors:** a dynamic `slot={expr}` on a direct component child; a control-flow block at direct-child level that contains top-level `slot`-attributed elements (default-routing would silently misroute — put the condition inside the slotted element).
 - **Anywhere else, `slot` is not ours** — it passes through as the ordinary HTML attribute (shadow-DOM users inside islands keep it).
 - **Runtime: partition once, expand per marker.** The ViewManager partitions captured call-site children into named buckets plus the default bucket by the stripped `slot` attribute; slot expansion substitutes each named marker with its bucket (or its fallback when empty) and the default marker with the default bucket. Slot-free templates take the plain path.
-- **One marker mechanism, two fillers.** The router ([[DECISION-D30-NESTED-ROUTES]]) fills only the bare `<Slot/>` outlet; a named slot in a view or layout renders its fallback.
+- **One marker mechanism, two fillers.** The router ([[DECISION-D30-NESTED-ROUTES]]) fills only the `<Outlet/>`; a named slot in a view or layout renders its fallback.
 - Codegen emits a named marker as `new ViewNode(SLOT_TAG, { name: 'header' })`; a fallback body rides as a `fallback: () => [ … ]` thunk attribute (D141).
 
 ## Alternatives rejected

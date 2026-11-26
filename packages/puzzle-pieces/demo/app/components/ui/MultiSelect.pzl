@@ -11,12 +11,11 @@
             <span class="truncate">{ chip.label }</span>
             <button
               type="button"
-              tabindex="-1"
               class={ chipRemoveClass }
               aria-label={ chip.removeLabel }
               disabled={ disabled }
-              @mousedown={ onRemoveDown(event) }
-              @click={ removeChip(chip, event) }>
+              @mousedown={ keepFocus(event) }
+              @click={ removeChip(chip) }>
               <svg
                 class="size-3"
                 viewBox="0 0 20 20"
@@ -57,10 +56,10 @@
         <button
           type="button"
           tabindex="-1"
-          class="absolute inset-y-0 right-0 flex items-center pr-3 text-muted disabled:opacity-50 disabled:pointer-events-none"
+          class="absolute inset-y-0 right-0 flex items-center pr-3 text-muted"
           aria-label="Toggle options"
           disabled={ disabled }
-          @mousedown={ onChevronDown(event) }
+          @mousedown={ keepFocus(event) }
           @click={ toggle(event) }>
           <svg
             class="size-4 transition-[rotate] {#if open}rotate-180{/if}"
@@ -80,7 +79,8 @@
           aria-multiselectable="true"
           aria-label={ listAria }
           data-multiselect-panel
-          style={ panelStyle }>
+          style={ panelStyle }
+          @mousedown={ keepFocus(event) }>
           {#if empty}
             <li role="presentation" class="px-3 py-6 text-center text-sm text-muted">{ emptyText }</li>
           {:else}
@@ -92,7 +92,7 @@
                 aria-disabled={ row.ariaDisabled }
                 aria-hidden={ row.ariaHidden }
                 class={ row.rowClass }
-                @click={ choose(row, event) }
+                @click={ choose(row) }
                 @mouseenter={ hover(row) }>
                 {#if row.kind === 'option'}
                   <Slot
@@ -170,13 +170,15 @@ import { PuzzleView } from '@magic-spells/puzzle';
 //
 // FOCUS MODEL (Combobox's). DOM focus lives on the <input> the whole time; the
 // listbox is never focused. The active option is tracked purely with
-// aria-activedescendant, so the vdom never fights a browser focus move. Chip ×
-// buttons and the chevron preventDefault their mousedown to keep focus on input.
+// aria-activedescendant, so the vdom never fights a browser focus move. The
+// listbox, chip × buttons and chevron preventDefault their mousedown to keep focus
+// on the input, so picking several options in a row never blurs it.
 //
 // KEYBOARD. Type filters + opens; Down/Up move the active option (wrap, skip
 // disabled); Home/End jump; Enter ADDS the active option (query clears, popup
 // stays open); Escape closes; Backspace on an EMPTY input removes the last chip;
-// Tab closes and moves on. Clicking a chip's × removes that chip.
+// Tab closes and moves on. Each chip's × is a tab stop before the input (removing
+// a chip returns focus to the input); clicking it removes that chip.
 //
 // NO free-text / custom value (Combobox's strict-select stance): Enter with no
 // active option is a no-op. NO `morph`: the trigger IS the input being typed into,
@@ -188,11 +190,11 @@ const CONTROL_BASE =
   'relative flex min-h-9 w-full flex-wrap items-center gap-1.5 rounded-lg border bg-surface ' +
   'py-1 pl-2 pr-9 text-sm transition-colors ' +
   'focus-within:outline-2 focus-within:outline-offset-2';
-const CONTROL_OK = 'border-border outline-ring focus-within:outline-ring';
-const CONTROL_ERROR = 'border-danger outline-danger focus-within:outline-danger';
+const CONTROL_OK = 'border-border outline-ring';
+const CONTROL_ERROR = 'border-danger outline-danger';
 
 const INPUT_BASE =
-  'h-7 min-w-[4rem] flex-1 bg-transparent text-sm text-ink placeholder:text-muted ' +
+  'h-7 min-w-16 flex-1 bg-transparent text-sm text-ink placeholder:text-muted ' +
   'focus:outline-none disabled:cursor-not-allowed';
 
 const CHIP_CLASS =
@@ -200,7 +202,7 @@ const CHIP_CLASS =
   'text-xs font-medium text-brand';
 const CHIP_REMOVE_CLASS =
   'inline-flex size-4 shrink-0 items-center justify-center rounded-full text-brand ' +
-  'transition-colors hover:bg-brand hover:text-brand-ink ' +
+  'transition-colors hover:bg-brand hover:text-brand-ink outline-ring focus-visible:outline-2 ' +
   'disabled:pointer-events-none';
 
 const PANEL_BASE =
@@ -276,7 +278,7 @@ export default class MultiSelect extends PuzzleView {
     this._scrollActive = false; // scroll the active option into view after next render
     this._openSeeded = false; // did this open pass already seed query/active/placement?
     this._pendingRestoreFocus = true; // whether the next close refocuses the input
-    this.setData({
+    this.setState({
       uncontrolledOpen: false,
       query: '',
       activeIndex: -1,
@@ -326,9 +328,9 @@ export default class MultiSelect extends PuzzleView {
       if (e == null || e.divider || e.group != null) continue;
       labelByValue.set(e.value, e.label != null ? String(e.label) : String(e.value ?? ''));
     }
-    return values.map((v, i) => {
+    return values.map((v) => {
       const label = labelByValue.has(v) ? labelByValue.get(v) : String(v ?? '');
-      return { id: `${this._base}-chip-${i}`, value: v, label, removeLabel: `Remove ${label}` };
+      return { id: `${this._base}-chip-${String(v)}`, value: v, label, removeLabel: `Remove ${label}` };
     });
   }
 
@@ -473,11 +475,10 @@ export default class MultiSelect extends PuzzleView {
     return { rows, options };
   }
 
-  data(params, props) {
+  data({ props }) {
     const prev = this.getData();
     const open = this._effectiveOpen();
-    const query = prev.query ?? '';
-    const activeIndex = prev.activeIndex ?? -1;
+    const { query, activeIndex } = prev;
     const selectedSet = new Set(this._values(props));
 
     // Closed → no filter (query is cleared on close anyway); open filters live.
@@ -594,15 +595,13 @@ export default class MultiSelect extends PuzzleView {
     if (this._effectiveOpen()) return;
     const base = this._seedOpen();
     if (this._controlled()) {
-      this.setData(base);
+      this.setState(base);
     } else {
-      this.setData({ ...base, uncontrolledOpen: true });
+      this.setState({ ...base, uncontrolledOpen: true });
     }
 
     const { show } = this.props;
     if (typeof show === 'function') show();
-
-    if (!this._controlled()) this.refresh();
   }
 
   _requestClose({ restoreFocus = true } = {}) {
@@ -614,11 +613,10 @@ export default class MultiSelect extends PuzzleView {
 
     if (this._controlled()) {
       // Parent owns `open`; clear the local query so the reopened control is blank.
-      this.setData({ query: '' });
+      this.setState({ query: '' });
       return;
     }
-    this.setData({ uncontrolledOpen: false, query: '' });
-    this.refresh();
+    this.setState({ uncontrolledOpen: false, query: '' });
   }
 
   // ---- open / close side-effects (driven by the effective-open transition) --
@@ -645,8 +643,10 @@ export default class MultiSelect extends PuzzleView {
   _onOpened() {
     document.addEventListener('pointerdown', this._onDocPointer);
     // Fallback seed: a controlled parent may flip `open` true with no interaction.
+    // refresh() on purpose: the scroll-into-view below needs the seeded rows
+    // rendered now.
     if (!this._openSeeded) {
-      this.setData(this._seedOpen());
+      this.setState(this._seedOpen());
       this.refresh();
     }
     this._openSeeded = false;
@@ -657,7 +657,7 @@ export default class MultiSelect extends PuzzleView {
 
   _onClosed() {
     document.removeEventListener('pointerdown', this._onDocPointer);
-    this.setData({ placement: 'bottom', maxHeight: 0 });
+    this.setState({ placement: 'bottom', maxHeight: 0 });
     if (this._pendingRestoreFocus) {
       this.element?.querySelector('[data-multiselect-input]')?.focus();
     }
@@ -693,8 +693,7 @@ export default class MultiSelect extends PuzzleView {
   _setActive(i, scroll) {
     if (i < 0) return;
     this._scrollActive = !!scroll;
-    this.setData({ activeIndex: i });
-    this.refresh();
+    this.setState({ activeIndex: i });
   }
 
   _scrollActiveIntoView() {
@@ -707,57 +706,51 @@ export default class MultiSelect extends PuzzleView {
 
   // Emit `change` with the value ADDED, clear the query, and reseat the active
   // option against the NEW (shorter) candidate list. The popup stays OPEN.
-  _add(value, event) {
+  _add(value) {
     if (this.props.disabled) return;
     const current = this._values(this.props);
     if (current.includes(value)) return;
     const next = current.concat([value]);
 
     const { change } = this.props;
-    if (typeof change === 'function') change(next, event);
+    if (typeof change === 'function') change(next);
 
     const { options } = this._build(this.props, '', new Set(next));
     this._scrollActive = false;
-    this.setData({ query: '', activeIndex: this._firstEnabled(options) });
-    this.refresh();
+    this.setState({ query: '', activeIndex: this._firstEnabled(options) });
     this.element?.querySelector('[data-multiselect-input]')?.focus({ preventScroll: true });
   }
 
   // Emit `change` with `value` REMOVED. Open state is untouched; focus returns to
   // the input. Reseats active against the NEW (longer) candidate list.
-  _remove(value, event) {
+  _remove(value) {
     if (this.props.disabled) return;
     const current = this._values(this.props);
     if (!current.includes(value)) return;
     const next = current.filter((v) => v !== value);
 
     const { change } = this.props;
-    if (typeof change === 'function') change(next, event);
+    if (typeof change === 'function') change(next);
 
     if (this._effectiveOpen()) {
       const { options } = this._build(this.props, this.getData().query, new Set(next));
       const { activeIndex } = this.getData();
       const ai = activeIndex >= 0 && activeIndex < options.length ? activeIndex : this._firstEnabled(options);
       this._scrollActive = false;
-      this.setData({ activeIndex: ai });
-      this.refresh();
+      this.setState({ activeIndex: ai });
     }
     this.element?.querySelector('[data-multiselect-input]')?.focus({ preventScroll: true });
   }
 
-  _selectActive(event) {
+  _selectActive() {
     const { options, activeIndex } = this.getData();
     const opt = options[activeIndex];
     if (!opt || opt.disabled) return;
-    this._add(opt.value, event);
+    this._add(opt.value);
   }
 
   events = {
-    onChevronDown: (event) => {
-      event.preventDefault();
-    },
-
-    onRemoveDown: (event) => {
+    keepFocus: (event) => {
       event.preventDefault();
     },
 
@@ -787,16 +780,14 @@ export default class MultiSelect extends PuzzleView {
         this._openSeeded = true;
         const base = { query, activeIndex: ai, placement, maxHeight };
         if (this._controlled()) {
-          this.setData(base);
+          this.setState(base);
         } else {
-          this.setData({ ...base, uncontrolledOpen: true });
+          this.setState({ ...base, uncontrolledOpen: true });
         }
         const { show } = this.props;
         if (typeof show === 'function') show();
-        if (!this._controlled()) this.refresh();
       } else {
-        this.setData({ query, activeIndex: ai });
-        this.refresh();
+        this.setState({ query, activeIndex: ai });
       }
     },
 
@@ -829,7 +820,7 @@ export default class MultiSelect extends PuzzleView {
         case 'Enter':
           if (!open) return;
           event.preventDefault();
-          this._selectActive(event);
+          this._selectActive();
           break;
         case 'Backspace': {
           // Empty input → remove the last chip (whether open or closed).
@@ -837,7 +828,7 @@ export default class MultiSelect extends PuzzleView {
           const current = this._values(this.props);
           if (!current.length) return;
           event.preventDefault();
-          this._remove(current[current.length - 1], event);
+          this._remove(current[current.length - 1]);
           break;
         }
         case 'Escape':
@@ -859,13 +850,13 @@ export default class MultiSelect extends PuzzleView {
       this._setActive(row.optIndex, false);
     },
 
-    choose: (row, event) => {
+    choose: (row) => {
       if (row.kind !== 'option' || row.disabled) return;
-      this._add(row.value, event);
+      this._add(row.value);
     },
 
-    removeChip: (chip, event) => {
-      this._remove(chip.value, event);
+    removeChip: (chip) => {
+      this._remove(chip.value);
     },
   };
 }

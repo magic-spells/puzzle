@@ -166,7 +166,7 @@ export const RICH_TEXT_CLASSES = {
 	listItem: 'leading-7',
 	blockquote: 'mt-4 first:mt-0 border-l-2 border-border pl-4 italic text-muted',
 	codeBlock:
-		'mt-4 first:mt-0 overflow-x-auto rounded-lg bg-surface-sunken p-4 font-mono text-[13px]/relaxed text-body whitespace-pre',
+		'mt-4 first:mt-0 overflow-x-auto rounded-lg bg-surface-sunken p-4 font-mono text-code/relaxed text-body whitespace-pre',
 	link: 'text-brand underline underline-offset-2 hover:opacity-80',
 	// image + link-preview atoms (root level only)
 	figure: 'mt-4 first:mt-0',

@@ -353,7 +353,7 @@
 				/*
 				 * inspect:view payloads. Ids 3 and 5 deliberately carry the SAME key in
 				 * both layers with different values — precisely the situation the
-				 * panel's side-by-side split exists to expose: a later setData() is
+				 * panel's side-by-side split exists to expose: a later setState() is
 				 * winning over what the last data() commit returned.
 				 */
 				var inspectable = {
@@ -362,6 +362,7 @@
 						module: 'layouts/Fixture.pzl',
 						params: {},
 						props: {},
+						shared: {},
 						model: { title: 'Fixture' },
 						local: { navOpen: false },
 					},
@@ -370,6 +371,7 @@
 						module: 'views/Home.pzl',
 						params: { filter: 'active' },
 						props: {},
+						shared: {},
 						model: { todos: 3, activeTodos: 2 },
 						local: { newTodoText: '', currentFilter: 'active' },
 					},
@@ -378,6 +380,7 @@
 						module: 'components/Row.pzl',
 						params: {},
 						props: { todo: 't2', index: 1 },
+						shared: { list: { filter: 'active' } },
 						model: { label: 'Ship the panel', completed: false },
 						local: { completed: true, draft: 'Ship the panel now' },
 					},
@@ -386,6 +389,7 @@
 						module: 'components/Row.pzl',
 						params: {},
 						props: { todo: 't3', index: 2 },
+						shared: {},
 						model: { label: 'Write the fixture', completed: false },
 						local: {},
 					},
@@ -394,6 +398,7 @@
 						module: 'components/Filters.pzl',
 						params: { filter: 'active' },
 						props: { counts: { all: 3, active: 2 } },
+						shared: {},
 						model: { current: 'active', options: ['all', 'active', 'done'] },
 						local: { current: 'done', hovered: 'done' },
 					},
@@ -402,6 +407,7 @@
 						module: 'components/Nav.pzl',
 						params: {},
 						props: { compact: false },
+						shared: {},
 						model: { links: 3 },
 						local: { openMenu: null },
 					},
@@ -899,7 +905,7 @@
 						', protocol v' +
 						(found.protocolVersion ?? '?');
 
-					// Same order as the real bridge's appMountedImpl.
+					// Same order as the real bridge's devtoolsAppMounted.
 					emit('hello', {
 						protocolVersion: PROTOCOL_VERSION,
 						frameworkVersion: FRAMEWORK_VERSION,
@@ -958,6 +964,7 @@
 							module: view.module,
 							params: {},
 							props: { todo: 't' + id, index: id },
+							shared: {},
 							model: { label: 'Added at runtime #' + id, completed: false },
 							local: {},
 						};

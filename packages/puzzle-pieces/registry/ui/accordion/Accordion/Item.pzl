@@ -34,7 +34,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 //   class  merged onto <collapsible-component>
 
 export default class Item extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     return {
       // `false` is the compiler's omit sentinel: no value, no data-value, and the
       // root's member query skips the row entirely.

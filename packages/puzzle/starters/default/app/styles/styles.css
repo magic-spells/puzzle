@@ -1,0 +1,12 @@
+@import "tailwindcss";
+
+/* A semantic token becomes Tailwind utilities (bg-accent, …). */
+@theme {
+  --color-accent: #4f46e5;
+}
+
+@layer base {
+  body {
+    -webkit-font-smoothing: antialiased;
+  }
+}

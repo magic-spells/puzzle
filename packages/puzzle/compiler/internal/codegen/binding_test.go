@@ -36,7 +36,12 @@ func TestClassifyBindExpr(t *testing.T) {
 		{name: "member", raw: "todo.completed", target: "todo", field: "completed", ok: true},
 		{name: "member camel case", raw: "profile.displayName", target: "profile", field: "displayName", ok: true},
 		{name: "underscore member", raw: "_x.y", target: "_x", field: "y", ok: true},
-		{name: "deep member", raw: "a.b.c"},
+		{name: "deep member", raw: "a.b.c", target: "a.b", field: "c", ok: true},
+		{name: "four steps", raw: "form.values.address.city", target: "form.values.address", field: "city", ok: true},
+		{name: "deep scoped member", raw: "todo.meta.done", scope: scopedTodo, target: "todo.meta", field: "done", ok: true},
+		{name: "deep with computed step", raw: "a[k].c"},
+		{name: "deep with optional step", raw: "a?.b.c"},
+		{name: "deep rooted at a call", raw: "f(x).b.c"},
 		{name: "call", raw: "fmt(x)"},
 		{name: "member call", raw: "x.trim()"},
 		{name: "a field named size", raw: "profile.size", target: "profile", field: "size", ok: true},
@@ -310,5 +315,26 @@ func TestAutoBindWidthTrialDoesNotConsumeHandlerSite(t *testing.T) {
 	}
 	if strings.Count(got, "(this.__h ??= {})[") != 3 {
 		t.Errorf("auto-bind must consume no cached-handler site:\n%s", got)
+	}
+}
+
+// a deeper member path (d192) binds the object that owns the last step, with
+// each step past the root read optionally so a missing middle object stays
+// inert instead of throwing or falling into the bare-local arm.
+func TestAutoBindDeepPathEmission(t *testing.T) {
+	src := viewSrc(
+		"  <div>\n"+
+			"    <input value={ form.values.title } />\n"+
+			"    {#for row in rows}<input type=\"checkbox\" checked={ row.meta.done } />{/for}\n"+
+			"  </div>",
+		plainScripts,
+	)
+	got := compileSrc(t, src)
+
+	if !strings.Contains(got, "'@input:bind': this.__bind(__d.form?.values ?? 0, 'title', 'v')") {
+		t.Fatalf("compiled output missing the deep data-root bind:\n%s", got)
+	}
+	if !strings.Contains(got, "?.meta ?? 0, 'done', 'c')") {
+		t.Fatalf("compiled output missing the deep loop-member bind:\n%s", got)
 	}
 }

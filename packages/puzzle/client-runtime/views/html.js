@@ -11,7 +11,7 @@
  * contract every other vnode kind meets with its single node. The patcher never
  * reconciles inside `nodes`: a changed value replaces them all, an unchanged
  * one leaves them untouched, and a keyed move or a removal carries the whole
- * range (htmlTail / moveHtml / unmountHtml).
+ * range (htmlTail / moveComponentSlot / unmountHtml).
  */
 
 import { sanitizeHtml, newlineToBr } from '../sanitize.js';
@@ -97,17 +97,6 @@ export function htmlTail(vnode) {
 	// Translation may wrap the original tail text in a new element.
 	while (tail?.parentNode && tail.parentNode !== parent) tail = tail.parentNode;
 	return tail?.parentNode === parent ? tail : vnode.el;
-}
-
-/**
- * Move the whole range before `ref`.
- * @param {Node} parent
- * @param {ViewNode} vnode
- * @param {Node | null} ref
- */
-export function moveHtml(parent, vnode, ref) {
-	parent.insertBefore(vnode.el, ref);
-	for (const node of vnode.nodes) parent.insertBefore(node, ref);
 }
 
 /** @param {ViewNode} vnode */

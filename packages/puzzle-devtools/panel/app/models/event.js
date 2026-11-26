@@ -5,9 +5,9 @@ import { PuzzleModel, Puzzle } from '@magic-spells/puzzle';
  *
  * The collection is a capped ring: `EVENT_LIMIT` in bridge.js destroys the
  * oldest record whenever a new one pushes past the cap, so an app that flushes
- * on every keystroke cannot grow the panel's memory without bound. `id` is the
- * hook's per-page-load sequence number, which also gives the list a stable sort
- * that survives same-millisecond bursts.
+ * on every keystroke cannot grow the panel's memory without bound. `id` is
+ * bridge.js's own `eventSeq`, which also gives the list a stable sort that
+ * survives same-millisecond bursts.
  */
 export default class DevEvent extends PuzzleModel {
 	static schema = {

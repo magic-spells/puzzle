@@ -17,7 +17,7 @@
       {#if title}
         <p class="font-medium text-ink">{ title }</p>
       {/if}
-      <div class="text-sm text-body"><Slot/></div>
+      <div class="text-sm text-body"><Children/></div>
     </div>
   </div>
 </puzzle-view>
@@ -50,7 +50,7 @@ const ICON_TONE = {
 };
 
 export default class Alert extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     const variant = VARIANT[props.variant] ? props.variant : 'default';
     return {
       classes: [BASE, VARIANT[variant], props.class || ''].join(' '),

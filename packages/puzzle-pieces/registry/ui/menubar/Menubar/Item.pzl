@@ -55,7 +55,7 @@ export default class Item extends PuzzleView {
     }
   }
 
-  data(params, props) {
+  data({ props }) {
     return {
       disabled: !!props.disabled,
       rowClass: [

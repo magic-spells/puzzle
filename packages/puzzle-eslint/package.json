@@ -1,7 +1,7 @@
 {
 	"name": "@magic-spells/eslint-plugin-puzzle",
-	"version": "0.9.0",
-	"description": "ESLint plugin for Puzzle Framework .pzl files — lints the <script> body as real JS/TS and validates section structure",
+	"version": "0.10.0",
+	"description": "ESLint plugin for Puzzle Framework .pzl files — lints the <script> body as real JS/TS and the <style> body as CSS, and validates section structure",
 	"type": "module",
 	"license": "MIT",
 	"main": "./src/index.js",
@@ -30,10 +30,14 @@
 		"directory": "packages/puzzle-eslint"
 	},
 	"sideEffects": false,
+	"engines": {
+		"node": ">=24"
+	},
 	"peerDependencies": {
 		"eslint": ">=9"
 	},
 	"devDependencies": {
+		"@eslint/css": "^2.0.1",
 		"@eslint/js": "^9.39.5",
 		"eslint": "^9",
 		"typescript": "^6.0.3",

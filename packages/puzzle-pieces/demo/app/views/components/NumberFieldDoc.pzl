@@ -130,7 +130,7 @@ const codeHero = `<NumberField label="Quantity" value={ qty } min={ 0 } max={ 20
 
 // parent — @change emits a number, or null when the field is cleared
 events = {
-  setQty: (v) => this.setData('qty', v),
+  setQty: (v) => this.setState('qty', v),
 };`;
 
 const codeDecimals = `// precision formats the display and rounds the emitted value; step can be fractional
@@ -152,10 +152,10 @@ const show = (v) => (v == null ? 'null' : String(v));
 
 export default class NumberFieldDoc extends PuzzleView {
   created() {
-    this.setData({ qty: 3, weight: 68.5, rating: 3, discount: null, level: 40 });
+    this.setState({ qty: 3, weight: 68.5, rating: 3, discount: null, level: 40 });
   }
 
-  data(params, props) {
+  data() {
     const state = this.getData();
     return {
       ...state,
@@ -189,24 +189,19 @@ export default class NumberFieldDoc extends PuzzleView {
 
   events = {
     setQty: (v) => {
-      this.setData('qty', v);
-      this.refresh();
+      this.setState('qty', v);
     },
     setWeight: (v) => {
-      this.setData('weight', v);
-      this.refresh();
+      this.setState('weight', v);
     },
     setRating: (v) => {
-      this.setData('rating', v);
-      this.refresh();
+      this.setState('rating', v);
     },
     setDiscount: (v) => {
-      this.setData('discount', v);
-      this.refresh();
+      this.setState('discount', v);
     },
     setLevel: (v) => {
-      this.setData('level', v);
-      this.refresh();
+      this.setState('level', v);
     },
   };
 }

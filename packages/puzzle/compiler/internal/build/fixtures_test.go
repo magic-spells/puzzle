@@ -90,7 +90,8 @@ export default class Home extends PuzzleView {
 
 // A --fixtures build bundles the generated wrapper entry, which imports the
 // fixtures module before the app module. The output must still land at
-// dist/app.js (the wrapper's base name is what esbuild names the bundle after),
+// dist/app.js, or app-<hash>.js when hashed (the wrapper's base name is what esbuild
+// names the bundle after),
 // and the scratch dir the build created for the wrapper must not survive it.
 func TestBuildFixturesInstallsModule(t *testing.T) {
 	root := writeFixturesApp(t, true)
@@ -98,7 +99,7 @@ func TestBuildFixturesInstallsModule(t *testing.T) {
 		t.Fatalf("Build with Fixtures: %v", err)
 	}
 
-	js, err := os.ReadFile(filepath.Join(root, "dist", "app.js"))
+	js, err := os.ReadFile(appBundle(t, filepath.Join(root, "dist")))
 	if err != nil {
 		t.Fatalf("--fixtures must keep the bundle at dist/app.js: %v", err)
 	}
@@ -125,7 +126,7 @@ func TestBuildWithoutFixturesOmitsModule(t *testing.T) {
 		t.Fatalf("Build without Fixtures: %v", err)
 	}
 
-	js, err := os.ReadFile(filepath.Join(root, "dist", "app.js"))
+	js, err := os.ReadFile(appBundle(t, filepath.Join(root, "dist")))
 	if err != nil {
 		t.Fatal(err)
 	}

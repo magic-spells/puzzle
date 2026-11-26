@@ -1,0 +1,47 @@
+# netlify config for a puzzle app built as an spa (the default) or with
+# output: 'hybrid'. written by `puzzle add deploy netlify`.
+
+# netlify runs the build and publishes dist/, where puzzle build writes.
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+# client-side routes: any path that is not a real file gets the shell, and the
+# router draws the route. netlify serves an existing file first (it never
+# shadows one), so hashed assets and hybrid's prerendered
+# dist/<path>/index.html pages are still served as they are.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+# hashed production names change on every build that changes their content,
+# so browsers may keep them for a year without asking again.
+# app-<hash>.js / app-<hash>.css: the entry and the css it imports.
+[[headers]]
+  for = "/app-*.js"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+[[headers]]
+  for = "/app-*.css"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+# styles-<hash>.css: the composed stylesheet.
+[[headers]]
+  for = "/styles-*.css"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+# chunks/chunk-<hash>.js: lazy chunks from build.splitting.
+[[headers]]
+  for = "/chunks/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+# locales/<tag>.<hash>.json: translation tables (i18n).
+[[headers]]
+  for = "/locales/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"

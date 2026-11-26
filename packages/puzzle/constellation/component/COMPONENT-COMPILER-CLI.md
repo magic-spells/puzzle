@@ -11,128 +11,146 @@ connections:
   - FILE-GENERATE
   - FILE-PIECES
   - FILE-PZLC
-verified_at: '2026-08-24T21:11:50.859Z'
-verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
-notes:
-  - kind: state
-    text: >-
-      `add piece` next steps also carry (D171): a stale-theme hint when an existing
-      app/styles/pieces.css differs from the registry theme (lock-hash match → `puzzle add theme
-      default`; otherwise hand merge / `--overwrite`), and one `puzzle add theme <names…>` line for
-      the palettes the resolved pieces name in their manifest `themes` array that the app has
-      neither on disk nor package-imported. `pieces.lock` is read before `planTheme` so the hint can
-      tell an older registry copy from an edit. `add theme` with no names marks an installed palette
-      whose bytes differ from the registry's `installed · outdated`.
+  - FILE-STANDALONE-COMPILE
+  - DECISION-D194-VITEST-PLUGIN
+verified_at: '2026-11-26T05:26:02.017Z'
+verified_sha: 2f5f6d0cebefc1d6b3c8f4cde3f4b4795d3e78c3
 ---
 
 # Compiler CLI
 
 The Cobra command surface in the platform binary (`compiler/cmd/puzzle`, one file per
-command, each self-registering). The user-facing contract is [[DOC-SPEC-BUILD]] §13 and
-the per-feature sections it points to; this card holds implementation rules.
+command, each self-registering in `init()`). The user-facing contract — every command,
+flag, default and message — is [[DOC-SPEC-BUILD]] §13 and the sections it points to;
+this card holds the implementation rules behind it.
 
-## Commands
+## Command wiring
 
-- **`build [dir] [--mode] [--static|--hybrid]`** — production/development SPA, true
-  static (D81) or hybrid prerender (D67). The two output flags are exclusive and must
-  agree with any `output` config. The entry is `app/app.ts` or `app/app.js`. Prints
-  raw/gzip sizes, a per-dependency composition report (warns past 200 KB,
-  [[DECISION-D160-SPA-CODE-SPLITTING]]) and prerender summaries. `--profile-build` (or
-  `PUZZLE_PROFILE_BUILD=1`, which is how a dev static rebuild gets profiled) prints phase
-  tables to **stderr**, keeping the stdout summary scripts parse untouched; disabled, the
-  profiler is a nil pointer.
-- **`dev [dir] --port`** — [[COMPONENT-DEV-SERVER]]. A busy port scans upward
-  (`--strict-port` = bind-or-fail, [[DECISION-D90-DEV-PORT-SCAN]]); an `output: 'static'`
-  project runs the real prerender per rebuild ([[DECISION-D148-PREVIEW-AND-STATIC-DEV]],
-  [[DECISION-D154-STATIC-DEV-WARM-REBUILDS]]).
-- **Runtime preflight**: `build` and `dev` call `build.PreflightRuntime` before any
-  esbuild work. It first `os.Stat`s the directory (`directory not found` / `is not a
-  directory`, not bypassable by `PUZZLE_RUNTIME`), then requires one of the three runtime
-  sources (`PUZZLE_RUNTIME`, the in-repo walk, the installed runtime); otherwise one
-  message naming `<pm> install`, with the package manager from the nearest lockfile.
-  Rejected: auto-installing (the CLI never touches node_modules or the network, would guess
-  the manager, and could install a mismatched runtime). `check`/`generate`/`preview` never
-  bundle and are not gated.
-- **`preview [dir] [--port N] [--strict-port]`** (D148) — serves an existing `dist/` with
-  production-host semantics per output mode via `internal/preview` over the shared
-  `internal/serve` resolver; no watcher. Default port 4000; missing `dist/` is a hard
-  error; a flag-only build's mode is read back from the `data-puzzle-static`/
-  `data-puzzle-ssg` marker.
-- **`check [dir]`** ([[DECISION-D165-PUZZLE-CHECK]]) — `internal/check` rebuilds
-  `.puzzle/check/` per run: each `.pzl` becomes a virtual file (a TS script verbatim plus
-  a never-executed wrapper restating every template expression, or for JS an unchecked
-  `.pzl.script.js` mirror — the `.script` infix stops TypeScript resolving the wrapper's
-  import back to itself). It runs `node <app>/node_modules/typescript/bin/tsc --noEmit
-  --pretty false -p .puzzle/check` (never a `.bin` shim or `cmd.exe`, so spaces in paths
-  work on Windows) and maps diagnostics back through `.segments.json` sidecars. The
-  generated tsconfig extends the app's, overrides workspace-breaking options, writes
-  `paths` (app entries merged over `@/*`, retargeted), and switches shape at TypeScript 6
-  (≥ 6 clears `baseUrl`/`moduleResolution`; below keeps node resolution and pins
-  `module: ESNext`). No app tsconfig ⇒ `strict: false`. A missing tsc is checked AFTER
-  the not-a-project test; an uncompilable `.pzl` is its own diagnostic, not an abort.
-  `--js` is registered and errors as not implemented.
-- **`--fixtures`** on `build`/`dev` (D98): a generated two-module wrapper entry under
-  `.puzzle/` installs `/fixtures` before the app entry; requires `app/fixtures.js`,
-  rejected with static/hybrid output. `.puzzle/` is the compiler's self-ignoring scratch
-  root (`tmp/`, `check/`, a `*` `.gitignore`; [[DECISION-D153-PUZZLE-SCRATCH-DIR]]).
-- **`init <name>`** — embedded `default`/`todos` trees (+ TypeScript variants). On a TTY
-  it prompts for what wasn't given (D77); non-TTY never prompts. Targets must be
-  npm-valid and empty.
-- **`generate` / `g`** — component/view/layout/model stubs; in a TypeScript app (a root
-  `tsconfig.json`, `IsTypeScriptApp`) every stub is TypeScript and a model is
-  `app/models/<name>.ts`. Model generation prints registry wiring instead of editing JS.
-  `--family A,B` (D167) scaffolds `app/components/<Root>/` with one `.pzl` per member plus
-  an `index.js`/`index.ts` barrel; names are PascalCase and reserved marker names are
-  refused for components. `Component` is refused for every `.pzl` scaffold, including
-  views, layouts, family roots and members (D180), with a rename hint before any write.
-  Collisions are all-or-nothing and `--force` rewrites only the family's files. The `--path` containment guard resolves symlinks
-  (`evalSymlinksAllowMissing`, in lockstep with pieces).
-- **`add tailwind`** writes missing canonical files or prints the snippet for
-  user-owned config.
-- **`add piece`** — registry precedence `--registry` → `$PUZZLE_PIECES_REGISTRY` →
-  `npm:@magic-spells/puzzle-pieces`; sources are `npm:` specs, directories or URLs. The npm
-  transport picks the newest release sharing the CLI's major.minor (no prereleases),
-  falls back to an older minor with a notice, `--pieces-version` pins. Then: transitive
-  piece and `lib/` deps, did-you-mean, all-or-nothing overwrite pre-flight, theme and npm
-  next steps, sha256 `pieces.lock`. **Every manifest path is validated before any write**
-  (no `.`/`..`/empty segments, no absolute or drive paths) and rejected, never cleaned; a
-  `files` entry with a `/` installs path-preserving (the only compound-piece signal).
-  Theme fetch and lock parse finish before the first write. Dependency specs carry a
-  version floor (D169): split on the LAST `@`, merged by package name keeping the highest
-  floor; a bare name still prints bare.
-- **`add theme [name…]`** (D171, `internal/pieces/themes.go`) — no args lists the
-  registry's palettes with install state; with names, copies each into the app and
-  records it in `pieces.lock`: the default palette at `app/styles/pieces.css` (the same
-  file `add piece` writes, so the two stay idempotent), others at
-  `app/styles/themes/<name>.css`. A palette already imported from
-  `@magic-spells/puzzle-pieces/themes/` is skipped; `styles.css` is never edited (the
-  `@import` and `data-scheme` switch are printed). An unmodified older copy (matches its
-  lock hash) is refreshed; a modified one needs `--overwrite`.
-- **`add skills`** ([[DECISION-D78-AGENT-SKILL-DISTRIBUTION]]) installs the embedded agent
-  skill into detected `~/.claude`/`~/.codex`/`~/.cursor` dirs (TTY multi-select, non-TTY
-  installs to all; `--skill-root` pins). The `.puzzle-skill-version` stamp classifies
-  existing installs; symlinked destinations are skipped unless `--overwrite` (then written
-  through, never removed). **`upgrade skills`** refreshes existing installs from the
-  running binary.
-- **`upgrade`** (D76) resolves the install context from the RUNNING EXECUTABLE (project →
-  lockfile manager; global → `npm -g`/`pnpm -g`; `go install` → instructions; a hoisted
-  workspace binary → refusal naming the member command), confirms the version, then offers
-  to refresh installed skills by re-execing the NEW binary. `--check` only reports.
-- **Passive update notice** (`internal/update`, on `build`/`dev`): prints from a 1 h
-  cache and NEVER fetches in-process. When stale (and no `failed_at` backoff), it spawns a
-  detached helper — the binary re-execing the hidden `update-check` subcommand
-  (`updatecheck.go`, 3 s budget) — because `puzzle build` exits before an in-process
-  fetch could land. Cache writes are atomic (parallel builds). TTY-only; skipped under
-  `CI`/`PUZZLE_NO_UPDATE_CHECK` (re-checked by the helper); `PUZZLE_REGISTRY` overrides.
-- `doctor`, `info`, `--version` — diagnostics.
+- **Root.** `SilenceUsage`/`SilenceErrors`: `main()` prints the error and exits 1.
+  The root `PersistentPreRunE` turns `--no-color` into `NO_COLOR=1` for every printer and
+  child process, so **no subcommand may define its own `PersistentPreRunE` without
+  chaining it**. `main()` also scans argv for `--no-color` before parsing, so usage errors
+  print uncoloured.
+- **Version.** `version.go` holds the one `versionTemplate` (`{{.Name}} version
+  {{.Version}}`) shared by `--version`/`-v` and the `version` subcommand. The version must
+  stay the LAST field: upgrade's `binaryReportsVersion` reads it.
+- **`--host`** (`serveflags.go`, dev/preview). pflag gives optional values only to
+  `--host=`, so `main()` runs `normalizeHostArgs` first, rewriting `--host <ip>` to
+  `--host=<ip>` only for the token immediately after a bare `--host` that is an IP literal
+  or `localhost`. A custom `hostValue` (NoOptDefVal sentinel, Type `bool` so help shows no
+  `[=…]`) records a bare flag; `serve.BindHost`/`serve.Banner` map it to the bind address
+  and the banner URLs.
+- **Compatibility aliases.** `add --overwrite` (bound to the same var as `--force`) and
+  `init --dir` use `MarkHidden`, not `MarkDeprecated`: a 0.9 `puzzle upgrade` re-execs the
+  new binary with `add skills --overwrite`, and a deprecation notice would land in its
+  output. `-y/--yes` is a persistent
+  flag on `upgrade` so `upgrade skills -y` works.
+- **Runtime preflight.** `build` and `dev` call `build.PreflightRuntime` before any esbuild
+  work: first `os.Stat` the directory (`directory not found` / `is not a directory`, not
+  bypassable by `PUZZLE_RUNTIME`), then `build.PairRuntime`. With no runtime source
+  (`PUZZLE_RUNTIME`, the in-repo walk, the installed package) it stops with one message
+  naming `<pm> install` from the nearest lockfile. Rejected: auto-installing (the CLI never
+  touches `node_modules` or the network, would guess the manager, and could install a
+  mismatched runtime).
+- **Version pair** ([[DECISION-D202-CLI-RUNTIME-VERSION-PAIR]]). `build.PairRuntime` takes
+  the sources in that order and compares only an installed package: `build.PairInstalled`
+  reads its version (`update.PackageVersion`) and, across a breaking release
+  (`update.Breaking`, both shared with `upgrade`), returns the message naming both
+  versions. `check` (and `check --fix`), every `generate` kind and `add piece` never bundle,
+  so they call `build.PairRuntime` alone, before they read or write source: a mismatch stops
+  them, and a missing runtime does not, so they run right after `init`. `doctor` calls
+  `build.PairInstalled` for its runtime row. `preview` and the other `add` kinds do not
+  compare versions.
+- **`build -q`** sets `build.Options.Quiet`, which gates the internal/build page report as
+  well as the CLI summary and update notice.
+- **`--profile-build`** reads `PUZZLE_PROFILE_BUILD=1` too (that is how dev static
+  rebuilds get profiled); tables go to stderr; disabled, the profiler is a nil pointer.
+
+## Per-command notes
+
+- **`dev`** → [[COMPONENT-DEV-SERVER]]; port scan [[DECISION-D90-DEV-PORT-SCAN]]; static
+  dev [[DECISION-D148-PREVIEW-AND-STATIC-DEV]], [[DECISION-D154-STATIC-DEV-WARM-REBUILDS]].
+- **`preview`** — `internal/preview` over the shared `internal/serve` resolver; no watcher.
+- **`check`** ([[DECISION-D165-PUZZLE-CHECK]]) — `internal/check`. The JS mirror is
+  `.pzl.script.js`: the `.script` infix stops TypeScript resolving the wrapper's import
+  back to itself. tsc runs as `node <dir>/node_modules/typescript/bin/tsc` (`<dir>` = the
+  app or the nearest ancestor with it, `fsutil.FindUp`), never a `.bin` shim or
+  `cmd.exe`, so spaces in Windows paths work. The not-a-project test runs before the
+  missing-tsc test.
+- **`check --fix`** ([[DECISION-D199-UPGRADE-PASS]], `internal/codemod`) — the upgrade pass
+  runs before the type check, so old code is named for what changed instead of surfacing
+  as type errors. Without `--fix`, found sites are listed and `check` exits non-zero.
+  `--fix` rewrites them in place and lists the sites it can't rewrite safely; with no
+  TypeScript installed it then skips the type check with a note, not a failure.
+- **`--fixtures`** (D98) — `build/fixtures.go` writes the wrapper under `.puzzle/fixtures/`;
+  [[DECISION-D153-PUZZLE-SCRATCH-DIR]].
+- **`init`** — embedded `default`/`static` trees plus `-ts` overlays (`starters/`, written
+  by `internal/scaffold`); writes `tsconfig.json` or `jsconfig.json`, never both. TTY
+  prompts (D77) are gated on a real isatty check AND no `--yes`. `create` is a cobra
+  `Aliases` entry on the same command, so it shares the flags, prompts and output.
+  Nothing in the CLI keys off the command name: the update notice and the D202 check are
+  called from each command's own `RunE`, and `normalizeHostArgs` reads only `dev` and
+  `preview`.
+- **`generate`** — `IsTypeScriptApp` (a root `tsconfig.json`) switches every stub. Reserved
+  marker names are refused for components and `Component` for every `.pzl` scaffold
+  (D180), with a rename hint before any write. Family collisions are all-or-nothing;
+  `--force` rewrites only the family's files. The `--path` containment guard resolves
+  symlinks (`fsutil.EvalSymlinksAllowMissing`, shared with pieces). `generate` and `add`
+  hand `--dir` (empty = the working directory) straight to `generate.FindProjectRoot`,
+  which makes it absolute itself.
+- **`add piece` / `add theme`** (`internal/pieces`) — the theme fetch and `pieces.lock`
+  parse finish before the first write; the lock is read before `planTheme` so the
+  stale-theme hint can tell an older registry copy from a local edit. `planTheme` counts
+  only the hand-merge marker, a live `@import` of `pieces.css` (`piecesCssImported`; a
+  comment that mentions the file is not wiring) or the package import as "already wired",
+  so `add piece` and `add theme` agree about the same styles.css. Dependency specs
+  carry a version floor (D169): split on the LAST `@`, merged by package name keeping the
+  highest floor. The manifests' `styles` are unioned in resolution order (`collectStyles`:
+  first occurrence wins, never sorted, because each manifest lists its sheets in load
+  order) and printed as one `@import "<spec>" layer(components);` step each, the first
+  after `@import "tailwindcss";` and each later one after the line before it.
+  `add theme` lives in `internal/pieces/themes.go`.
+- **`add deploy`** ([[DECISION-D198-DEPLOY-TEMPLATES]], `add_deploy.go`) — the templates
+  are embedded from the package's `deploy/` folder. `--static`/`--hybrid` picks the
+  template, else the config's `output`; a config that fails to load is an error, never a
+  guess. Each host writes one file under the template's own name, and a clash without
+  `--force` is refused before anything is written.
+- **`add skills` / `upgrade skills`** ([[DECISION-D78-AGENT-SKILL-DISTRIBUTION]]) —
+  symlinked destinations are written through only under `--force`, never removed.
+- **`upgrade`** ([[DECISION-D76-CLI-UPGRADE]]) — `detectInstallContext` classifies the
+  running binary from its executable only. `upgradeScopes` lists the scopes, global first:
+  the running binary is its own scope when it is a global or project install, a workspace
+  or nested binary leaves the project out, and every other scope comes from disk
+  (`installedGlobal`, and `projectAt` from the cwd). Every scope goes through
+  `printScope`, `question` and `upgradeScope`, and `installed()` names the copy each one
+  reports; a project's is looked up afresh each call, so the read-back finds it wherever
+  the install put it. One walk, `upward`, finds a project's `package.json`, lockfile and
+  copy, and stops at home or the filesystem root. `confirmUpgrade` is the prompt seam.
+  `upgradedBinaryCandidates` + `binaryReportsVersion` prove the new binary before the
+  skill re-exec (`add skills --force`).
+  `platformPackageNameFor`/`platformBinaryNameFor` take GOOS/GOARCH explicitly (Node
+  spelling: `win32`, `x64`; win32-arm64 folds onto x64) so every target is testable from
+  one host.
+- **Passive update notice** (`internal/update`, `updatecheck.go`) — gates are checked in
+  `printUpdateNotice` before `CheckPassive`; the detached helper is the hidden
+  `update-check` subcommand.
 
 ## Rules
 
 - **D3 boundary**: add/generate never parse or rewrite user JavaScript and never install
-  npm dependencies; `check` resolves the app's own `tsc` and never installs one.
-- **Piece registries are untrusted**: no absolute/parent traversal in target/file/lib/
-  theme paths, no symlink escape from the app or (local fetches) the registry root.
+  npm dependencies; `check` resolves the app's own `tsc` and never installs one. The one
+  command that edits user source is `check --fix`, and only with the idempotent D199
+  rewrites: the router `<Slot/>` → `<Outlet/>` (or `<Children/>` in a component),
+  `setData(` → `setState(`, positional `data()`/`share()` → the one-object form, and the
+  `formatters` key and `app/formatters.js` → `functions`.
+- **Piece registries are untrusted**: no absolute/parent traversal in target/file/lib/theme
+  paths, no symlink escape from the app or (local fetches) the registry root.
 - Atomic writes where a partial artifact would hurt. TTY gates use a real isatty check —
   `/dev/null` is a character device, not a terminal, so prompts never block under CI.
-- `pzlc` (`cmd/pzlc`) is the test/tooling single-file compiler with explicit mode; not
-  the app workflow.
+- `pzlc` (`cmd/pzlc`) is the test/tooling single-file compiler with explicit mode; not the
+  app workflow.
+- The hidden `puzzle compile <file.pzl>` (`cmd/puzzle/compilecmd.go`) shares pzlc's
+  pipeline (`internal/standalone`) but compiles under the file's path from the project
+  root, the name the build uses, so the D20 mode and the `<style scoped>` id match the
+  build; its one caller is the `/vitest` plugin, so app tests can import `.pzl` (D194).
+- Flag-convention tests live in `cmd/puzzle/cli_conventions_test.go`.

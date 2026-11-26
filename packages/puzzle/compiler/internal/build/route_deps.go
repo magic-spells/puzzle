@@ -12,7 +12,7 @@ package build
 //     whose page bundle (and therefore whose rendered chain) contains it. A file
 //     in this set is attributable: only its routes can change.
 //   - The PRERENDER bundle's metafile is the graph rooted at the app entry —
-//     app.js, routes.js, the models registry, the formatters module, every
+//     app.js, routes.js, the models registry, the functions module, every
 //     lifecycle hook, and transitively every view. The part of THIS graph that
 //     sits ABOVE the route chain is global to the render: it can move
 //     `beforeMount`, the route table, the store seed, or the formatter set, and
@@ -140,7 +140,7 @@ func buildRouteGraph(pagesMetafile, pagesBase, preMetafile, preBase string, entr
 // renderWide is the prerender graph ABOVE the route chain: walk it from its
 // roots and stop at every chain root, and what the walk reached is exactly the
 // set of modules that shape every page — the app entry, the route table, the
-// store seed, the models registry, the formatters module, the lifecycle hooks
+// store seed, the models registry, the functions module, the lifecycle hooks
 // and whatever those pull in. Membership here is computed WITHOUT reference to
 // page attribution, so a module that is both keeps its render-wide standing
 // (classify consults this set first).
@@ -305,13 +305,13 @@ func (g *routeGraph) classify(root string, changed []string, assetConsumers func
 	}
 
 	// The public tree is app/public/ in the examples but a root-level public/ is
-	// equally supported (publicDir, which the copier and the dev watcher both go
+	// equally supported (PublicDir, which the copier and the dev watcher both go
 	// through). Resolving it the same way here is what keeps the two rules below
 	// alive for a root-public project: hardcoding app/public made every public
 	// asset save an unknown path, so the whole fast path collapsed to a full
 	// render on a documented layout.
 	var shell, publicPrefix string
-	if src := publicDir(root); src != "" {
+	if src := PublicDir(root); src != "" {
 		shell = resolvePath(filepath.Join(src, "index.html"))
 		publicPrefix = resolvePath(src) + string(filepath.Separator)
 	}

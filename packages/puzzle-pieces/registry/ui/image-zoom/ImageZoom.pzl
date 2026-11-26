@@ -76,8 +76,9 @@ import { PuzzleView } from '@magic-spells/puzzle';
 //   style    merged after the piece's own custom-property declarations.
 //
 // Callbacks (value-first, per the registry convention)
-//   @change(scale, { translateX, translateY })   any transform update. FIRES
-//            PER FRAME during a gesture — debounce anything expensive.
+//   @change(scale)     any transform update. FIRES PER FRAME during a gesture —
+//            debounce anything expensive. Read the pan from the @ready element's
+//            `translateX` / `translateY` getters.
 //   @zoomStart(scale)  a pinch began, or a double-tap / reset() / zoomTo() is
 //            about to commit. The scale is the one it is leaving.
 //   @zoomEnd(scale)    a gesture settled, or a programmatic change committed.
@@ -99,11 +100,11 @@ import { PuzzleView } from '@magic-spells/puzzle';
 // at max scale. The host is not focusable and not a button, so it adds no stop
 // to the tab order that a keyboard user could not use.
 //
-// LOADING. The package registers its custom element at module scope with
-// `class extends HTMLElement`, which is a ReferenceError under Node — a
-// top-level import would crash the prerender pass of any app on static or
-// hybrid output. The import lives in mounted() instead, which never runs
-// server-side. Prerendering is fine either way: the stylesheet already sizes
+// LOADING. The import lives in mounted(), which never runs server-side, so the
+// prerender pass of a static or hybrid app never loads the package. (0.1.0 also
+// guards its `class extends HTMLElement` and its element registration for Node,
+// so a top-level import would not crash either.) Prerendering is fine either
+// way: the stylesheet already sizes
 // the host and absolutely positions the image, so the page shows the picture
 // before the JS lands and simply becomes zoomable when it arrives.
 //
@@ -140,8 +141,7 @@ export default class ImageZoom extends PuzzleView {
   #live = false;
 
   #onChange = (event) => {
-    const { scale: value, translateX, translateY } = event.detail || {};
-    this.props.change?.(value, { translateX, translateY });
+    this.props.change?.(event.detail?.scale);
   };
 
   #onZoomStart = (event) => {
@@ -152,7 +152,7 @@ export default class ImageZoom extends PuzzleView {
     this.props.zoomEnd?.(event.detail?.scale);
   };
 
-  data(params, props) {
+  data({ props }) {
     const declarations = [];
     if (props.aspect) declarations.push(`--image-zoom-aspect:${props.aspect}`);
     if (props.style) declarations.push(String(props.style));

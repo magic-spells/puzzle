@@ -5,12 +5,13 @@ connections:
   - DECISION-D115-MOUNT-FAILURE-RECOVERY-CONTRACT
   - DECISION-D136-VIEW-LIFECYCLE-CONVERGENCE
   - DECISION-D143-MOUNT-THROW-OWNERSHIP
+  - DECISION-D192-FORMS-MODULE
   - COMPONENT-PUZZLE-VIEW
   - COMPONENT-VIEW-MANAGER
   - COMPONENT-ROUTER
   - COMPONENT-PUZZLE-APP
-verified_at: '2026-08-24T21:39:23.520Z'
-verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
+verified_at: '2026-11-24T18:05:31.213Z'
+verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
 code_refs:
   - client-runtime/views/PuzzleView.js
   - client-runtime/views/viewManager.js
@@ -36,7 +37,8 @@ frozen `info = { phase, view, route }`; `view`/`route` are coerced to `null`
 when absent (the app phases always have `view: null`). The phase set is closed
 and pinned in tests-types (`PuzzleErrorInfo` in `types/index.d.ts`):
 - view positions — `mount`, `refresh`, `render`, `bind`, `enter`, `leave`,
-  `unmount`;
+  `unmount`, and `submit` (a `/forms` submit callback's error that maps to no
+  field, [[DECISION-D192-FORMS-MODULE]]);
 - navigation — `navigation`, `transition`;
 - app — `app-mount`, `app-unmount`;
 - terminal — `error-view` (never produces a replacement).
@@ -45,7 +47,7 @@ Only current-run failures report: `PuzzleView.refresh` applies the same
 token/destroyed/leaving check to rejections as to fulfillments, and D161's
 settle loop checks `isStale()` on both arms. A throwing or rejecting `onError`
 is contained with its own `console.error` and never re-enters the funnel.
-Config lives in a WeakMap keyed by ctx — the three-service ctx is not widened.
+Config lives in a WeakMap keyed by ctx (`setErrorConfig`), so ctx is not widened.
 
 **The error view.** `new PuzzleApp({ errorView })` takes ONE ordinary compiled
 view (typically `app/views/AppError.pzl`); a non-view value is a construction
@@ -80,8 +82,10 @@ their state. Props: `error`, `info` (the same frozen object), and `retry`
   router-owned descendants.
 - **The error view failing** reports once as `error-view` and stops; the
   placeholder stays for a later patch or navigation.
-- **SSG takeover:** the error view renders first; only without one (or if it
-  fails) is the prerendered page restored (D140).
+- **SSG takeover:** a mount failure renders the error view first; only
+  without one (or if it fails) is the prerendered page restored (D140). A
+  takeover whose `data()` fails keeps the prerendered page untouched: the
+  clear runs after the data gate.
 - **No `errorView`:** the funnel still reports, the invisible placeholder
   stays, and the owner's `refresh()` remounts through it. No built-in error UI.
 - **Prerender:** a build-time failure fails the build; the error view never
@@ -96,9 +100,12 @@ their state. Props: `error`, `info` (the same frozen object), and `retry`
   `clear()` runs the same release. Known limit: bracketing needs the old root
   to be a direct child of the container; otherwise `unknownRange` is null, and
   fresh content can land beside the corrupt content. Undecided.
-- **Pre-mount failures are buffered.** A skeleton view's preload rejecting
-  before `mount()` parks on the instance and is flushed once after the first
-  render attempt.
+- **Pre-mount failures are buffered.** A failure that reaches a preloaded view
+  before its `mount()` (a skeleton view's preload rejecting, the gate failure
+  a load with nothing committed yet hands its top unit
+  ([[DECISION-D19-NAVIGATION-COMMIT]]), or a store-change refresh failing in
+  between) parks on the instance; `mount()` flushes it before the first
+  render, so the failed view never paints or fires `mounted()`.
 - **Cleanup is exactly-once** — subscriptions, descendants, refs, `:outside`
   listeners, portal ranges; a throwing teardown hook cannot block the
   replacement.
@@ -118,8 +125,7 @@ failure and IS contained.
 - A wrapper `<ErrorBoundary>` component — new grammar for what one config key
   expresses.
 - Global handler with no fallback UI — leaves the blank hole.
-- Widening ctx with the handler — the three-service ctx is a documented
-  selling point (D60).
+- Widening ctx with the handler — ctx stays the app's services and nothing else.
 
 ## Consequences
 

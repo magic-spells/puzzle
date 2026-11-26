@@ -94,12 +94,28 @@ test('registry.json mirrors every manifest, including the floors', async () => {
 		const row = rows.get(piece.name);
 		assert.ok(row, `registry.json has no ${piece.name} entry`);
 		assert.equal(piece.name, name, `${name}/piece.json names itself ${piece.name}`);
-		assert.equal(row.description, piece.description);
-		assert.deepEqual(row.files, piece.files);
-		assert.deepEqual(row.registryDependencies, piece.registryDependencies);
-		assert.deepEqual(row.dependencies, piece.dependencies);
-		assert.deepEqual(row.themes, piece.themes);
-		assert.equal(row.targetDir, piece.targetDir);
+		assert.deepEqual(row, piece, `registry.json's ${name} row has drifted from piece.json`);
+	}
+});
+
+test('registry.json pieces stay alphabetical', async () => {
+	const names = (await readJSON('../registry/registry.json')).pieces.map((p) => p.name);
+	assert.deepEqual(names, [...names].sort());
+});
+
+// `styles` is print-only too: the CLI prints `@import "<spec>" layer(components);`
+// for each one, so its package must be one the same manifest installs, and the
+// demo, which exercises every wrapper, imports it the same way.
+test('every piece.json style comes from a package the piece installs', async () => {
+	const demo = await readFile(new URL('../demo/app/styles/styles.css', import.meta.url), 'utf8');
+	for (const [name, piece] of await manifests()) {
+		const pkgs = (piece.dependencies ?? []).map((spec) => splitSpec(spec)[0]);
+		for (const p of pkgs) if (demo.includes(`@import "${p}/css" layer(components);`)) assert.ok(piece.styles?.includes(`${p}/css`), `${name} installs ${p} but does not list its stylesheet`);
+		for (const style of piece.styles ?? []) {
+			const pkg = style.split('/').slice(0, style.startsWith('@') ? 2 : 1).join('/');
+			assert.ok(pkgs.includes(pkg), `${name}/piece.json imports ${style} but does not install ${pkg}`);
+			assert.ok(demo.includes(`@import "${style}" layer(components);`), `the demo does not import ${style}`);
+		}
 	}
 });
 

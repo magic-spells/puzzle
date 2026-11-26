@@ -39,7 +39,7 @@ describe('prepareRefresh eval-scope unwinding', () => {
 	it('overlapping prepares leave no dead scope behind', async () => {
 		const gates = { a: deferred(), b: deferred() };
 		class Detail extends PuzzleView {
-			async data(params) {
+			async data({ params }) {
 				await gates[params.id]?.promise;
 				return { id: params.id };
 			}
@@ -158,7 +158,7 @@ describe('prepareRefresh eval-scope unwinding', () => {
 		expect(instance.params.id).toBe(2); // the destination scope is live
 
 		// A DOM handler landing during the gate, with a nested fence inside it.
-		instance.setData('n', 1); // arms the flushUpdates → #renderNow fence
+		instance.setState('n', 1); // arms the flushUpdates → #renderNow fence
 		const seen = [];
 		instance.__withCommittedScope(() => {
 			seen.push(instance.params.id);
@@ -199,7 +199,7 @@ describe('prepareRefresh eval-scope unwinding', () => {
 		class Detail extends PuzzleView {
 			// Deliberately NOT declared async: the sync-shaped probe is what reaches
 			// the abandon-and-retry branch inside Store.withTracking.
-			data(params) {
+			data({ params }) {
 				runs++;
 				return gate.then(() => ({ id: params.id }));
 			}

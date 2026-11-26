@@ -1,11 +1,20 @@
 
+
+
+
+
+
+
+
+
+        
 import { PuzzleView } from '@magic-spells/puzzle';
 
 // Every way to write an `events` handler — see tests/handler-this.test.js. The
 // runtime calls each as this.events.name(…), so only the arrows see the view.
 export default class HandlerForms extends PuzzleView {
   created() {
-    this.setData('count', 0);
+    this.setState('count', 0);
   }
 
   events = {
@@ -28,11 +37,11 @@ export default class HandlerForms extends PuzzleView {
     },
     // Arrows close over the view — the correct form.
     bump: () => {
-      this.setData('count', this.getData().count + 1);
+      this.setState('count', this.getData().count + 1);
     },
     save: async () => {
       await null;
-      this.setData('saved', true);
+      this.setState('saved', true);
     },
   };
 }
@@ -81,4 +90,3 @@ HandlerForms.prototype.render = function () {
     ]),
   ]);
 };
-HandlerForms.__pzlModule = 'HandlerForms.pzl';

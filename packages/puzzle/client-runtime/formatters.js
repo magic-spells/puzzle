@@ -1,8 +1,8 @@
 /**
  * FormatterRegistry — the function library (D176 §4): the built-in functions and
  * the app's own, which a template calls as `name(value, …args)` for display-only
- * transforms (constellation/doc/DOC-SPEC.md §6). Apps register theirs through
- * the `formatters` config map, which keeps its name.
+ * transforms (constellation/doc/DOC-SPEC.md §6). Apps register theirs under the
+ * `functions` config key.
  *
  * Compiled render code receives the RAW function map (getAll()), never the registry
  * instance: it calls `__formatters.escape(...)` and, for every library call,
@@ -16,7 +16,7 @@
 import manifestFormatters from '@magic-spells/puzzle/formatters/manifest';
 import { escape } from './formatters/builtins.js';
 
-/** @import { Formatter, LinkOptions } from '../types/index.js' */
+/** @import { Formatter, LinkOptions, NamedRouteTarget } from '../types/index.js' */
 
 // `raw` is no longer seeded here (D174): templates reach it only through the
 // live-HTML node, never through the registry, and seeding it would pull the
@@ -147,9 +147,12 @@ export class FormatterRegistry {
 		// PuzzleApp reports its own typos and test cases don't leak a "warned"
 		// flag into one another (a module-level Set would silence a second app or
 		// a second test that hits the same name). Matches the malformed-animation /
-		// duplicate-key warn-once pattern.
-		/** @type {Set<string>} */
-		this._warnedMissing = new Set();
+		// duplicate-key warn-once pattern. Dev-only, like its sole reader in
+		// __missing below: a production build allocates no ledger.
+		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+			/** @type {Set<string>} */
+			this._warnedMissing = new Set();
+		}
 
 		for (const [name, fn] of Object.entries(seedMap || {})) {
 			this.register(name, fn);
@@ -201,10 +204,10 @@ export class FormatterRegistry {
 	/** @param {string} name @param {Formatter} fn */
 	register(name, fn) {
 		if (typeof name !== 'string' || name === '') {
-			throw new Error('[puzzle] formatter name must be a non-empty string');
+			throw new Error('[puzzle] function name must be a non-empty string');
 		}
 		if (typeof fn !== 'function') {
-			throw new Error(`[puzzle] formatter "${name}" must be a function (got ${typeof fn})`);
+			throw new Error(`[puzzle] function "${name}" must be a function (got ${typeof fn})`);
 		}
 		this.formatters[name] = fn;
 	}
@@ -230,8 +233,9 @@ export class FormatterRegistry {
  * formatter only when the app did not provide its own implementation.
  *
  * @param {object} [customFormatters] name → formatter function
- * @param {(path: string, options?: LinkOptions) => string} [url] mode-aware route URL
- *   encoder; `options` reaches it only under locale prefix routing (D177)
+ * @param {(target: string | NamedRouteTarget, options?: LinkOptions) => string} [url]
+ *   mode-aware route URL encoder; a named target (D196) is resolved by it, and
+ *   `options` reaches it only under locale prefix routing (D177)
  * @returns {FormatterRegistry}
  */
 export function makeFormatterRegistry(customFormatters = {}, url) {
@@ -260,11 +264,16 @@ export function makeFormatterRegistry(customFormatters = {}, url) {
 			// Locale prefix routing (D177) passes `options` ({ locale: 'es' } or
 			// { locale: false }) through to the encoder; without it the second
 			// argument is not even read, so those apps ship the one-argument form.
+			//
+			// A plain object is a named target (`link({ name: 'album', params })`,
+			// D196) and reaches url() as it is, which resolves it through the route
+			// table; every other value (a number, a URL object, an array) is a path
+			// and is stringified exactly as before.
 			typeof __PUZZLE_HAS_LOCALE_ROUTING__ === 'undefined' || __PUZZLE_HAS_LOCALE_ROUTING__
-				? (value, options) => (value == null ? '' : url(String(value), options))
+				? (value, options) => (value == null ? '' : url(value.constructor === Object ? value : String(value), options))
 				: (value) => {
 						if (value == null) return '';
-						return url(String(value));
+						return url(value.constructor === Object ? value : String(value));
 					}
 		);
 	}

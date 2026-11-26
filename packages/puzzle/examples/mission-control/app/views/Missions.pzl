@@ -19,7 +19,7 @@
 
     <!-- Detail child route renders here (nested routes, D30): /missions fills
          the slot with the empty index child; /missions/:id slides in Detail.pzl. -->
-    <Slot />
+    <Outlet />
   </div>
 </puzzle-view>
 
@@ -31,7 +31,7 @@ import { missions } from '../data/catalog.js';
 export default class MissionsView extends PuzzleView {
   // Selection is URL state (nested routes, v1.3/D30) — see Fleet.pzl for the
   // full pattern notes.
-  data(params) {
+  data({ params }) {
     return {
       items: missions,
       selectedId: params.id || null,

@@ -18,6 +18,8 @@ connections:
   - DECISION-D42-MEMORY-MODE
   - DECISION-D47-ROUTE-SNAPSHOT
   - DECISION-D51-ROUTER-BASE-PATH
+  - DECISION-D195-LINK-PREFETCH
+  - DECISION-D196-NAMED-ROUTES
   - DECISION-D61-ATOMIC-LOCATION-COMMIT
   - DECISION-D79-LINK-FUNCTION
   - DECISION-D83-QUERY-REPLACE
@@ -28,39 +30,63 @@ connections:
   - DECISION-D159-ROUTER-MODE-FACTORIES
   - DECISION-D163-LAZY-ROUTE-VIEWS
   - DOC-TESTING
-verified_at: '2026-08-24T21:39:23.520Z'
-verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
+verified_at: '2026-11-24T18:13:21.008Z'
+verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
 ---
 
 # Router navigation, matching, and commit atomicity
 
-The largest suite, guarding the sharpest invariant: navigation loads before it
-commits, and URL, history, mounted tree, route snapshot, outgoing scroll save,
-and reused-ancestor state commit together or not at all. Suites:
-`tests/router*.test.js` and `route-tree-shared`. Run with
-`npx vitest run tests/router`.
+The largest suite, guarding the sharpest invariant: navigation loads before it commits,
+and URL, history, mounted tree, route snapshot, outgoing scroll save and reused-ancestor
+state commit together or not at all. The machine it exercises is [[STATE-NAVIGATION]].
+Run with `npx vitest run tests/router tests/route-tree-shared tests/auth-example`.
 
-- initial navigation, commit ordering, cancellation under a monotonic token, and
-  same-path pushes idle and mid-flight.
-- nested chains: matching and composition, prefix reuse, params-only chain
-  refresh, ancestor re-render after a swap, failure and cancellation keeping the
-  last good tree, constructor config rejection; lazy route views.
-- patterns: literal paths with regex metacharacters escaped, a declared trailing
-  slash insignificant, declaration-order shadow warnings, failure-safe param
-  decode, non-ASCII literal paths held in encoded pathname form.
-- all three modes behind the mode factories (path inline, hash, memory), base
-  path per mode, link interception (including inside shadow DOM), popstate, and
-  memory mode doing no document-level work.
-- `Router.url()` argument guarding and per-mode output, and the `link` function.
-- scroll: defaults, config, anchor targets, sessionStorage persistence, hash-mode
-  anchors. Focus and announcement on commit, tabindex hygiene, skip cases,
-  disabling, a custom behavior.
-- a same-document fragment pop settles in place — path/pathname/query/hash move
-  and a saved position restores, with no load, focus move or announcement.
-- head sync at the commit point only; hybrid takeover leaves prerendered tags.
-- guards (including redirect-on-pop URLs), a throwing leave hook not leaking the
-  incoming chain, and the transactional reused-ancestor prepare/commit:
-  overlapping prepares, conflicting-commit convergence, exception safety, the
-  mid-gate scope fence.
-- the shared route-tree helpers, with a drift guard asserting SSG enumeration and
-  the router table agree.
+- **Core** (`router`, `router-nested`, `router-constructor-throw`, `router-lazy`):
+  initial navigation, commit ordering, cancellation under the monotonic token, nested
+  chains (matching, prefix reuse, params-only chain refresh, ancestor re-render after a
+  swap), failure and cancellation keeping the last good tree, constructor config
+  rejection, `lazy()` route views.
+- **`NavigationResult`** (`router-navigation-result`, D182): every outcome
+  `push()`/`replace()` resolve: commit, block, supersession, not-found, error,
+  `redirectedFrom`, `catchAll`; same-path pushes when idle and mid-flight; a duplicate
+  push joining the in-flight promise.
+- **Patterns** (`router-patterns`, `router-unicode`): regex metacharacters escaped in
+  literal paths, a declared trailing slash insignificant, declaration-order shadow
+  warnings, failure-safe param decode, non-ASCII literals held in encoded form.
+- **Modes and base** (`router-hash`, `router-memory`, `router-base`,
+  `router-shadow-links`): the three modes behind the mode factories, base path per mode,
+  link interception (including inside shadow DOM), popstate, memory mode doing no
+  document-level work.
+- **URLs** (`router-url`): `router.url()` argument guarding, per-mode output, the `link`
+  function.
+- **Named routes** (`router-named-routes`, D196): the name table and duplicate names,
+  `targetPath` params, encoding and errors, named targets in `url()`, `push()`,
+  `replace()`, guards and `link` in every mode, and the same hrefs from hybrid prerender,
+  the static stub and the static kernel's names island.
+- **Scroll, focus, fragments** (`router-scroll`, `router-focus`, `router-fragment-pop`):
+  scroll defaults, config, anchors, sessionStorage persistence; focus and announcement on
+  commit, a view's own focus or `[autofocus]`, tabindex hygiene, skip cases, a custom
+  behavior; a same-document fragment pop settles in place with no load, focus move or
+  announcement.
+- **Head** (`router-head`): title sync at the commit point only; hybrid takeover leaves
+  prerendered tags.
+- **Guards and failure** (`router-guard-redirect-pop-url`, `router-failed-pop-url`,
+  `router-leave-hook-failure`): guard redirects and failed pops repairing the URL, a
+  throwing leave hook not leaking the incoming chain. `auth-example` boots the compiled
+  `examples/auth` over its mock backend: an async guard that refreshes before it lets
+  you in, a named redirect to sign-in and back, a shared refresh, a 401 renewed by the
+  error view, a restored session, and a sign-out that leaves nothing for the next user.
+- **Reused ancestors** (`router-ancestor-transaction`,
+  `router-prepared-commit-containment`, D146): overlapping prepares, conflicting-commit
+  convergence, exception safety, the mid-gate scope fence.
+- **`router.views` and `agent`** (`router-views`, D183): the frozen leaf list and the
+  `agent` route field's resolution and dev checks.
+- **Link prefetch** (`router-prefetch`, D195): hover delay and cancel, touch and focus
+  at once, lazy layouts, links a click would not take, Save-Data and 2g, hash mode,
+  `data-prefetch` values and the `prefetch: false` default, the guard rule,
+  `router.prefetch()` results, a named target, and retry after a failed load, `"visible"`
+  links joining and leaving, no listeners for an eager table, teardown at `stop()`.
+- **Route tree** (`route-tree-shared`): SSG enumeration and the router table agree.
+
+Transitions and morphs are [[TEST-TRANSITIONS-MORPH]]; locale prefixes are
+[[TEST-I18N]]; real-browser history is [[TEST-BROWSER-SMOKE]].

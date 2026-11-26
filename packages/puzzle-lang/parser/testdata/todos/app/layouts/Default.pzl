@@ -1,15 +1,15 @@
-<puzzle-view class="relative min-h-screen flex flex-col bg-ink text-fg">
+<puzzle-view class="relative min-h-screen flex flex-col bg-page text-ink">
   <!-- Single subtle amber glow overhead — atmosphere, not a color gradient -->
-  <div class="app-glow pointer-events-none absolute inset-x-0 top-0 h-[440px]"></div>
+  <div class="app-glow pointer-events-none absolute inset-x-0 top-0 h-110"></div>
 
   <header class="relative pt-16 pb-10">
     <div class="max-w-xl mx-auto px-6 text-center">
       <div class="flex items-center justify-center gap-3 mb-4">
         <span class="h-px w-8 bg-hairline"></span>
-        <span class="font-mono text-[11px] uppercase tracking-[0.4em] text-faint">Puzzle</span>
+        <span class="font-mono text-11 uppercase tracking-brand text-faint">Puzzle</span>
         <span class="h-px w-8 bg-hairline"></span>
       </div>
-      <h1 class="font-display text-6xl md:text-7xl leading-none text-fg">
+      <h1 class="font-display text-6xl md:text-7xl leading-none text-ink">
         Todos
       </h1>
       <p class="mt-4 text-sm text-muted">
@@ -20,13 +20,13 @@
 
   <main class="relative flex-1 pb-16">
     <div class="max-w-xl mx-auto px-6">
-      <Slot/>
+      <Outlet/>
     </div>
   </main>
 
   <footer class="relative py-8 border-t border-line">
     <div class="max-w-xl mx-auto px-6">
-      <p class="text-center font-mono text-[11px] tracking-[0.15em] text-faint">
+      <p class="text-center font-mono text-11 tracking-footer text-faint">
         built with the puzzle framework
       </p>
     </div>

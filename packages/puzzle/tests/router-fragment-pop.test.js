@@ -100,7 +100,16 @@ const ROUTES = [
 	},
 ];
 
+// A browser follows every move with a `scroll` event, which is what the router
+// reads the departing position from on popstate.
 function setScroll(x, y) {
+	jump(x, y);
+	window.dispatchEvent(new Event('scroll'));
+}
+
+// A move whose scroll event has not fired yet: WebKit's and Firefox's jump to a
+// fragment, which lands BEFORE popstate (its event follows on the next frame).
+function jump(x, y) {
 	Object.defineProperty(window, 'scrollX', { configurable: true, writable: true, value: x });
 	Object.defineProperty(window, 'scrollY', { configurable: true, writable: true, value: y });
 }
@@ -314,6 +323,38 @@ describe('Router fragment pop — back/forward traversal (D41)', () => {
 		expect(runs).toEqual({ home: 0, about: 0, shell: 1, docs: 1 });
 	});
 
+	it('restores the reading position when the browser jumped before popstate (WebKit, Firefox)', async () => {
+		await boot(ROUTES, undefined, '/docs');
+		const docsState = history.state;
+
+		setScroll(0, 220);
+		jump(0, 640); // the anchor jump, ahead of popstate and of its own scroll event
+		browserFragmentNav('/docs#faq');
+		await tick();
+		setScroll(0, 640); // that scroll event, a frame later
+
+		traverseTo(docsState, '/docs');
+		await tick();
+
+		expect(window.scrollY).toBe(220);
+	});
+
+	it('restores the position start() found when the page never scrolled before the jump', async () => {
+		jump(0, 300); // where the page stood when the router started (a reload, a remount)
+		await boot(ROUTES, undefined, '/docs');
+		const docsState = history.state;
+
+		jump(0, 640);
+		browserFragmentNav('/docs#faq');
+		await tick();
+		setScroll(0, 640);
+
+		traverseTo(docsState, '/docs');
+		await tick();
+
+		expect(window.scrollY).toBe(300);
+	});
+
 	it('does not move focus or announce on a traversal either', async () => {
 		await boot(ROUTES, undefined, '/docs');
 		const docsState = history.state;
@@ -381,6 +422,95 @@ describe('Router fragment pop — what still navigates', () => {
 		expect(router.current.route.name).toBe('about');
 		expect(router.current.hash).toBe('#faq');
 		expect(runs.about).toBe(1);
+	});
+});
+
+// ---- a pop still loading (C2#1, F1-B2) -------------------------------------
+
+describe('Router fragment pop — over a pop still loading', () => {
+	// /slow's data() waits on `gate` while one is set: the Back below loads slowly.
+	let gate;
+	class SlowView extends PuzzleView {
+		async data() {
+			await gate?.promise;
+			return {};
+		}
+		render() {
+			return h('puzzle-view', { class: 'slow' }, [text('SLOW')]);
+		}
+	}
+	const SLOW_ROUTES = [...ROUTES, { path: '/slow', name: 'slow', view: SlowView }];
+	const deferred = () => {
+		let resolve;
+		const promise = new Promise((r) => (resolve = r));
+		return { promise, resolve };
+	};
+	const savedY = (state) => JSON.parse(sessionStorage.getItem('__puzzleScroll'))[state.__puzzleScrollKey]?.y;
+
+	beforeEach(() => {
+		gate = null;
+	});
+
+	it('Back then Forward before the Back lands keeps the URL, tree and scroll on the committed page', async () => {
+		const { router, el } = await boot(SLOW_ROUTES, undefined, '/slow');
+		const slowState = history.state;
+		setScroll(0, 100);
+		await router.push('/about');
+		const aboutState = history.state;
+		setScroll(0, 200);
+
+		gate = deferred();
+		traverseTo(slowState, '/slow'); // Back — /slow's data() is held
+		await tick();
+		traverseTo(aboutState, '/about'); // Forward, home to the committed entry
+		gate.resolve();
+		await tick();
+
+		expect(location.pathname).toBe('/about');
+		expect(router.current.path).toBe('/about');
+		expect(el.textContent).toBe('ABOUT');
+		expect(window.scrollY).toBe(200);
+		expect(savedY(slowState)).toBe(100); // not /about's 200 under /slow's key
+	});
+
+	it("a push over a loading pop files no position under the popped entry's key", async () => {
+		const { router } = await boot(SLOW_ROUTES, undefined, '/slow');
+		const slowState = history.state;
+		setScroll(0, 100);
+		await router.push('/about');
+		setScroll(0, 200);
+
+		gate = deferred();
+		traverseTo(slowState, '/slow');
+		await tick();
+		await router.push('/docs');
+		gate.resolve();
+		await tick();
+
+		expect(router.current.path).toBe('/docs');
+		expect(savedY(slowState)).toBe(100);
+	});
+
+	it('Forward home does not cancel a push that superseded the Back: the push writes its own URL', async () => {
+		const { router, el } = await boot([...SLOW_ROUTES, { path: '/slow2', view: SlowView }], undefined, '/slow');
+		await router.push('/about'); // history: [/slow, /about]
+		const popped = () => new Promise((r) => window.addEventListener('popstate', r, { once: true }));
+
+		gate = deferred();
+		let moved = popped();
+		history.back(); // to /slow, whose data() is held
+		await moved;
+		const push = router.push('/slow2'); // held too
+		moved = popped();
+		history.forward(); // home to /about while both load
+		await moved;
+		expect(location.pathname).toBe('/about');
+		gate.resolve();
+
+		expect((await push).ok).toBe(true);
+		expect(router.current.path).toBe('/slow2');
+		expect(location.pathname).toBe('/slow2');
+		expect(el.textContent).toBe('SLOW');
 	});
 });
 

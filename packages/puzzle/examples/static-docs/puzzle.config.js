@@ -2,8 +2,8 @@
 // the compiler via node — the Go side never parses JS (D3).
 export default {
 	// Declaring the Tailwind pipeline makes `puzzle build` / `puzzle dev` run the
-	// Tailwind CLI and fold its output into dist/styles.css ahead of the collected
-	// <style> blocks.
+	// Tailwind CLI and fold its output into the built stylesheet, ahead of the
+	// collected <style> blocks.
 	styles: {
 		use: ['tailwindcss'],
 	},

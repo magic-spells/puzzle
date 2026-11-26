@@ -200,19 +200,18 @@ describe('encodeURL parity with Router.url()', () => {
 		}
 	}
 
-	it('throws on a non-string path exactly as Router.url() does', () => {
+	it('Router.url() throws on a non-string path', () => {
 		const router = new Router([]);
 		for (const bad of [5, null, undefined, {}, [], true, () => {}]) {
-			expect(() => encodeURL(bad, null, '')).toThrow(/\[puzzle\]/);
 			expect(() => router.url(bad)).toThrow(/\[puzzle\]/);
 		}
 	});
 });
 
 // D177 — under locale prefix routing each locale's pages encode under
-// `routerBase + /<locale>`, in both prerender modes: the static stub is
-// localized per page and the hybrid router's url() shadow is re-made per locale
-// pass, so the second locale never inherits the first one's prefix.
+// `routerBase + /<locale>`, in both prerender modes: the router stub is
+// localized per page and the hybrid router's url() shadow is re-made per page,
+// so the second locale never inherits the first one's prefix.
 describe('prerender — routerBase plus a locale prefix (D177)', () => {
 	const i18n = {
 		manifest: {

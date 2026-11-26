@@ -106,7 +106,7 @@ const usageMarkup = `<EmojiPicker @change={ addEmoji }/>
 const codeHero = `<input value={ message } @input={ onMessageInput(event) } />
 <EmojiPicker align="end" @change={ addEmoji }/>
 
-// addEmoji: (char) => this.setData({ message: this.getData().message + char })`;
+// addEmoji: (char) => this.setState({ message: this.getData().message + char })`;
 
 const codeTrigger = `<EmojiPicker label="Add reaction" @change={ addEmoji }>
   <span slot="trigger" class="…">React</span>
@@ -137,7 +137,7 @@ const codeMorph = `<EmojiPicker morph @change={ addEmoji }/>
 // prefers-reduced-motion by falling back to the plain panel.`;
 
 export default class EmojiPickerDoc extends PuzzleView {
-  data(params, props) {
+  data() {
     return {
       message: '',
       lastEmoji: '',
@@ -166,22 +166,19 @@ export default class EmojiPickerDoc extends PuzzleView {
   events = {
     addEmoji: (char) => {
       const { message } = this.getData();
-      this.setData({ message: message + char, lastEmoji: char });
-      this.refresh();
+      this.setState({ message: message + char, lastEmoji: char });
     },
 
     onMessageInput: (event) => {
-      this.setData({ message: event.target.value });
+      this.setState({ message: event.target.value });
     },
 
     openPicker: () => {
-      this.setData({ pickerOpen: true });
-      this.refresh();
+      this.setState({ pickerOpen: true });
     },
 
     closePicker: () => {
-      this.setData({ pickerOpen: false });
-      this.refresh();
+      this.setState({ pickerOpen: false });
     },
   };
 }

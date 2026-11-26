@@ -1,4 +1,20 @@
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+        
 import { PuzzleView } from '@magic-spells/puzzle';
 import WrapperChain from './WrapperChain.compiled.js';
 
@@ -49,4 +65,3 @@ SnippetChainHost.prototype.render = function () {
     ]),
   ]);
 };
-SnippetChainHost.__pzlModule = 'SnippetChainHost.pzl';

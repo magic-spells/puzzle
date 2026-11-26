@@ -1,0 +1,41 @@
+<puzzle-view>
+  <div class="space-y-8">
+    <div class="max-w-2xl space-y-2">
+      <h1 class="text-3xl font-semibold tracking-tight">A small site, ready for your words</h1>
+      <p class="text-gray-400">Every page here is plain HTML, written when you build. It loads fast and reads well before any JavaScript runs.</p>
+    </div>
+
+    <div class="flex max-w-2xl flex-wrap items-center gap-4 rounded-xl border border-gray-800 p-5">
+      <p class="text-sm text-gray-400">Pages can still run components. This counter is one:</p>
+      <Counter/>
+    </div>
+
+    <p class="text-sm text-gray-400">Edit <code class="font-mono text-gray-300">app/views/Home.pzl</code> and save — the dev server rebuilds the page.</p>
+
+    <nav class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <a href="https://magicspells.io/puzzle/docs" target="_blank" rel="noopener" class="space-y-1 rounded-xl border border-gray-800 p-5 hover:border-gray-600 hover:bg-gray-900">
+        <h2 class="font-medium">Docs</h2>
+        <p class="text-sm text-gray-400">Guides and reference for every part of Puzzle.</p>
+      </a>
+      <a href="https://magicspells.io/puzzle/tutorial" target="_blank" rel="noopener" class="space-y-1 rounded-xl border border-gray-800 p-5 hover:border-gray-600 hover:bg-gray-900">
+        <h2 class="font-medium">Tutorial</h2>
+        <p class="text-sm text-gray-400">Build a small app, one step at a time.</p>
+      </a>
+      <a href="https://magicspells.io/puzzle" target="_blank" rel="noopener" class="space-y-1 rounded-xl border border-gray-800 p-5 hover:border-gray-600 hover:bg-gray-900">
+        <h2 class="font-medium">Puzzle</h2>
+        <p class="text-sm text-gray-400">What the framework does and how it works.</p>
+      </a>
+      <a href="https://magicspells.io/puzzle-pieces" target="_blank" rel="noopener" class="space-y-1 rounded-xl border border-gray-800 p-5 hover:border-gray-600 hover:bg-gray-900">
+        <h2 class="font-medium">Puzzle Pieces</h2>
+        <p class="text-sm text-gray-400">Ready-made components you copy into your app.</p>
+      </a>
+    </nav>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import Counter from '../components/Counter.pzl';
+
+export default class Home extends PuzzleView {}
+</script>

@@ -1,6 +1,6 @@
 ---
 name: 'D163 — Lazy route views: the branded lazy() marker, resolved after guards'
-status: built
+status: verified
 connections:
   - DECISION-D160-SPA-CODE-SPLITTING
   - DECISION-D159-ROUTER-MODE-FACTORIES
@@ -16,7 +16,9 @@ connections:
   - FILE-ROUTER
   - DOC-SPEC-ROUTER
   - DOC-RELEASE-SURFACE
-  - RELEASE-V0-7-0
+  - DECISION-D195-LINK-PREFETCH
+verified_at: '2026-11-24T18:05:31.213Z'
+verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
 ---
 
 ## Context
@@ -69,3 +71,5 @@ export default [
 ## Consequences
 
 Route validation is stricter: a non-view value fails at `Router` construction, not first navigation.
+
+[[DECISION-D195-LINK-PREFETCH]] calls the same resolver before the click (intent or scroll into view). It keeps this card's guard rule by default: an automatic prefetch skips a guarded route, and only a link that asks by name, or `router.prefetch()`, loads one.

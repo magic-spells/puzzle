@@ -11,9 +11,8 @@
 // src/utils/dismiss-timer.js).
 //
 // PORTED from notification-stack:
-//   - the pausable one-shot DismissTimer (pause on hover, resume on leave),
-//     with the monotonic run-token guard so a callback that fires after a
-//     pause/cancel is a guaranteed no-op.
+//   - the pausable one-shot dismiss timer (pause on hover, resume on leave).
+//     A toast that arrives while the stack is paused starts paused.
 //   - variants (default | success | danger), auto-dismiss with a per-toast
 //     duration, and sticky toasts (duration 0/null → no timer).
 //   - the max-visible cap (enforced in the Toaster host, not here — the store
@@ -41,7 +40,7 @@
  * @property {string} message
  * @property {ToastVariant} variant
  * @property {boolean} leaving   - true once the exit transition has begun
- * @property {DismissTimer|null} timer
+ * @property {{ pause(): void, resume(): void, cancel(): void } | null} timer
  */
 
 /** Default auto-dismiss time, in ms. */
@@ -57,75 +56,35 @@ const LEAVE_MS = 180;
 const VARIANTS = new Set(['default', 'success', 'danger']);
 
 /**
- * Pausable one-shot timer used for toast auto-dismiss.
- *
- * A monotonic run token invalidates stale timeouts, so a callback that fires
- * after a pause/cancel is a guaranteed no-op even if a clearTimeout is missed.
+ * Pausable one-shot timer for auto-dismiss; it starts paused while the stack is.
+ * It needs no fired state: firing calls dismiss(), which drops it from the toast.
  */
-class DismissTimer {
-	/**
-	 * Starts counting down immediately.
-	 * @param {Function} callback - Called once when the timer runs out
-	 * @param {number} duration - Total time in milliseconds before expiry
-	 */
-	constructor(callback, duration) {
-		this._callback = callback;
-		this._duration = duration;
-		this._remaining = duration;
-		this._startedAt = null;
-		this._timeoutId = null;
-		this._runToken = 0;
-		this._paused = false;
-		this._schedule();
-	}
-
-	/** Pause the timer, banking the time left. */
-	pause() {
-		if (this._timeoutId === null) return;
-		this._clear();
-		this._remaining = Math.max(0, this._remaining - (performance.now() - this._startedAt));
-		this._startedAt = null;
-		this._paused = true;
-	}
-
-	/** Resume a paused timer with its banked remaining time. */
-	resume() {
-		if (!this._paused) return;
-		this._paused = false;
-		this._schedule();
-	}
-
-	/** Cancel the timer entirely. */
-	cancel() {
-		this._clear();
-		this._startedAt = null;
-		this._paused = false;
-	}
-
-	_schedule() {
-		this._startedAt = performance.now();
-		const token = ++this._runToken;
-		this._timeoutId = setTimeout(() => {
-			if (token !== this._runToken) return;
-			this._timeoutId = null;
-			this._startedAt = null;
-			this._remaining = 0;
-			this._callback();
-		}, this._remaining);
-	}
-
-	_clear() {
-		this._runToken++;
-		if (this._timeoutId !== null) {
-			clearTimeout(this._timeoutId);
-			this._timeoutId = null;
-		}
-	}
+function timer(done, left) {
+	let id = null;
+	let at = 0;
+	const run = () => {
+		at = performance.now();
+		id = setTimeout(done, left);
+	};
+	if (!paused) run();
+	return {
+		pause() {
+			if (id === null) return;
+			clearTimeout(id);
+			id = null;
+			left -= performance.now() - at;
+		},
+		resume() {
+			if (id === null) run();
+		},
+		cancel: () => clearTimeout(id),
+	};
 }
 
 /** @type {Toast[]} */
 let toasts = [];
 let counter = 0;
+let paused = false;
 const subscribers = new Set();
 
 function notify() {
@@ -182,7 +141,7 @@ export function toast(input) {
 		timer: null,
 	};
 	if (duration > 0) {
-		entry.timer = new DismissTimer(() => dismiss(id), duration);
+		entry.timer = timer(() => dismiss(id), duration);
 	}
 
 	toasts = [...toasts, entry];
@@ -218,10 +177,12 @@ export function clearToasts() {
 
 /** Pause every auto-dismiss timer — the Toaster calls this on hover. */
 export function pauseAll() {
+	paused = true;
 	for (const t of toasts) t.timer?.pause();
 }
 
 /** Resume every auto-dismiss timer — the Toaster calls this on hover-leave. */
 export function resumeAll() {
+	paused = false;
 	for (const t of toasts) t.timer?.resume();
 }

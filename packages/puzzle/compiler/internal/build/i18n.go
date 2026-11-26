@@ -49,10 +49,10 @@ func i18nWarnings(absRoot string, cfg config.Config, usage plugin.Usage, res *lo
 	if !cfg.I18nEnabled() {
 		var out []string
 		// The compiler never reads app.js, so it cannot see an app-registered `t`
-		// formatter; the warning says so rather than guessing.
+		// function; the warning says so rather than guessing.
 		if usage.UsesT() {
-			out = append(out, "templates use the t formatter, but "+config.ConfigFileName+
-				" configures no i18n, so every key prints as written unless the app registers its own t formatter — to use translations, add i18n: { locales: ['en'], defaultLocale: 'en' } and app/locales/en.json")
+			out = append(out, "templates use the t function, but "+config.ConfigFileName+
+				" configures no i18n, so every key prints as written unless the app registers its own t function — to use translations, add i18n: { locales: ['en'], defaultLocale: 'en' } and app/locales/en.json")
 		}
 		if locales.HasSourceDir(absRoot) {
 			out = append(out, locales.DirName+"/ exists, but "+config.ConfigFileName+

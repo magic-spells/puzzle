@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile, access } from 'node:fs/promises';
+import { readFile } from 'node:fs/promises';
 
 // Static guards for the dropdown-panel WRAPPER family and the navigation-menu
 // family composed over it. There is nothing behavioural left to unit test here:
@@ -183,34 +183,7 @@ for (const entry of PIECES) {
 		assert.deepEqual(piece.dependencies, entry.dependencies);
 		assert.equal(piece.targetDir, 'app/components/ui');
 	});
-
-	test(`registry.json mirrors the ${entry.piece} manifest`, async () => {
-		const [piece, registry] = await Promise.all([
-			readJSON(entry.manifest),
-			readJSON('../registry/registry.json'),
-		]);
-		const row = registry.pieces.find((p) => p.name === entry.piece);
-
-		assert.ok(row, `registry.json has no ${entry.piece} entry`);
-		assert.equal(row.description, piece.description);
-		assert.deepEqual(row.files, piece.files);
-		assert.deepEqual(row.registryDependencies, piece.registryDependencies);
-		assert.deepEqual(row.dependencies, piece.dependencies);
-		assert.equal(row.targetDir, piece.targetDir);
-	});
-
-	test(`every ${entry.piece} manifest file exists on disk`, async () => {
-		for (const file of entry.files) {
-			await access(new URL(`../registry/ui/${entry.piece}/${file}`, import.meta.url));
-		}
-	});
 }
-
-test('registry.json pieces stay alphabetical', async () => {
-	const registry = await readJSON('../registry/registry.json');
-	const names = registry.pieces.map((p) => p.name);
-	assert.deepEqual(names, [...names].sort());
-});
 
 test(`exactly one dynamic import of ${PACKAGE}, in the base root`, async () => {
 	const sources = await Promise.all(

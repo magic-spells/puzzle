@@ -19,6 +19,12 @@ notes:
       fakeDom takes `htmlAttrs` to seed stamped attributes. One case stamps data-theme="dark" with
       data-scheme="warm" and asserts two things: pre-paint removes both, and boot() leaves the
       result unchanged. The demo index.html inline copy was re-synced byte for byte.
+  - kind: state
+    text: >-
+      appearance-picker's style group always keeps one tab stop. When the current key is not among
+      the options (`system={false}` with a null or omitted `mode`), the roving tabindex falls back
+      to the first option, so the radiogroup stays reachable by Tab; aria-checked stays honest
+      (nothing checked).
 ---
 
 # Appearance styles — Cool scheme, Dark/Dim/Mixed/Light, picker previews

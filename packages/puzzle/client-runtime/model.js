@@ -360,13 +360,6 @@ const POLLUTION_SKIP = new Set(['__proto__', 'constructor', 'prototype']);
 // internals (`_store`/`_type`/`_synced`/`_deleted`).
 const MERGE_SKIP = new Set([...POLLUTION_SKIP, '_store', '_type', '_synced', '_deleted']);
 
-/**
- * The one save-after-removal message. save() raises it at CALL time; the Store's
- * _saveRecordNow raises the identical error when a save that was QUEUED behind
- * another write discovers the removal only on reaching the front of the chain.
- * Callers cannot tell those apart and must not have to, so the string lives here
- * and the Store imports it. Not re-exported from index.js — internal, not API.
- */
 // Per-record local-mutation state used by save-response reconciliation. Weak
 // storage keeps it off the deliberate record shape and releases it with the
 // record. Each update() advances the record revision once and stamps every field
@@ -644,30 +637,6 @@ export function safeMerge(record, src, throughRevision) {
 }
 
 /**
- * Does `key` resolve to a plain method on this model's prototype chain?
- * Stops before Object.prototype, mirroring resolveCollision's walk.
- */
-// Walks to Object.prototype for the same reason resolveCollision does: a schema
-// field named `toString`/`valueOf` is unusable by construction, so the two walks
-// must agree on what "is a method" means. If this one stopped short, such a field
-// would register cleanly and then never hold data — the exact trap this check
-// exists to close.
-/**
- * @param {object} proto
- * @param {string} key
- * @returns {boolean}
- */
-function resolvesToMethod(proto, key) {
-	let owner = proto;
-	while (owner) {
-		const descriptor = Object.getOwnPropertyDescriptor(owner, key);
-		if (descriptor) return !('get' in descriptor) && typeof descriptor.value === 'function';
-		owner = Object.getPrototypeOf(owner);
-	}
-	return false;
-}
-
-/**
  * Reject a schema entry whose NAME the record shape has already spoken for —
  * checked once, when the Store registers the model, so the mistake surfaces at
  * app construction instead of as a `TypeError: record.update is not a function`
@@ -699,7 +668,8 @@ export function assertSchemaNames(Model, type) {
 	if (typeof Model !== 'function' || !Model.prototype) return;
 	const schema = Model.schema;
 	if (!schema || typeof schema !== 'object') return;
-	const proto = Model.prototype;
+	// the payload path's own walk, on a probe with no own keys standing in for a record
+	const probe = Object.create(Model.prototype);
 	for (const name of Object.keys(schema)) {
 		// Reserved first: `constructor` is in both families, and "reserved" is the
 		// more useful thing to tell someone who declared it.
@@ -708,7 +678,7 @@ export function assertSchemaNames(Model, type) {
 				`[puzzle] model "${type}" declares schema entry "${name}", which is a reserved record field — every merge path (update, upsert, save response, storage hydration) drops it, so the field can never hold data: a required rule on it fails forever and save() rejects without dispatching. Rename the field.`
 			);
 		}
-		if (!resolvesToMethod(proto, name)) continue;
+		if (resolveCollision(probe, name) !== COLLIDES_METHOD) continue;
 		throw new Error(
 			`[puzzle] model "${type}" declares schema entry "${name}", which is a method on ${Model.name || 'the model class'} — a field cannot shadow a model method (payloads carrying it are dropped). Rename the field or the method.`
 		);

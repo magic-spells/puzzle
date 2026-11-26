@@ -11,6 +11,15 @@
 
 declare module '*.pzl' {
 	import { PuzzleView } from '@magic-spells/puzzle';
-	const component: typeof PuzzleView;
+	const component: typeof PuzzleView<any>;
 	export default component;
+}
+
+/** Public compile-time values from puzzle.config.js; apps can augment this interface. */
+interface ImportMetaEnv {
+	readonly [key: string]: string | number | boolean | undefined;
+}
+
+interface ImportMeta {
+	readonly env: ImportMetaEnv;
 }

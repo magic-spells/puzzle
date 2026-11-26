@@ -77,7 +77,8 @@ const rows = [
   { invoice: 'INV-1044', client: 'Initech', status: 'Paid', amount: '$3,450.00' },
 ];
 
-<Table columns={ columns } rows={ rows } caption="Invoices billed this quarter" />`;
+<Table columns={ columns } rows={ rows } caption="Invoices billed this quarter" />
+// expose them to the template: data() { return { columns, rows }; }`;
 
 const codeAlignment = `const columns = [
   { key: 'item', label: 'Item' },
@@ -85,14 +86,15 @@ const codeAlignment = `const columns = [
   { key: 'price', label: 'Price', align: 'right' },
 ];
 
-<Table columns={ columns } rows={ rows } />`;
+<Table columns={ columns } rows={ rows } />
+// expose it to the template: data() { return { columns }; }`;
 
 const codeEmpty = `// An empty rows array renders one centered cell spanning every column.
 // The empty prop overrides the default "No results." text.
 <Table columns={ columns } rows={ [] } empty="No invoices this quarter." />`;
 
 export default class TableDoc extends PuzzleView {
-  data(params, props) {
+  data() {
     return {
       ...this.getData(),
       installCmd,

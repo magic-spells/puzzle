@@ -6,7 +6,9 @@
         <p class="mt-2 text-body">
           A config-first part-to-whole donut. Hand it an array of
           <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">{ '{ label, value }' }</code>
-          and it renders slices in fixed slot colors, an always-present legend, per-slice hover tooltips with
+          and it renders slices in fixed slot colors, a legend (shown by default;
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">{ 'showLegend={ false }' }</code>
+          hides it), per-slice hover tooltips with
           percent-of-total, and an accessible data table. Pass
           <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">totalLabel</code>
           to fill the donut center with the summed total.
@@ -44,7 +46,7 @@
         <section id="folding" class="scroll-mt-20">
           <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Legend and folding</h2>
           <p class="mb-4 text-sm text-body">
-            The legend is always present — slices are the series, so color-matching alone is never required.
+            The legend shows by default — slices are the series, so color-matching alone is never required.
             When the data has more than eight slices, the seven largest are kept and the rest fold into a
             single <span class="font-medium text-ink">Other</span> slice, so the palette is never cycled past
             its eight validated slots.
@@ -80,7 +82,8 @@ const codeHero = `const trafficData = [
 ];
 
 // donut defaults to true; totalLabel fills the center with the summed total.
-<PieChart data={ trafficData } label="Traffic by source" totalLabel="Sessions" />`;
+<PieChart data={ trafficData } label="Traffic by source" totalLabel="Sessions" />
+// expose it to the template: data() { return { trafficData }; }`;
 
 const codePlain = `// donut={ false } draws a solid pie instead of a ring.
 <PieChart data={ trafficData } donut={ false } label="Traffic by source" />`;
@@ -99,10 +102,11 @@ const codeFolding = `const countryData = [
 ];
 
 // 10 slices → the 7 largest stay; the rest fold into "Other" (always chart-8).
-<PieChart data={ countryData } label="Users by country" totalLabel="Users" />`;
+<PieChart data={ countryData } label="Users by country" totalLabel="Users" />
+// expose it to the template: data() { return { countryData }; }`;
 
 export default class PieChartDoc extends PuzzleView {
-  data(params, props) {
+  data() {
     return {
       ...this.getData(),
       installCmd,

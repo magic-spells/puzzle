@@ -225,10 +225,10 @@ const PROMOS = [
 
 export default class MarqueeDoc extends PuzzleView {
   created() {
-    this.setData({ promoIndex: 0 });
+    this.setState({ promoIndex: 0 });
   }
 
-  data(params, props) {
+  data() {
     return {
       promo: PROMOS[this.getData().promoIndex % PROMOS.length],
       installCmd,
@@ -261,8 +261,7 @@ export default class MarqueeDoc extends PuzzleView {
 
   events = {
     nextPromo: () => {
-      this.setData('promoIndex', this.getData().promoIndex + 1);
-      this.refresh();
+      this.setState('promoIndex', this.getData().promoIndex + 1);
     },
   };
 }

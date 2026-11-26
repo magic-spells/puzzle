@@ -59,7 +59,7 @@ import DropdownPanel from '../DropdownPanel/index.js';
 //   wide     full-width mega panel spanning the <nav>
 //   opens    'down' (default) | 'right' for a submenu
 //   align    'start' (default) | 'end'
-//   effect   'fade' | 'slide' | 'scale' | 'blur' | 'swing' (effects sheet only)
+//   effect   'fade' | 'slide' | 'scale' | 'blur' | 'bloom' | 'swing' (effects sheet only)
 //   class    merged onto <dropdown-panel>.
 //            Merging is not precedence: a utility of yours on a property the
 //            stock chrome already sets wins only if Tailwind emits it LATER in
@@ -81,7 +81,7 @@ const TIGHT = 'grid gap-1';
 const WIDE = 'grid gap-x-6 gap-y-5 px-6 py-5';
 
 export default class Content extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     const wide = !!props.wide;
     const count = Number(props.columns);
     const cols = COLUMNS[count] || (wide ? AUTO : COLUMNS[1]);

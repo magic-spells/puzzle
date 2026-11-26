@@ -1,9 +1,5 @@
 import { PuzzleView } from '@magic-spells/puzzle';
-export default class Links extends PuzzleView {
-  data(params, props) {
-    return props;
-  }
-}
+export default class Links extends PuzzleView {}
 
 import { ViewNode, displayValue as __s, urlValue as __u } from '@magic-spells/puzzle';
 
@@ -64,4 +60,3 @@ Links.prototype.render = function () {
     ]),
   ]);
 };
-Links.__pzlModule = 'Links.pzl';

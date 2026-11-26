@@ -1,6 +1,6 @@
 ---
 name: 'D168 — Template whitespace: one merged rule for both hosts'
-status: built
+status: verified
 connections:
   - COMPONENT-CODEGEN
   - DOC-SPEC-TEMPLATE
@@ -9,6 +9,8 @@ connections:
   - DOC-LANGUAGE-CORE
   - DECISION-D173-CORE-SEMANTICS
   - DECISION-D172-ONE-LANGUAGE-TWO-DIALECTS
+verified_at: '2026-11-24T18:13:21.008Z'
+verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
 ---
 
 # D168 — Template whitespace: one merged rule for both hosts
@@ -29,15 +31,17 @@ siblings such as buttons.
 
 ## Decision
 
-1. **Whitespace with no newline collapses to one space.**
+1. **Whitespace with no newline collapses to one space** (whitespace is ASCII
+   space, tab, CR and LF; U+00A0 and other non-ASCII spaces are text).
 2. **Newline-bearing whitespace at a parent's first/last-child edge is
    dropped.** A parent is an element, a component's children, a marker's
    fallback body, a snippet body, or a control block's own body (a `{#for}`
    body's edges strip on every iteration).
 3. **Newline-bearing whitespace between two non-text siblings is dropped.**
-   Non-text: elements, components, markers, `<Portal>`, `<Snippet>`, `{#svg}`
-   and control blocks (`{#if}`, `{#unless}`, `{#for}`, `{#case}`). A
-   whitespace-only gap between two stacked blocks stays dropped.
+   Non-text: elements, components, markers, `<Portal>`, `<Snippet>`, `{#svg}`,
+   `raw()`/`newline_to_br()` markup nodes, and control blocks (`{#if}`,
+   `{#unless}`, `{#for}`, `{#case}`). A whitespace-only gap between two
+   stacked blocks stays dropped.
 4. **Between text/interpolation and an element (either order),
    newline-bearing whitespace becomes one space.** "Element" = rule 3's set
    minus control blocks. Punctuation that must touch an element goes on the
@@ -70,8 +74,7 @@ prerendered and mounted text match. Pinned by
 `codegen/text_run_space_test.go`, the serializer suite, and the V10 case in
 `tests/core-semantics.test.js`.
 
-**Sites** implements rules 1, 2, 4 and 6; rules 3 and 5 and its `<pre>`
-first-newline check are on D173's Sites list.
+Sites renders the same rule (D173 V10).
 
 ## Alternatives
 

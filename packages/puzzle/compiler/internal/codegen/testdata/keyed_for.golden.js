@@ -27,4 +27,3 @@ KeyedFor.prototype.render = function () {
     ),
   ]);
 };
-KeyedFor.__pzlModule = 'keyed_for.pzl';

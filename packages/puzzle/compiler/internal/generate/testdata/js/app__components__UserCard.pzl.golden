@@ -9,7 +9,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 
 export default class UserCard extends PuzzleView {
   // `label` is a prop passed by the parent component.
-  data(params, props) {
+  data({ props }) {
     return {
       label: props.label || 'UserCard'
     };

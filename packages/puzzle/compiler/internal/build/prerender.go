@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/evanw/esbuild/pkg/api"
+	"github.com/magic-spells/puzzle/compiler/internal/fsutil"
 	"github.com/magic-spells/puzzle/compiler/internal/plugin"
 	"github.com/magic-spells/puzzle/compiler/internal/ui"
 	"github.com/magic-spells/puzzle/packages/puzzle-lang/textutil"
@@ -55,18 +56,17 @@ const prerenderDir = ".puzzle-prerender"
 //
 // The check reads the post-copyPublic STAGING state rather than the app tree, so
 // neither the app/public vs flat public/ resolution nor a file-instead-of-dir
-// spelling can dodge it. It mirrors the reserved-name guard the static mode
-// already applies to staging/_puzzle (prerender_pages.go). label names the mode
-// in the error, as elsewhere in this file.
+// spelling can dodge it. label names the mode in the error, as elsewhere in this
+// file.
 func checkPrerenderScratchCollision(absRoot, staging, label string) error {
 	scratch := filepath.Join(staging, prerenderDir)
-	if !dirExists(scratch) && !FileExists(scratch) {
+	if !dirExists(scratch) && !fsutil.FileExists(scratch) {
 		return nil
 	}
 	// Name the user's file where it can be resolved; the staging copy is a temp
 	// path that is gone by the time the error is read.
 	source := prerenderDir
-	if pub := publicDir(absRoot); pub != "" {
+	if pub := PublicDir(absRoot); pub != "" {
 		if rel, err := filepath.Rel(absRoot, filepath.Join(pub, prerenderDir)); err == nil {
 			source = filepath.ToSlash(rel)
 		}
@@ -78,10 +78,24 @@ func checkPrerenderScratchCollision(absRoot, staging, label string) error {
 	)
 }
 
+// checkStaticReserved runs static mode's reserved-output guards against the
+// post-copyPublic staging tree: a public asset at _puzzle would be clobbered by
+// the per-page bundles, and one at .puzzle-prerender consumed by the prerender
+// step.
+func checkStaticReserved(absRoot, staging string) error {
+	if pagesOut := filepath.Join(staging, staticPagesDir); dirExists(pagesOut) || fsutil.FileExists(pagesOut) {
+		return fmt.Errorf(
+			"public asset would overwrite compiler output dist/%s (a reserved output name in static mode); rename or remove it",
+			staticPagesDir,
+		)
+	}
+	return checkPrerenderScratchCollision(absRoot, staging, "--static")
+}
+
 // ssgSummary mirrors the JSON the SSG runtime's prerenderToDir prints after the
-// sentinel: the files written, the routes it skipped (dynamic routes in v1), and
-// any advisory warnings. The output file path lets the build compare each route
-// output with the public assets copied into staging before the prerender pass.
+// sentinel: the files written and any advisory warnings (a skipped route is
+// one). The output file path lets the build compare each route output with the
+// public assets copied into staging before the prerender pass.
 type ssgSummary struct {
 	Written []struct {
 		Path string `json:"path"`
@@ -90,10 +104,6 @@ type ssgSummary struct {
 		// at its path instead of rendered markup (an SPA island, SPEC §36).
 		Prerender bool `json:"prerender"`
 	} `json:"written"`
-	Skipped []struct {
-		Path   string `json:"path"`
-		Reason string `json:"reason"`
-	} `json:"skipped"`
 	Warnings []string `json:"warnings"`
 }
 
@@ -107,7 +117,7 @@ type ssgSummary struct {
 //
 // site is the config's `site` origin (D177), handed to prerenderToDir as its
 // `site` option when set (prerenderSiteOption).
-func prerenderHybrid(absRoot, appEntry, staging, site string, publicFiles map[string]bool, pc *passContext) error {
+func prerenderHybrid(absRoot, appEntry, staging, site string, publicFiles map[string]bool, quiet bool, pc *passContext) error {
 	// A public/ asset copied to staging/.puzzle-prerender would be overwritten by
 	// the prerender bundle and then deleted with it — reject it before any of that
 	// happens. copyPublic has already run, so the collision is observable here.
@@ -140,7 +150,7 @@ func prerenderHybrid(absRoot, appEntry, staging, site string, publicFiles map[st
 		}
 	}
 
-	printPrerenderSummary(summary)
+	printPrerenderSummary(summary, quiet)
 
 	// Drop the prerender bundle before the swap so it never ships in dist/.
 	if err := os.RemoveAll(filepath.Join(staging, prerenderDir)); err != nil {
@@ -214,7 +224,7 @@ func checkPrerenderCollision(absRoot, staging string, publicOwners map[string]st
 		return nil
 	}
 
-	publicPath, err := filepath.Rel(absRoot, filepath.Join(publicDir(absRoot), filepath.FromSlash(owner)))
+	publicPath, err := filepath.Rel(absRoot, filepath.Join(PublicDir(absRoot), filepath.FromSlash(owner)))
 	if err != nil {
 		return fmt.Errorf("resolving public asset for prerender output %s: %w", outputFile, err)
 	}
@@ -233,16 +243,11 @@ func checkPrerenderCollision(absRoot, staging string, publicOwners map[string]st
 // plugin collects is discarded — styles.css was already composed by the main
 // pass; this pass exists only to run the app under node.
 func bundlePrerenderEntry(absRoot, stdin, outfile, label string, pc *passContext) error {
-	buildOpts := prerenderBundleOptions(absRoot, stdin, outfile, pc.plugin(absRoot))
+	buildOpts := prerenderBundleOptions(absRoot, stdin, outfile, pc.plugin(absRoot), pc.env)
 
 	result := api.Build(buildOpts)
 	if len(result.Errors) > 0 {
-		lines := api.FormatMessages(result.Errors, api.FormatMessagesOptions{
-			Kind:          api.ErrorMessage,
-			Color:         ui.New(os.Stderr).Enabled(),
-			TerminalWidth: 0,
-		})
-		return fmt.Errorf("puzzle build %s: prerender bundle failed:\n%s", label, strings.Join(lines, "\n"))
+		return formatBuildErrors("puzzle build "+label+": prerender bundle failed", result.Errors)
 	}
 	return nil
 }
@@ -251,7 +256,7 @@ func bundlePrerenderEntry(absRoot, stdin, outfile, label string, pc *passContext
 // split out from bundlePrerenderEntry so the static dev builder can hold the
 // same pass open as a persistent api.Context and never risk drifting from what
 // a one-shot build compiles.
-func prerenderBundleOptions(absRoot, stdin, outfile string, pl *plugin.Plugin) api.BuildOptions {
+func prerenderBundleOptions(absRoot, stdin, outfile string, pl *plugin.Plugin, env map[string]json.RawMessage) api.BuildOptions {
 	buildOpts := api.BuildOptions{
 		Stdin: &api.StdinOptions{
 			Contents:   stdin,
@@ -274,7 +279,7 @@ func prerenderBundleOptions(absRoot, stdin, outfile string, pl *plugin.Plugin) a
 		// router.js only for route-shape validation and segment-regex compilation
 		// (ssg/index.js constructs an unstarted memory Router); nothing here
 		// navigates into a container.
-		Define:   bundleDefines(pl, bundleFlags{Dev: false, Takeover: false}),
+		Define:   bundleDefines(pl, bundleFlags{Env: env, Dev: false, Takeover: false}),
 		Plugins:  []api.Plugin{pl.ESBuild()},
 		LogLevel: api.LogLevelSilent,
 	}
@@ -350,10 +355,11 @@ func prerenderDetail(stderr, stdout string, err error) string {
 }
 
 // printPrerenderSummary reports the prerender result to stdout in the style of
-// the build summary: a header with the page count, then each skipped route and
-// each advisory warning as a dimmed/yellow line. It degrades cleanly on a
-// non-TTY (the ui.Printer no-ops color).
-func printPrerenderSummary(s ssgSummary) {
+// the build summary: a header with the page count, then each warning as a
+// yellow line — every skipped route carries one. It degrades cleanly on a
+// non-TTY (the ui.Printer no-ops color). quiet (`puzzle build -q`) drops the
+// header; the warning lines always print.
+func printPrerenderSummary(s ssgSummary, quiet bool) {
 	prerendered := 0
 	for _, w := range s.Written {
 		if w.Prerender {
@@ -363,24 +369,19 @@ func printPrerenderSummary(s ssgSummary) {
 	shells := len(s.Written) - prerendered
 
 	out := ui.New(os.Stdout)
-	detail := fmt.Sprintf("· %d page%s prerendered", prerendered, textutil.Plural(prerendered))
-	if shells > 0 {
-		// `prerender: false` islands get the plain SPA shell — written, not rendered.
-		detail += fmt.Sprintf(" (+%d SPA shell%s)", shells, textutil.Plural(shells))
+	if !quiet {
+		detail := fmt.Sprintf("· %d page%s prerendered", prerendered, textutil.Plural(prerendered))
+		if shells > 0 {
+			// `prerender: false` islands get the plain SPA shell — written, not rendered.
+			detail += fmt.Sprintf(" (+%d SPA shell%s)", shells, textutil.Plural(shells))
+		}
+		fmt.Fprintln(os.Stdout)
+		fmt.Fprintf(os.Stdout, "  %s %s\n",
+			out.Cyan(out.Bold("puzzle build · hybrid")),
+			out.Dim(detail),
+		)
 	}
-	fmt.Fprintln(os.Stdout)
-	fmt.Fprintf(os.Stdout, "  %s %s\n",
-		out.Cyan(out.Bold("puzzle build · hybrid")),
-		out.Dim(detail),
-	)
 	for _, w := range s.Warnings {
 		fmt.Fprintf(os.Stdout, "  %s %s\n", out.Yellow("!"), w)
-	}
-	for _, sk := range s.Skipped {
-		fmt.Fprintf(os.Stdout, "  %s %s %s\n",
-			out.Yellow("!"),
-			out.Dim("skipped"),
-			fmt.Sprintf("%s (%s)", sk.Path, sk.Reason),
-		)
 	}
 }

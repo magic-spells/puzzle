@@ -202,16 +202,10 @@ func TestArrowParamMangling(t *testing.T) {
 	}
 }
 
-// Defense in depth: whatever reaches the lowerer, `this` is never compiled as
-// the data field `__d.this`, and checkTemplateExprs rejects it with the
-// parser's own words at its own position.
+// Defense in depth behind the parser: checkTemplateExprs rejects a `this` with
+// the parser's own words at its own position, before anything is lowered.
 func TestThisSafetyNet(t *testing.T) {
 	this := &expr.Identifier{Name: "this", Start: expr.Pos{Line: 3, Col: 9, Offset: 40}}
-	w := &textWriter{}
-	newLowerer(w, targetRender, nil, nil).value(&expr.Member{Object: this, Property: "x"})
-	if strings.Contains(w.String(), "__d.this") {
-		t.Errorf("lowered `this` as a data read: %s", w.String())
-	}
 	c := &compiler{file: "T.pzl"}
 	root := &parser.Element{Tag: "puzzle-view", Children: []parser.Node{
 		&parser.Interpolation{Expr: "this.x", ExprAST: &expr.Member{Object: this, Property: "x"}},

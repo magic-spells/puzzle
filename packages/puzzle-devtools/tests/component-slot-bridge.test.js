@@ -41,7 +41,7 @@ afterEach(() => {
 });
 
 class Card extends PuzzleView {
-	data(_params, props) { return props; }
+	data({ props }) { return props; }
 	render() { return h('section', {}, [text(this.getData().title), h(SLOT_TAG)]); }
 }
 class TaskCard extends Card {}
@@ -56,7 +56,7 @@ describe('Component selections through the runtime DevTools bridge', () => {
 		const hook = installHook();
 		let host;
 		class Host extends PuzzleView {
-			created() { host = this; this.setData({ choice: TaskCard, title: 'first' }); }
+			created() { host = this; this.setState({ choice: TaskCard, title: 'first' }); }
 			render() {
 				const { choice, title } = this.getData();
 				return h('puzzle-view', {}, [
@@ -79,7 +79,7 @@ describe('Component selections through the runtime DevTools bridge', () => {
 		expect(hook.request('inspect:view', { id: oldCard.id }).props).toEqual({ title: 'first' });
 		expect(hook.request('inspect:view', { id: oldBadge.id }).props).toEqual({ title: 'slot first' });
 
-		host.setData({ choice: BacktestCard, title: 'second' });
+		host.setState({ choice: BacktestCard, title: 'second' });
 		await settled();
 		const after = hook.request('snapshot:views').roots;
 		const card = after[0].children[0];
@@ -105,7 +105,7 @@ describe('Component selections through the runtime DevTools bridge', () => {
 		let host;
 		const cards = { task: TaskCard, backtest: BacktestCard, empty: null };
 		class MapHost extends PuzzleView {
-			created() { host = this; this.setData({ key: 'task', title: 'first' }); }
+			created() { host = this; this.setState({ key: 'task', title: 'first' }); }
 			render() {
 				const { key, title } = this.getData();
 				return h('puzzle-view', {}, [dynamicComponent(cards[key], { title, name: 'child name', from: 'child source' })]);
@@ -118,7 +118,7 @@ describe('Component selections through the runtime DevTools bridge', () => {
 		expect(initial.children).toEqual([expect.objectContaining({ name: 'TaskCard', children: [] })]);
 		const oldId = initial.children[0].id;
 
-		host.setData({ key: 'backtest', title: 'next' });
+		host.setState({ key: 'backtest', title: 'next' });
 		await settled();
 		const selected = hook.request('snapshot:views').roots[0].children;
 		expect(selected).toEqual([expect.objectContaining({ name: 'BacktestCard', children: [] })]);
@@ -127,7 +127,7 @@ describe('Component selections through the runtime DevTools bridge', () => {
 		expect(hook.of('view-destroyed').map((event) => event.payload.id)).toContain(oldId);
 
 		for (const key of ['empty', 'unknown']) {
-			host.setData('key', key);
+			host.setState('key', key);
 			await settled();
 			expect(hook.request('snapshot:views').roots).toEqual([expect.objectContaining({ id: initial.id, children: [] })]);
 			expect(app.element.textContent).toBe('');

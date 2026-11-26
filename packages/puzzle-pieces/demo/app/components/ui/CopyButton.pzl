@@ -15,10 +15,7 @@
         <path d="M10.5 5.5v-2a1 1 0 0 0-1-1h-6a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2" />
       </svg>
     {/if}
-    {#if label}
-      <span>{ displayLabel }</span>
-    {/if}
-    <span class="sr-only" aria-live="polite">{ liveText }</span>
+    <span class={ textClass } aria-live="polite">{ text }</span>
   </button>
 </puzzle-view>
 
@@ -52,19 +49,19 @@ import { PuzzleView } from '@magic-spells/puzzle';
 //
 // Clipboard failures (denied permission, insecure context, no Clipboard API)
 // are swallowed — the button just never enters the copied state. The revert
-// timer is cleared on teardown so it never fires setData on a dead view, and
+// timer is cleared on teardown so it never fires setState on a dead view, and
 // an in-flight clipboard write that resolves after teardown fires nothing
-// (the runtime guards setData/refresh, but not the parent's @copy callback).
+// (the runtime guards setState, but not the parent's @copy callback).
 const BASE =
   'inline-flex items-center justify-center gap-2 whitespace-nowrap select-none ' +
   'font-medium cursor-pointer transition-colors ' +
   'focus-visible:outline-2 focus-visible:outline-offset-2 outline-ring focus-visible:outline-ring ' +
-  'disabled:opacity-50 disabled:pointer-events-none';
+  'disabled:opacity-50 disabled:cursor-not-allowed';
 
 const VARIANT = {
-  ghost: 'text-body hover:bg-surface-sunken hover:text-ink',
-  outline: 'border border-border bg-surface text-ink hover:border-border-strong hover:bg-surface-sunken',
-  secondary: 'bg-surface-sunken text-ink hover:bg-border',
+  ghost: 'text-body not-disabled:hover:bg-ink/6 not-disabled:hover:text-ink',
+  outline: 'border border-border-strong text-ink not-disabled:hover:bg-ink/6',
+  secondary: 'bg-ink/6 text-ink not-disabled:hover:bg-ink/10',
 };
 
 // Labeled sizes match Button's height/padding scale exactly.
@@ -90,7 +87,7 @@ export default class CopyButton extends PuzzleView {
   created() {
     this._timer = null;
     this._destroyed = false;
-    this.setData({ copied: false });
+    this.setState({ copied: false });
   }
 
   destroyed() {
@@ -98,7 +95,7 @@ export default class CopyButton extends PuzzleView {
     if (this._timer) clearTimeout(this._timer);
   }
 
-  data(params, props) {
+  data({ props }) {
     const variant = VARIANT[props.variant] ? props.variant : 'ghost';
     const size = SIZE[props.size] ? props.size : 'md';
     const label = props.label || '';
@@ -119,9 +116,10 @@ export default class CopyButton extends PuzzleView {
       // OVERRIDE the visible text ("Copy link" → "Copy Copy link"). A null
       // attribute value is removed by the patcher, so nothing is emitted.
       ariaLabel: iconOnly ? (copied ? 'Copied' : 'Copy') : null,
-      label,
-      displayLabel: copied ? 'Copied' : label,
-      liveText: copied ? 'Copied' : '',
+      // One live span: the visible label, or sr-only text when icon-only (where
+      // the aria-label above wins the name, so it never reads "Copied Copied").
+      text: copied ? 'Copied' : label,
+      textClass: iconOnly ? 'sr-only' : null,
       copied,
       iconClass: [ICON_GLYPH_SIZE[size], 'shrink-0'].join(' '),
     };
@@ -134,18 +132,16 @@ export default class CopyButton extends PuzzleView {
       const value = this.props.value || '';
       navigator.clipboard.writeText(value).then(
         () => {
-          // The write can resolve after teardown: setData/refresh are guarded by
-          // the runtime, but the parent's @copy callback is not — bail entirely.
+          // The write can resolve after teardown: setState is guarded by the
+          // runtime, but the parent's @copy callback is not — bail entirely.
           if (this._destroyed) return;
-          this.setData({ copied: true });
-          this.refresh();
+          this.setState({ copied: true });
           const { copy } = this.props;
           if (typeof copy === 'function') copy(value);
           if (this._timer) clearTimeout(this._timer);
           this._timer = setTimeout(() => {
             this._timer = null;
-            this.setData({ copied: false });
-            this.refresh();
+            this.setState({ copied: false });
           }, COPIED_MS);
         },
         () => {

@@ -236,6 +236,24 @@ func TestTextElementBoundaryKeepsOneSpace(t *testing.T) {
 	})
 }
 
+// The policy's whitespace is ASCII: a node holding only a non-breaking or an
+// ideographic space is text, never collapsed to ' ' or dropped.
+func TestNonASCIISpaceIsText(t *testing.T) {
+	runWSCases(t, []wsCase{
+		{
+			name:     "between two elements",
+			template: "<p><b>a</b>\u00a0<i>b</i></p>",
+			want:     []string{"value: '\u00a0'"},
+			notWant:  []string{"value: ' '"},
+		},
+		{
+			name:     "after a newline between two interpolations",
+			template: "<p>{ a }\n  \u3000{ b }</p>",
+			want:     []string{" + ' \u3000' + __s(__d.b"},
+		},
+	})
+}
+
 // D168 rule 6: a <pre>/<textarea> body keeps its bytes, subtree included,
 // except the one newline HTML's parser drops directly after the start tag.
 func TestPreAndTextareaBodiesPreserved(t *testing.T) {

@@ -70,6 +70,7 @@ function transcript() {
 				module: 'components/Row.pzl',
 				params: {},
 				props: { todo: 't2', index: 1 },
+				shared: { list: { filter: 'active' } },
 				model: { label: 'Ship the panel', completed: false },
 				local: { completed: true, draft: 'Ship the panel now' },
 			},
@@ -215,8 +216,6 @@ function stubBridge() {
 	const world = transcript();
 
 	return {
-		tabId: 1,
-		themeName: 'dark',
 		requests,
 		world,
 		/** Every request type the panels can issue; values may be functions of the payload. */
@@ -264,15 +263,12 @@ function stubBridge() {
 		},
 		onMessage(cb) {
 			subs.message.push(cb);
-			return () => {};
 		},
 		onStatus(cb) {
 			subs.status.push(cb);
-			return () => {};
 		},
 		onNavigated(cb) {
 			subs.nav.push(cb);
-			return () => {};
 		},
 		async request(type, payload) {
 			requests.push([type, payload]);
@@ -440,6 +436,7 @@ describe.skipIf(!built)('panel app (compiled bundle)', () => {
 	it('renders the "no Puzzle app detected" state before any hello', async () => {
 		await boot(bridge);
 		expect(document.body.textContent).toContain('No Puzzle app detected');
+		expect(document.body.textContent).toContain("built with output: 'static' (static pages never load the bridge)");
 		// Nav shell is present too.
 		expect(document.body.textContent).toContain('Connection');
 		expect(document.body.textContent).toContain('Views');
@@ -689,7 +686,7 @@ describe.skipIf(!built)('Views panel', () => {
 		expect(document.querySelector('[data-twisty="2"]').className).not.toContain('rotate-90');
 	});
 
-	it('colors a kind dot per row and bars the active row', async () => {
+	it('colors a kind dot per row and tints the active row', async () => {
 		const dot = (id) => treeRow(id).querySelector('[data-kind-dot]').className;
 		expect(dot('1')).toContain('bg-accent'); // layouts/
 		expect(dot('2')).toContain('bg-ok'); // views/
@@ -697,14 +694,12 @@ describe.skipIf(!built)('Views panel', () => {
 
 		treeRow('3').click();
 		await settle(app, 60);
-		expect(treeRow('3').className).toContain('dt-row-selected');
 		expect(treeRow('3').className).toContain('bg-accent-soft');
 
-		// Selection and pulse now ride different CSS properties, so a selected row
-		// that re-renders shows both at once.
+		// A selected row that re-renders stays selected while it pulses.
 		bridge.emit('flush', { keys: ['todo'], notified: [3] });
 		await settle(app);
-		expect(treeRow('3').className).toContain('dt-row-selected');
+		expect(treeRow('3').className).toContain('bg-accent-soft');
 		expect(treeRow('3').className).toContain('dt-pulse');
 	});
 
@@ -739,8 +734,8 @@ describe.skipIf(!built)('Views panel', () => {
 
 		expect(bridge.payloadsFor('inspect:view')).toEqual([{ id: 3 }]);
 
-		const model = groupFor('data() model layer');
-		const local = groupFor('setData() local layer');
+		const model = groupFor('data() derived layer');
+		const local = groupFor('setState() state layer');
 		expect(model).toBeTruthy();
 		expect(local).toBeTruthy();
 
@@ -752,13 +747,14 @@ describe.skipIf(!built)('Views panel', () => {
 		expect(local.textContent).toContain('Ship the panel now');
 		expect(model.textContent).not.toContain('draft');
 
-		// params and props are their own groups, above the pair.
+		// params, props and shared are their own groups, above the pair.
 		expect(groupFor('props').textContent).toContain('t2');
 		expect(groupFor('params').textContent).toContain('no route params');
+		expect(groupFor('shared').textContent).toMatch(/list[\s\S]*filter/);
 
 		// And the explainer that says which one wins.
 		expect(document.body.textContent).toContain(
-			'a later setData() wins until the next data() commit'
+			'a later setState() wins until the next data() commit'
 		);
 	});
 
@@ -774,7 +770,7 @@ describe.skipIf(!built)('Views panel', () => {
 		// The bug this pins: with a `shrink-0` key and no basis on the value, the
 		// key took whatever it wanted and the value was left with zero effective
 		// width — rendering as nothing but its ellipsis in a half-width card.
-		expect(key.className).toContain('max-w-[40%]');
+		expect(key.className).toContain('max-w-2/5');
 		expect(key.className).toContain('truncate');
 		expect(value.className).toContain('flex-1'); // basis 0 → takes the remainder
 		expect(value.className).toContain('min-w-0'); // ...and may shrink below content
@@ -785,7 +781,7 @@ describe.skipIf(!built)('Views panel', () => {
 		treeRow('2').click();
 		await settle(app, 60);
 
-		const key = [...groupFor('data() model layer').querySelectorAll('dt')].find(
+		const key = [...groupFor('data() derived layer').querySelectorAll('dt')].find(
 			(dt) => dt.textContent.trim() === 'note'
 		);
 		const value = key.nextElementSibling;
@@ -812,7 +808,7 @@ describe.skipIf(!built)('Views panel', () => {
 		treeRow('3').click();
 		await settle(app, 60);
 
-		const local = groupFor('setData() local layer');
+		const local = groupFor('setState() state layer');
 		const row = [...local.querySelectorAll('dt')].find(
 			(dt) => dt.textContent.trim() === 'draft'
 		).parentElement;
@@ -1022,7 +1018,7 @@ describe.skipIf(!built)('Views panel', () => {
 		const empty = emptyBlocks();
 		expect(empty).toHaveLength(1);
 		expect(empty[0].querySelector('p.font-medium').textContent).toBe('No Puzzle app detected');
-		expect(empty[0].textContent).toContain('dev-only runtime bridge');
+		expect(empty[0].textContent).toContain("dev-only runtime bridge, which pages built with `output: 'static'` never load");
 		// The page-hook injects at document_start, so a tab opened before the
 		// extension existed can never connect without a reload. Say so.
 		expect(empty[0].textContent).toContain(
@@ -1094,7 +1090,7 @@ describe.skipIf(!built)('Store panel', () => {
 		expect(local.textContent.trim()).toBe('local');
 		// Badge's own base class, compacted to DevTools scale by the class prop.
 		expect(synced.className).toContain('rounded-full');
-		expect(synced.className).toContain('text-[9px]!');
+		expect(synced.className).toContain('text-9!');
 		// Distinct variants, not just distinct text.
 		expect(synced.className).not.toBe(local.className);
 	});
@@ -1161,7 +1157,7 @@ describe.skipIf(!built)('Store panel', () => {
 		// Same width discipline as the inspector: bounded key, value takes the rest,
 		// full text on hover for the read-only fields that truncate.
 		const key = document.querySelector('[data-field="text"] dt');
-		expect(key.className).toContain('max-w-[35%]');
+		expect(key.className).toContain('max-w-7/20');
 		expect(key.className).toContain('truncate');
 		expect(document.querySelector('[data-field="_synced"] span[title]')).toBeTruthy();
 		expect(document.querySelector('[data-row="t1"] td[title]')).toBeTruthy();
@@ -1214,6 +1210,26 @@ describe.skipIf(!built)('Store panel', () => {
 		expect(document.querySelector('[data-row="t1"]').textContent).toContain('Ship the bridge');
 	});
 
+	it('keeps the caret where it was while typing re-runs data()', async () => {
+		document.querySelector('[data-row="t1"]').click();
+		await settle(app);
+
+		// editField's setState re-runs data() (it reads `edits`), which re-renders the
+		// focused input. The controlled value matches what is already in the DOM, so
+		// the patch must leave the input, and the caret in it, alone.
+		const input = document.querySelector('[data-field="text"] input');
+		input.focus();
+		type(input, 'Ship the bridge now');
+		input.setSelectionRange(4, 4);
+		await settle(app);
+
+		const after = document.querySelector('[data-field="text"] input');
+		expect(after).toBe(input);
+		expect(after.value).toBe('Ship the bridge now');
+		expect(after.selectionStart).toBe(4);
+		expect(after.selectionEnd).toBe(4);
+	});
+
 	it('reports a malformed number before it ever reaches the wire', async () => {
 		document.querySelector('[data-row="t1"]').click();
 		await settle(app);
@@ -1237,18 +1253,24 @@ describe.skipIf(!built)('Store panel', () => {
 		bridge.emit('flush', { keys: ['todo'], notified: [2] });
 		await settle(app, 260);
 
-		const entries = [...document.querySelectorAll('[data-history-entry]')];
-		expect(entries).toHaveLength(2);
-		const text = entries.map((e) => e.textContent.replace(/\s+/g, ' ')).join(' | ');
-		expect(text).toContain('text');
-		expect(text).toContain('Ship the panel');
-		expect(text).toContain('Ship the panel v2');
-		expect(text).toContain('priority');
+		// Newest first; the clock is the only part not pinned.
+		const entries = () =>
+			[...document.querySelectorAll('[data-history-entry]')].map((e) =>
+				[...e.children].map((span) => span.textContent).join(' ').replace(/^\d\d:\d\d:\d\d /, ''),
+			);
+		const first = ['text "Ship the panel" → "Ship the panel v2"', 'priority 2 → 9'];
+		expect(entries()).toEqual(first);
 
-		// A flush that changes nothing appends nothing.
+		// A flush that changes nothing appends nothing and re-renders the same text.
 		bridge.emit('flush', { keys: ['todo'], notified: [2] });
 		await settle(app, 260);
-		expect(document.querySelectorAll('[data-history-entry]')).toHaveLength(2);
+		expect(entries()).toEqual(first);
+
+		// A second change lands on top.
+		bridge.world.records.todo[1].priority = 10;
+		bridge.emit('flush', { keys: ['todo'], notified: [2] });
+		await settle(app, 260);
+		expect(entries()).toEqual(['priority 9 → 10', ...first]);
 	});
 
 	it('clears the changelog when the watched record changes', async () => {
@@ -1325,7 +1347,7 @@ describe.skipIf(!built)('Subscriptions panel', () => {
 		await settle(app);
 
 		expect(document.querySelector('[data-sub-key="todo"]').className).toContain(
-			'dt-row-selected'
+			'bg-accent-soft'
 		);
 
 		// Ids resolve against the pview collection for name + module.
@@ -1424,7 +1446,7 @@ describe.skipIf(!built)('Subscriptions panel', () => {
 		expect(window.location.hash).toBe('#/views');
 		expect(treeIds().length).toBeGreaterThan(0);
 		// ...and the Views panel adopted the hand-off.
-		expect(treeRow('3').className).toContain('dt-row-selected');
+		expect(treeRow('3').className).toContain('bg-accent-soft');
 		expect(bridge.payloadsFor('inspect:view')).toContainEqual({ id: 3 });
 
 		// The intent is consumed, not sticky.
@@ -1742,7 +1764,7 @@ describe.skipIf(!built)('Performance panel', () => {
 		await settle(app, 120);
 
 		expect(window.location.hash).toBe('#/views');
-		expect(treeRow('3').className).toContain('dt-row-selected');
+		expect(treeRow('3').className).toContain('bg-accent-soft');
 		expect(bridge.payloadsFor('inspect:view')).toContainEqual({ id: 3 });
 		// The intent is consumed, not sticky.
 		expect(app.store.findOne('ui', 'main').pendingViewId).toBeNull();

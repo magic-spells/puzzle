@@ -33,7 +33,7 @@ export default class Home extends PuzzleView {
 <script>
 import { PuzzleView } from '@magic-spells/puzzle';
 export default class Message extends PuzzleView {
-  data(params, props) { return { body: props.body }; }
+  data({ props }) { return { body: props.body }; }
 }
 </script>
 `

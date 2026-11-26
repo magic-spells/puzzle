@@ -183,15 +183,15 @@ describe('FormatterRegistry', () => {
 	});
 
 	describe('registration validation', () => {
-		it('rejects empty and non-string formatter names', () => {
+		it('rejects empty and non-string function names', () => {
 			const reg = new FormatterRegistry();
 			const formatter = (value) => value;
 
 			expect(() => reg.register('', formatter)).toThrow(
-				'[puzzle] formatter name must be a non-empty string'
+				'[puzzle] function name must be a non-empty string'
 			);
 			expect(() => reg.register(null, formatter)).toThrow(
-				'[puzzle] formatter name must be a non-empty string'
+				'[puzzle] function name must be a non-empty string'
 			);
 		});
 
@@ -199,10 +199,10 @@ describe('FormatterRegistry', () => {
 			const reg = new FormatterRegistry();
 
 			expect(() => reg.register('price', 'not-a-function')).toThrow(
-				'[puzzle] formatter "price" must be a function (got string)'
+				'[puzzle] function "price" must be a function (got string)'
 			);
 			expect(() => makeFormatterRegistry({ price: null })).toThrow(
-				'[puzzle] formatter "price" must be a function (got object)'
+				'[puzzle] function "price" must be a function (got object)'
 			);
 		});
 

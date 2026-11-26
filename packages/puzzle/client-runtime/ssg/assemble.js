@@ -17,17 +17,39 @@
 import { ViewNode } from '../views/ViewNode.js';
 import { encodeURL, linkLocale, localeBase, normalizeBase } from '../router/router.js';
 import { normalizeRoutePath } from '../router/routePath.js';
+import { targetPath } from '../router/routeNames.js';
 
 /** @import { PuzzleView } from '../views/PuzzleView.js' */
-/** @import { LinkOptions } from '../../types/index.js' */
+/** @import { LinkOptions, NamedRouteTarget } from '../../types/index.js' */
+/** @import { RouteNameTable } from '../router/routeNames.js' */
 
 /**
  * The static router facade makeRouterStub returns: `url()` and a read-only
  * `current`, plus every Router navigation method (each throws). `url` takes
  * `options` only once localizeRouterStub has made it locale-aware (D177).
- * @typedef {{ url: (path: string, options?: LinkOptions) => string, readonly current: object,
- *   [method: string]: any }} RouterStub
+ * `names` is the route name table a named target resolves through (D196) —
+ * the build's table at prerender, the page's names island in the browser —
+ * and `named` is set once the stub has resolved one.
+ * @typedef {{ url: (target: string | NamedRouteTarget, options?: LinkOptions) => string,
+ *   readonly current: object, names?: RouteNameTable | null,
+ *   named?: boolean, [method: string]: any }} RouterStub
  */
+
+/**
+ * A static stub's target as a path (D196): a path string as written, a named
+ * target through the stub's `names` table. Resolving one marks the stub, so the
+ * prerender knows the page needs the table in its names island.
+ *
+ * @param {RouterStub} stub
+ * @param {string | NamedRouteTarget} target
+ * @returns {string}
+ */
+function stubPath(stub, target) {
+	if (typeof target === 'string') return target;
+	stub.named = true;
+	// a stub given no table knows no names, so every name reads as unknown.
+	return targetPath(target, stub.names ?? new Map());
+}
 
 /**
  * Instantiate + preload the layout+view chain for one route and assemble it into
@@ -81,7 +103,7 @@ export async function assembleChain(entry, ctx, route = makeRouteSnapshot(entry)
 		}
 		let topVnode = childVnode;
 
-		// A top-level layout wraps the whole chain, hosting it at its <Slot/>.
+		// A top-level layout wraps the whole chain, hosting it at its <Outlet/>.
 		if (LayoutClass) {
 			const layout = new (/** @type {typeof PuzzleView} */ (LayoutClass))(ctx);
 			instances.push(layout);
@@ -135,18 +157,20 @@ export function makeRouteSnapshot({ chain, fullPath, params = {} }) {
 const ROUTER_METHODS = ['push', 'replace', 'back', 'forward', 'go', 'start', 'stop'];
 
 /**
- * Router-shaped static stub, DOM-free and shared by BOTH the true-static browser
- * kernel (static/index.js) and the static-mode prerender ctx (ssg/index.js) so
- * `url()` and `current` are byte-identical between the prerendered HTML and the
- * client re-render. Navigation throws; `url()` IS Router.url's encoder (the shared
- * encodeURL), so the two can never drift; `current` is the page snapshot.
+ * Router-shaped static stub, DOM-free and shared by the true-static browser
+ * kernel (static/index.js) and the prerender ctx (ssg/index.js: static mode
+ * renders through it, hybrid takes only its `url()`) so `url()` and `current`
+ * are byte-identical between the prerendered HTML and the client re-render.
+ * Navigation throws; `url()` IS Router.url's encoder (the shared encodeURL), so
+ * the two can never drift; `current` is the page snapshot.
  *
  * Encoding is HISTORY-style, hard-coded (D159): a static page physically lives at
  * /about/index.html and ships no router or click interception, so a hash-shaped
  * href would be a dead link and a memory-shaped one would drop the base. Both
  * callers already forced 'history' before the mode became an object.
  *
- * @param {object} route the D83 route snapshot (makeRouteSnapshot output)
+ * @param {object | null} route the D83 route snapshot (makeRouteSnapshot output);
+ *   null for a prerender context that renders no page (only its `url()` is used)
  * @param {{ base?: string }} [opts]
  * @returns {RouterStub} a `{ url, current, push, replace, … }` router facade
  */
@@ -157,7 +181,7 @@ export function makeRouterStub(route, { base = '' } = {}) {
 		throw new Error('[puzzle] static output has no router — use plain links');
 	};
 	for (const method of ROUTER_METHODS) stub[method] = throwNoRouter;
-	stub.url = (path) => encodeURL(path, null, normalizedBase);
+	stub.url = (target) => encodeURL(stubPath(stub, target), null, normalizedBase);
 	Object.defineProperty(stub, 'current', {
 		enumerable: true,
 		get: () => route,
@@ -183,8 +207,12 @@ export function makeRouterStub(route, { base = '' } = {}) {
  */
 export function localizeRouterStub(stub, { base = '', locale, defaultLocale, locales }) {
 	const normalizedBase = normalizeBase(base);
-	stub.url = (path, options) =>
-		encodeURL(path, null, localeBase(normalizedBase, linkLocale(options, locale, locales), defaultLocale));
+	stub.url = (target, options) =>
+		encodeURL(
+			stubPath(stub, target),
+			null,
+			localeBase(normalizedBase, linkLocale(options, locale, locales), defaultLocale)
+		);
 	return stub;
 }
 

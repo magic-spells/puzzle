@@ -7,15 +7,15 @@ import models from './models/index.js';
 import { loadState, saveState } from './storage.js';
 
 // The v1 config surface is intentionally small: target, routes, models,
-// formatters, apiURL — see constellation/doc/DOC-SPEC.md §2.
+// functions, apiURL — see constellation/doc/DOC-SPEC.md §2.
 const app = new PuzzleApp({
   target: '#app',
   routes,
   models,
   adapter,
   // Route rides in location.hash (`…/index.html#/album/x`), so the built example
-  // hosts on any static host — GitHub Pages / S3 / file:// — with no server
-  // rewrite rules (SPEC §15, D34). App code stays path-shaped; only URLs differ.
+  // hosts on any static host — GitHub Pages / S3 — with no server rewrite rules
+  // (SPEC §15, D34); file:// cannot load it. App code stays path-shaped; only URLs differ.
   routerMode: hashRouter(),
   // No apiURL prefix: each model's adapter endpoint (e.g. '/artists.json') is
   // root-relative, so the seed files sit flat at the site root next to
@@ -23,10 +23,10 @@ const app = new PuzzleApp({
   // Point apiURL at a CDN/host later and the same endpoints follow it.
   apiURL: '',
 
-  // Display-only formatters (logic belongs in data()). `duration` turns a track's
+  // Display-only functions (logic belongs in data()). `duration` turns a track's
   // durationSec into m:ss; `plural` picks a word form. Big play counts use the
   // built-in compact_number.
-  formatters: {
+  functions: {
     duration: (sec) => {
       const s = Math.max(0, Math.round(Number(sec) || 0));
       const m = Math.floor(s / 60);

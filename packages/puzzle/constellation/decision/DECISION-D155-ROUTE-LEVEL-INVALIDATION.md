@@ -11,8 +11,8 @@ connections:
   - COMPONENT-SSG
   - COMPONENT-ESBUILD-PLUGIN
   - FILE-BUILD-WATCH
-verified_at: '2026-08-24T21:11:50.859Z'
-verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
+verified_at: '2026-11-24T18:13:21.008Z'
+verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
 code_refs:
   - compiler/internal/build/route_deps.go
   - compiler/internal/build/watch_static.go
@@ -62,7 +62,7 @@ byte-identical to `puzzle build --static` either way. Logic:
    [[DECISION-D175-TRANSLATIONS]]).
 3. A public path in neither graph set → copy only, zero routes (even if
    deleted). A public path the graph knows is a module first and falls through.
-   Public dir resolves via `publicDir(root)` (`app/public` or root `public/`).
+   Public dir resolves via `PublicDir(root)` (`app/public` or root `public/`).
 4. A vanished path (delete/rename) → full.
 5. **Render-wide checked first** → full. The sets overlap (a store seed
    `beforeMount` runs and one view imports); attributing it would leave other

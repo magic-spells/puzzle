@@ -19,7 +19,7 @@
     "id": "p3",
     "title": "Display Functions Keep Templates Honest",
     "authorId": "u3",
-    "tags": ["templates", "formatters"],
+    "tags": ["templates", "functions"],
     "publishedAt": "2026-06-21T11:15:00.000Z",
     "body": "A Puzzle template expression is JavaScript, so a display transform is just a call: write { date(publishedAt, 'long') } or { truncate(title, 60) } and the value is transformed only for display. The underlying record never changes. The framework ships display functions for text, numbers, and dates, strings and lists bring their own methods, and you register your own functions in the app config. The one rule worth repeating is that display functions are for formatting, not for filtering or sorting. Anything that changes which records you show belongs in data(), where it is easy to test and easy to read."
   },
@@ -29,7 +29,7 @@
     "authorId": "u1",
     "tags": ["reactivity", "components"],
     "publishedAt": "2026-07-01T08:45:00.000Z",
-    "body": "The heart of a Puzzle component is its data() method. It returns the model the template renders, and any store query made inside it automatically subscribes the component to changes. Update a record anywhere in the app and every component that read it re-runs data() and repaints — no dependency arrays, no manual subscriptions, no selectors. Local UI state that should not trigger a full reload uses setData() instead, which updates state and re-renders without re-running data(). That single split — data() for reactive sources, setData() for local flags — is most of what you need to know to build a real application."
+    "body": "The heart of a Puzzle component is its data() method. It returns the model the template renders, and any store query made inside it automatically subscribes the component to changes. Update a record anywhere in the app and every component that read it re-runs data() and repaints — no dependency arrays, no manual subscriptions, no selectors. Local UI state uses setState() instead. It updates state and re-renders, and it re-runs data() only when data() read the key you wrote. That single split — data() for reactive sources, setState() for local flags — is most of what you need to know to build a real application."
   },
   {
     "id": "p5",

@@ -4,16 +4,12 @@
   </header>
 
   <main>
-    <Slot/>
+    <Outlet/>
   </main>
 </puzzle-view>
 
 <script lang="ts">
 import { PuzzleView } from '@magic-spells/puzzle';
-
-interface AdminProps {
-  title?: string;
-}
 
 // What data() hands the template.
 interface AdminModel {
@@ -21,9 +17,9 @@ interface AdminModel {
 }
 
 export default class Admin extends PuzzleView {
-  data(_params: Record<string, string>, props: AdminProps): AdminModel {
+  data(): AdminModel {
     return {
-      title: props.title || 'Admin',
+      title: 'Admin',
     };
   }
 }

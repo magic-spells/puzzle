@@ -69,27 +69,6 @@ for (const entry of PIECES) {
 		assert.equal(piece.targetDir, 'app/components/ui');
 	});
 
-	test(`registry.json mirrors the ${entry.piece} manifest`, async () => {
-		const [piece, registry] = await Promise.all([
-			readJSON(`../registry/ui/${entry.piece}/piece.json`),
-			readJSON('../registry/registry.json'),
-		]);
-		const row = registry.pieces.find((p) => p.name === entry.piece);
-
-		assert.ok(row, `registry.json has no ${entry.piece} entry`);
-		assert.equal(row.description, piece.description);
-		assert.deepEqual(row.files, piece.files);
-		assert.deepEqual(row.registryDependencies, piece.registryDependencies);
-		assert.deepEqual(row.dependencies, piece.dependencies);
-		assert.equal(row.targetDir, piece.targetDir);
-	});
-
-	test(`every ${entry.piece} manifest file exists on disk`, async () => {
-		for (const file of entry.files) {
-			await access(new URL(`../registry/ui/${entry.piece}/${file}`, import.meta.url));
-		}
-	});
-
 	test(`only the ${entry.piece} root imports ${entry.package}, and only dynamically`, async () => {
 		const specifier = entry.package.replace('/', '\\/');
 		const dynamic = new RegExp(`import\\(\\s*['"]${specifier}['"]\\s*\\)`);
@@ -184,8 +163,8 @@ test('Tabs scopes its lookups to its own group', async () => {
 		false,
 		"Tab must not use Tailwind's disabled: variant — it compiles to :disabled"
 	);
-	// A display utility on <tab-panel> outranks tab-panel[hidden] and leaves
-	// every panel visible.
+	// The panel host carries no chrome: any default would collide with a
+	// consumer's own p-*/text-* utility (see Panel.pzl).
 	const panel = await readText('../registry/ui/tabs/Tabs/Panel.pzl');
 	assert.equal(/const PANEL =/.test(panel), false, 'Tabs.Panel carries no chrome of its own');
 });

@@ -151,7 +151,7 @@ describe("an island's children are allocated once across renders", () => {
 			view = await mountView(Shell);
 			handles.push(view);
 			for (let n = 1; n <= 5; n++) {
-				view.instance.setData('n', n);
+				view.instance.setState('n', n);
 				await settled();
 			}
 		} finally {

@@ -1,4 +1,16 @@
 
+
+
+
+
+
+
+
+
+
+
+
+        
 import { PuzzleView } from '@magic-spells/puzzle';
 import LazyRows from './LazyRows.compiled.js';
 
@@ -36,4 +48,3 @@ LazyHost.prototype.render = function () {
     ]),
   ]);
 };
-LazyHost.__pzlModule = 'LazyHost.pzl';

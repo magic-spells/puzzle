@@ -1,8 +1,8 @@
 /**
- * PuzzleApp — the application class (constellation/doc/DOC-SPEC.md §1–§2, constellation/doc/DOC-APP-ANATOMY.md §3).
+ * PuzzleApp — the application class (constellation/doc/DOC-SPEC.md §1–§2, constellation/component/COMPONENT-PUZZLE-APP.md).
  *
  * Instantiate once with the v1 config surface and call `mount()`. The config
- * surface is frozen (SPEC §2): { target, routes, models, formatters, apiURL,
+ * surface is frozen (SPEC §2): { target, routes, models, functions, apiURL,
  * storage, adapter }, amended by v1.5 with { scrollBehavior } (D33), v1.6 with
  * { routerMode } (D34/D42, an imported mode object since D159), v1.19 with
  * { routerBase } (sub-path deploys, D51), v1.24 with
@@ -38,11 +38,11 @@ import {
 	viewerLanguages,
 } from './i18n.js';
 import manifestData from '@magic-spells/puzzle/i18n/manifest';
-import { Router, localePage, navigating, normalizeBase } from './router/router.js';
+import { Router, localePage, normalizeBase } from './router/router.js';
+import { isViewClass } from './router/viewClass.js';
 import { snapshotToStorage, restoreStoreFromStorage, restoreViewsFromStorage } from './devstate.js';
 import { devtoolsAppMounted, devtoolsAppUnmounted } from './devtools.js';
 import { reportError, setErrorConfig } from './errors.js';
-import { PuzzleView } from './views/PuzzleView.js';
 import { setPortalHost, teardownPortals } from './views/portal.js';
 import { frame, scheduled } from './scheduler.js';
 
@@ -113,8 +113,9 @@ export class PuzzleApp {
 	// newer cycle down. So each mount() attempt claims a monotonic epoch and
 	// #teardown() burns the current one: `this.#mountEpoch !== epoch` is the
 	// authoritative staleness test — true iff anything tore down or re-mounted
-	// since this attempt began. The _mounted flag stays the "is anything mounted"
-	// question it always was (unmount()'s idempotency guard, the abort read).
+	// since this attempt began. A matching epoch also means mounted: only
+	// #teardown() clears _mounted, and it burns the epoch first. The _mounted flag
+	// stays the "is anything mounted" question (unmount()'s idempotency guard).
 	#mountEpoch = 0;
 
 	// The in-flight #mount() promise, so concurrent mount() calls share ONE
@@ -131,7 +132,8 @@ export class PuzzleApp {
 	 * @param {any[]} [config.routes] route definitions (the published `Route`
 	 *   shape; author data handed to the Router as-is)
 	 * @param {object} [config.models] type name → model class registry
-	 * @param {object} [config.formatters] app-level template formatters (override built-ins)
+	 * @param {object} [config.functions] app-level template functions (override built-ins); the
+	 *   pre-0.10 `formatters` key throws (D199)
 	 * @param {string} [config.apiURL] base URL for the D21 server read path
 	 * @param {Pick<Storage, 'getItem' | 'setItem'>} [config.storage] Storage-like object for persistence (opt-in)
 	 * @param {import('./capabilities.js').AdapterCapability} [config.adapter] capability imported from
@@ -173,6 +175,10 @@ export class PuzzleApp {
 	 *   feel (v1.24, D56): omit/`'sequential'` for the default sequential swap
 	 *   (old `out` finishes before the new view mounts), `'overlap'` to play the
 	 *   old `out` and new `in` concurrently via fixed-pin positioning (SPEC §26)
+	 * @param {boolean} [config.prefetch] link prefetch default (D195): omit or
+	 *   `true` to load a lazy route's code when a link to it is hovered, touched
+	 *   or focused (guarded routes skipped); `false` to prefetch only links that
+	 *   ask by name (`data-prefetch`) and `router.prefetch(path)` calls
 	 * @param {Function} [config.beforeMount] app lifecycle hook (v1.31, D66):
 	 *   `beforeMount(app)`, run inside mount() after the ctx services are wired
 	 *   and BEFORE navigation #0 — AWAITED, so an async store seed lands before
@@ -197,17 +203,19 @@ export class PuzzleApp {
 	 *   kernel pass so nothing is fetched
 	 */
 	constructor(config = {}) {
+		// the template-function map was `formatters` before 0.10 (D199). an app
+		// that still passes it would boot with none of its functions, so the old
+		// key stops here, naming the new one and the codemod that renames it.
+		if (/** @type {any} */ (config).formatters !== undefined) {
+			throw new Error('[puzzle] config.formatters is config.functions since 0.10 — rename the key (puzzle check --fix does it)');
+		}
 		if (config.adapter && !isAdapterCapability(config.adapter)) {
 			throw new TypeError(
 				"[puzzle] config.adapter must be the adapter capability imported from '@magic-spells/puzzle/adapter'"
 			);
 		}
 		const ErrorView = config.errorView;
-		if (
-			ErrorView != null &&
-			(typeof ErrorView !== 'function' ||
-				(ErrorView !== PuzzleView && !(ErrorView.prototype instanceof PuzzleView)))
-		) {
+		if (ErrorView != null && !isViewClass(ErrorView)) {
 			throw new Error('[puzzle] config.errorView must be a PuzzleView constructor when set');
 		}
 		this.config = config;
@@ -264,14 +272,12 @@ export class PuzzleApp {
 	 */
 	mount() {
 		if (this.#mountPromise) return this.#mountPromise;
-		const p = this.#mount();
-		this.#mountPromise = p;
-		// Not .finally(): that mints a second promise whose rejection nobody handles.
-		const clear = () => {
+		// Hand out the finally() promise itself, so a rejection nobody handles is
+		// still reported by the browser.
+		const p = this.#mount().finally(() => {
 			if (this.#mountPromise === p) this.#mountPromise = null;
-		};
-		p.then(clear, clear);
-		return p;
+		});
+		return (this.#mountPromise = p);
 	}
 
 	/**
@@ -281,7 +287,7 @@ export class PuzzleApp {
 	 * loading, and — with the adapter — no tracked find's fetch in flight; false
 	 * when `timeout` (ms, default 10000; a bad value falls back to it) runs out
 	 * first. A check runs after its frame's callbacks, so
-	 * a setData() render scheduled before it has landed. Frames follow the store's
+	 * a setState() render scheduled before it has landed. Frames follow the store's
 	 * scheduler (D63): timers in a hidden tab. An app neither mounted nor mounting
 	 * resolves true at once. Never rejects. It reads state the runtime already
 	 * keeps, so it cannot see user timers, animations, IntersectionObserver
@@ -315,14 +321,14 @@ export class PuzzleApp {
 					store._flushScheduled ||
 					store._asyncTrackingChain ||
 					store._reading?.() ||
-					navigating(/** @type {Router} */ (this.router)) ||
+					Router.navigating(/** @type {Router} */ (this.router)) ||
 					((typeof __PUZZLE_HAS_I18N__ === 'undefined' || __PUZZLE_HAS_I18N__) && this.i18n?.__busy)
 				)
 					clear = 0;
 				else if (++clear > 1) return resolve(true);
 				if (Date.now() >= end) return resolve(false);
 				// Check again after the next frame's callbacks (rAF, then a timer), so a
-				// setData() render scheduled before then has landed. The store's D63
+				// setState() render scheduled before then has landed. The store's D63
 				// scheduler: a timer in a hidden tab, a fallback timer if rAF freezes.
 				frame(() => setTimeout(check, 0));
 			};
@@ -372,7 +378,7 @@ export class PuzzleApp {
 			target,
 			routes = [],
 			models = {},
-			formatters = {},
+			functions = {},
 			apiURL,
 			storage,
 			adapter,
@@ -481,43 +487,41 @@ export class PuzzleApp {
 		//    `link` encoder. The closure reads this.router lazily so a re-mount never
 		//    keeps a stale Router, and a custom `link` formatter still wins.
 		this.formatters = makeFormatterRegistry(
-			formatters,
+			functions,
 			// Locale prefix routing (D177) hands link()'s options ({ locale: 'es' },
 			// { locale: false }) to router.url; without it the one-argument form ships.
+			// With no router yet a path passes through as before, and a named target
+			// (D196), which only the route table can resolve, renders no href.
 			typeof __PUZZLE_HAS_LOCALE_ROUTING__ === 'undefined' || __PUZZLE_HAS_LOCALE_ROUTING__
-				? (path, options) => (this.router ? this.router.url(path, options) : path)
-				: (path) => (this.router ? this.router.url(path) : path)
+				? (path, options) => (this.router ? this.router.url(path, options) : typeof path === 'string' ? path : '')
+				: (path) => (this.router ? this.router.url(path) : typeof path === 'string' ? path : '')
 		);
 		// The service-bound `t` formatter (D175); an app `t` still wins.
 		if ((typeof __PUZZLE_HAS_I18N__ === 'undefined' || __PUZZLE_HAS_I18N__) && this.i18n)
 			installTranslate(this.formatters, this.i18n);
 
-		// 4. Router + the shared context object injected into every view. Pass
-		//    `mode` through only when routerMode is set, so the Router's own default
-		//    (path routing, inline) stands otherwise — mirroring how `storage` is
-		//    conditionally passed to the Store above (D34/D159).
+		// 4. Router + the shared context object injected into every view. An unset
+		//    option arrives undefined, and the Router's own defaults apply (path
+		//    routing, no base, 'sequential', default focus + announce).
 		/** @type {NonNullable<ConstructorParameters<typeof Router>[1]>} */
 		const routerOptions = {
 			scrollBehavior,
+			focusBehavior,
+			mode: /** @type {import('./router/modes.js').RouterModeDescriptor} */ (routerMode),
+			base: routerBase,
+			transitionMode,
 			// Locale prefix routing (D177): the page's locale and the configured ones,
 			// so the router reads and writes URLs under the locale's prefix. Folds
 			// away without the define.
 			...((typeof __PUZZLE_HAS_LOCALE_ROUTING__ === 'undefined' || __PUZZLE_HAS_LOCALE_ROUTING__) &&
 				prefixRouterOptions(this.config)),
 		};
-		// focusBehavior → Router `focusBehavior`, passed through ONLY when set so the
-		// Router's own default (focus the committed leaf root + announce the title)
-		// stands otherwise (v1.56, D93) — mirroring the conditional passthroughs below.
-		if (focusBehavior !== undefined) routerOptions.focusBehavior = focusBehavior;
-		if (routerMode !== undefined) routerOptions.mode = /** @type {import('./router/modes.js').RouterModeDescriptor} */ (routerMode);
-		// routerBase → Router `base`, passed through ONLY when set so the Router's own
-		// default ('' — no base) stands otherwise (v1.19, D51) — mirroring the
-		// routerMode conditional passthrough.
-		if (routerBase !== undefined) routerOptions.base = routerBase;
-		// transitionMode → Router `transitionMode`, passed through ONLY when set so
-		// the Router's own default ('sequential' — byte-identical to v1.23) stands
-		// otherwise (v1.24, D56) — mirroring the conditional passthroughs above.
-		if (transitionMode !== undefined) routerOptions.transitionMode = transitionMode;
+		// prefetch → Router `prefetch` (D195). Undefined lets the Router's own
+		// default (true) stand. Behind the lazy gate: an app with no lazy() route
+		// has nothing to prefetch, so it carries neither the key nor the check.
+		if (typeof __PUZZLE_HAS_LAZY__ === 'undefined' || __PUZZLE_HAS_LAZY__) {
+			routerOptions.prefetch = this.config.prefetch;
+		}
 		this.router = new Router(routes, routerOptions);
 		if (this.#morphHandler) {
 			// Re-arm a handler disposed by a prior unmount() so a mount → unmount →
@@ -574,65 +578,53 @@ export class PuzzleApp {
 			devtoolsAppMounted(this);
 		}
 
-		// App lifecycle: beforeMount (v1.31, SPEC §34, D66). The three ctx services
-		// are live and the mounted flag is claimed, but navigation #0 has NOT run —
-		// so a store seed here lands before the first data(). AWAITED: an async hook
-		// finishes before router.start(). A throw/rejection ABORTS the mount — tear
-		// back down to the unmounted state and rethrow (mount() rejects; re-mounting
-		// later is legal). This abort path must NOT fire beforeUnmount (which pairs
-		// only with a completed mount), so it calls #teardown() directly. It must
-		// also tear down only ITS OWN cycle: an unmount() during the in-flight hook
-		// already tore us down (don't double-teardown), and a mount() after that
-		// unmount owns the app now — destroying IT because our stale hook rejected
-		// would kill a healthy cycle. The epoch comparison is what tells those apart
-		// (the flag reads `true` in both cases); a stale rejection just propagates,
-		// the newer cycle owns its own cleanup. Nothing is swallowed either way.
-		if (beforeMount != null) {
-			try {
-				await beforeMount.call(this, this);
-			} catch (err) {
-				if (this.#mountEpoch === epoch && this._mounted) this.#teardown();
-				throw err;
-			}
-		}
-
-		// Staleness gate (see the #mountEpoch field comment). unmount() may have run
-		// during an async beforeMount (SPEC §34) — its #teardown() dropped our
-		// services and burned our epoch — and a NEWER mount() may already own the
-		// app. Either way this continuation is stale: stay out, the router must never
-		// (re-)start from here. `#mountEpoch !== epoch` is the load-bearing half; the
-		// `!this._mounted` read stays as the plain torn-down case it always covered.
-		if (this.#mountEpoch !== epoch || !this._mounted) return this;
-
-		// The first render has its strings (D175): navigation #0 — its guards, its
-		// data(), its commit — never runs without the table. __ready follows any
-		// setLocale() beforeMount made, and rejects only when neither the active
-		// locale nor the default could load; that aborts the mount exactly like a
-		// rejected beforeMount.
-		if ((typeof __PUZZLE_HAS_I18N__ === 'undefined' || __PUZZLE_HAS_I18N__) && this.i18n) {
-			try {
-				await this.i18n.__ready();
-			} catch (err) {
-				if (this.#mountEpoch === epoch && this._mounted) this.#teardown();
-				throw err;
-			}
-			if (this.#mountEpoch !== epoch || !this._mounted) return this;
-		}
-
-		// Dev HMR restore, phase 1 (§27, D57; Change D): consume the one-shot blob
-		// and transplant its STORE records BEFORE navigation #0, so nav #0's data()
-		// queries see the restored records (the old single-phase restore ran after
-		// start() — store-derived views rendered empty until the next mutation). The
-		// returned blob carries the view-local state to phase 2 (below). Gate spelled
-		// inline so production DCEs it and the devstate import tree-shakes away.
+		// The awaited boot: beforeMount (v1.31, SPEC §34, D66), the translations
+		// (D175), then navigation #0. A throw/rejection from any of them ABORTS the
+		// mount — tear back down to the unmounted state and rethrow (mount()
+		// rejects; re-mounting later is legal). This abort path must NOT fire
+		// beforeUnmount (which pairs only with a completed mount), so it calls
+		// #teardown() directly. It must also tear down only ITS OWN cycle: an
+		// unmount() during the await already tore us down (don't double-teardown),
+		// and a mount() after that unmount owns the app now — destroying IT because
+		// our stale step rejected would kill a healthy cycle. The epoch comparison
+		// tells those apart; a stale rejection just propagates, the newer cycle owns
+		// its own cleanup. Nothing is swallowed either way.
 		let hmrBlob = null;
-		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) hmrBlob = restoreStoreFromStorage(this);
-
-		// 5. Start routing — registers listeners and runs navigation #0.
 		try {
+			// The three ctx services are live and the mounted flag is claimed, but
+			// navigation #0 has NOT run — so a store seed here lands before the first
+			// data(). AWAITED: an async hook finishes before router.start().
+			if (beforeMount != null) await beforeMount.call(this, this);
+
+			// Staleness gate (see the #mountEpoch field comment). unmount() may have
+			// run during an async beforeMount (SPEC §34) — its #teardown() dropped our
+			// services and burned our epoch — and a NEWER mount() may already own the
+			// app. Either way this continuation is stale: stay out, the router must
+			// never (re-)start from here.
+			if (this.#mountEpoch !== epoch) return this;
+
+			// The first render has its strings (D175): navigation #0 — its guards, its
+			// data(), its commit — never runs without the table. __ready follows any
+			// setLocale() beforeMount made, and rejects only when neither the active
+			// locale nor the default could load.
+			if ((typeof __PUZZLE_HAS_I18N__ === 'undefined' || __PUZZLE_HAS_I18N__) && this.i18n) {
+				await this.i18n.__ready();
+				if (this.#mountEpoch !== epoch) return this;
+			}
+
+			// Dev HMR restore, phase 1 (§27, D57; Change D): consume the one-shot blob
+			// and transplant its STORE records BEFORE navigation #0, so nav #0's data()
+			// queries see the restored records (the old single-phase restore ran after
+			// start() — store-derived views rendered empty until the next mutation). The
+			// returned blob carries the view-local state to phase 2 (below). Fail-soft,
+			// it never throws. Gate spelled inline so production DCEs it and the
+			// devstate import tree-shakes away.
+			if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) hmrBlob = restoreStoreFromStorage(this);
+
+			// 5. Start routing — registers listeners and runs navigation #0.
 			await this.router.start(el, this.ctx);
 		} catch (err) {
-			if (this.#mountEpoch === epoch && this._mounted) this.#teardown();
+			if (this.#mountEpoch === epoch) this.#teardown();
 			throw err;
 		}
 
@@ -643,10 +635,10 @@ export class PuzzleApp {
 		// restore HMR state onto another cycle's view tree, and do not fire `mounted`
 		// for a mount that no longer owns the app. Everything below this line is
 		// synchronous, so this single gate covers the phase-2 restore and the hook.
-		if (this.#mountEpoch !== epoch || !this._mounted) return this;
+		if (this.#mountEpoch !== epoch) return this;
 
 		// Dev HMR restore, phase 2 (§27, D57; Change D): the view chain is now
-		// mounted, so each saved view's LOCAL setData state (drafts, toggles) can be
+		// mounted, so each saved view's LOCAL setState state (drafts, toggles) can be
 		// restored onto its keyed counterpart. The store was already transplanted in
 		// phase 1 (before nav #0); this consumes the same blob phase 1 handed back.
 		// Fail-soft end to end — a null/corrupt/expired blob just cold-starts.
@@ -657,32 +649,7 @@ export class PuzzleApp {
 		// awaited — a post-success hook must never turn into a spurious mount()
 		// rejection (same "logged, never wedges" posture as morph-handler errors,
 		// D55). Both a sync throw and an async rejection are caught and logged.
-		if (mounted != null) {
-			const errorCtx = this.ctx;
-			const route = this.router?.current;
-			try {
-				const ret = mounted.call(this, this);
-				if (ret != null && typeof ret.then === 'function') {
-					ret.catch((/** @type {unknown} */ err) =>
-						reportError(
-							errorCtx,
-							err,
-							{ phase: 'app-mount', route },
-							'[puzzle] mounted hook error:',
-							err
-						)
-					);
-				}
-			} catch (err) {
-				reportError(
-					errorCtx,
-					err,
-					{ phase: 'app-mount', route },
-					'[puzzle] mounted hook error:',
-					err
-				);
-			}
-		}
+		this.#callHook(mounted, 'app-mount', '[puzzle] mounted hook error:');
 		return this;
 	}
 
@@ -714,41 +681,38 @@ export class PuzzleApp {
 		// is not awaited and cannot delay teardown; a throw is caught and logged and
 		// teardown always proceeds. Read from config (not destructured in mount())
 		// so a re-mounted instance re-fires it. It does NOT fire on the beforeMount
-		// abort path — that calls #teardown() directly.
+		// abort path — that calls #teardown() directly. A returned thenable that
+		// REJECTS is still observed (Change B), never left unobserved.
 		const { beforeUnmount } = this.config;
-		if (beforeUnmount != null) {
-			const errorCtx = this.ctx;
-			const route = this.router?.current;
-			try {
-				// Synchronous: teardown does NOT await a returned promise. But a
-				// returned thenable that REJECTS would otherwise be an unobserved
-				// rejection (Change B) — observe it with the same logged/never-wedges
-				// posture as the mounted hook. The sync throw is caught below.
-				const ret = beforeUnmount.call(this, this);
-				if (ret != null && typeof ret.then === 'function') {
-					ret.catch((/** @type {unknown} */ err) =>
-						reportError(
-							errorCtx,
-							err,
-							{ phase: 'app-unmount', route },
-							'[puzzle] beforeUnmount hook error:',
-							err
-						)
-					);
-				}
-			} catch (err) {
-				reportError(
-					errorCtx,
-					err,
-					{ phase: 'app-unmount', route },
-					'[puzzle] beforeUnmount hook error:',
-					err
-				);
-			}
-		}
+		this.#callHook(beforeUnmount, 'app-unmount', '[puzzle] beforeUnmount hook error:');
 
 		this.#teardown();
 		return this;
+	}
+
+	/**
+	 * Run a non-awaited app lifecycle hook (`mounted`, `beforeUnmount`; D66) with
+	 * the shared "logged, never wedges" policy: the hook runs synchronously as
+	 * `hook.call(app, app)`, a sync throw is reported, and a returned thenable's
+	 * rejection is observed and reported — never awaited. The context and route
+	 * are captured BEFORE the call, because a rejection can land after teardown
+	 * or a re-mount has replaced them.
+	 * @param {Function | null | undefined} hook
+	 * @param {'app-mount' | 'app-unmount'} phase error phase reported to onError
+	 * @param {string} message console diagnostic prefix
+	 */
+	#callHook(hook, phase, message) {
+		if (hook == null) return;
+		const errorCtx = this.ctx;
+		const route = this.router?.current;
+		const failed = (/** @type {unknown} */ err) =>
+			reportError(errorCtx, err, { phase, route }, message, err);
+		try {
+			const ret = hook.call(this, this);
+			if (ret != null && typeof ret.then === 'function') ret.catch(failed);
+		} catch (err) {
+			failed(err);
+		}
 	}
 
 	/**

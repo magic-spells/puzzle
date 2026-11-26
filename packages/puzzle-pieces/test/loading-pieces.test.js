@@ -5,8 +5,8 @@ import { readFile } from 'node:fs/promises';
 // Static guards for the two CSS-animated loading pieces, spinner and
 // shimmer-text. The motion itself is keyframes in each file's <style> block and
 // is judged by eye in the docs site; what can regress here is the contract
-// around it — the manifests, the demo copies, the ring staying byte-stable for
-// existing callers, the accessible root, and "CSS only, reduced motion covered".
+// around it — the manifests, the ring staying byte-stable for existing callers,
+// the accessible root, and "CSS only, reduced motion covered".
 
 const readText = (path) => readFile(new URL(path, import.meta.url), 'utf8');
 const readJSON = async (path) => JSON.parse(await readText(path));
@@ -22,19 +22,11 @@ const script = (source) => source.slice(source.indexOf('<script>'), source.index
 for (const { name, file } of PIECES) {
   const src = `../registry/ui/${name}/${file}`;
 
-  test(`${name}: manifest, registry.json row and demo copy agree`, async () => {
-    const [piece, registry, source, copy] = await Promise.all([
-      readJSON(`../registry/ui/${name}/piece.json`),
-      readJSON('../registry/registry.json'),
-      readText(src),
-      readText(`../demo/app/components/ui/${file}`),
-    ]);
+  test(`${name}: the manifest declares its file and no dependencies`, async () => {
+    const piece = await readJSON(`../registry/ui/${name}/piece.json`);
     assert.deepEqual(piece.files, [file]);
     assert.deepEqual(piece.registryDependencies, []);
     assert.deepEqual(piece.dependencies, []);
-    const row = registry.pieces.find((p) => p.name === name);
-    assert.deepEqual(row, piece, `registry.json's ${name} row has drifted from piece.json`);
-    assert.equal(copy, source, `demo/app/components/ui/${file} has drifted`);
   });
 
   test(`${name}: animation is CSS only`, async () => {

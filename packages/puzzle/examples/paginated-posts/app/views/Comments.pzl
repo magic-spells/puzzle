@@ -1,0 +1,54 @@
+<puzzle-view>
+  <h1>Latest comments</h1>
+  <ul class="rows">
+    {#for comment in comments}
+      <li>
+        <span>{ comment.body }</span>
+        <span class="muted">{ comment.author }</span>
+      </li>
+    {/for}
+  </ul>
+  <p class="pager">
+    <span>{ comments.length } of { total }</span>
+    {#if nextCursor}<button @click={ loadMore }>Load more</button>{/if}
+  </p>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// how many comments one page holds
+const LIMIT = 5;
+
+export default class CommentsView extends PuzzleView {
+  data() {
+    const store = this.ctx.store;
+
+    // the cursors walked so far live in view state. '' is the first page.
+    const cursors = this.getState().cursors ?? [''];
+
+    // one server query per cursor: GET /api/comments?limit=5&after=10. each is
+    // its own cached entry, so appending a cursor fetches only the new page.
+    const pages = cursors.map((after) =>
+      store.findMany('comment', { query: after ? { after, limit: LIMIT } : { limit: LIMIT } })
+    );
+    const last = pages[pages.length - 1];
+
+    return {
+      comments: pages.flat(),
+      nextCursor: last.meta?.nextCursor ?? null,
+      total: last.meta?.total ?? 0,
+    };
+  }
+
+  events = {
+    // append the next cursor. setState on a key data() read re-runs data() on
+    // its own (D23), and the settle loop fetches the new page before the
+    // longer list commits.
+    loadMore: () => {
+      const cursors = this.getState().cursors ?? [''];
+      this.setState('cursors', [...cursors, this.getData().nextCursor]);
+    },
+  };
+}
+</script>

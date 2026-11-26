@@ -1,7 +1,7 @@
 ---
 name: Build pipeline, watch, and dev server
 kind: integration
-status: built
+status: verified
 framework: go test
 connections:
   - COMPONENT-ESBUILD-PLUGIN
@@ -39,47 +39,61 @@ connections:
   - FEATURE-DEV-PROXY
   - DOC-TESTING
   - DECISION-D181-HASHED-OUTPUT-NAMES-AND-MODULEPRELOAD
+verified_at: '2026-11-24T18:02:16.140Z'
+verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
+notes:
+  - kind: state
+    text: >-
+      Config `env` ([[DECISION-D190-CONFIG-ENV]]): `build/env_test.go` covers `bundleDefines`
+      (TestEnvDefines), a built SPA bundle (TestBuildEnv) and both prerender passes
+      (TestPrerenderEnv); `config_test.go` covers valid, unset and invalid `env` with exact messages
+      (TestLoadConfigEnv / EnvUnset / EnvInvalid) and an unset `dev.proxy` target in
+      TestLoadConfigNullBehavesAsUnset; `check/runner_test.go` TestImportMetaEnvCheck proves `puzzle
+      check` types `import.meta.env`; `dev_test.go` checks the fallback warning names env values.
+  - kind: state
+    text: >-
+      CSS output: `TestBuildUnlinkedEntryCSSWarning` and `TestWatchBuilderUnlinkedEntryCSSWarning`
+      pin the warning for emitted CSS no page links; `TestBuildStaticLinksPageCSS` pins each static
+      page linking its own CSS; `TestStaticWatchWarnsUnloadedCSSOnce` pins the static dev warning.
+      `TestMinifyKeepsVendorPrefixes` covers production `<style>` minify, `TestStripStamps` the SPA
+      production stamp strip, `TestPluginDiagnosticFrames` the source line in `.pzl` diagnostics.
 ---
 
 # Build pipeline, watch, and dev server
 
-Go integration tests over everything between a project directory and `dist/`,
-plus the long-running dev loop on top of it. Packages:
-`compiler/internal/{build,plugin,styles,config,locales,fsutil,keys}` and
-`compiler/internal/{dev,serve,preview,ui}`. Run from `packages/puzzle` with
+Go integration tests over everything between a project directory and `dist/`, plus the
+dev loop on top of it. Packages: `compiler/internal/{build,plugin,styles,config,locales,fsutil,keys}`
+and `compiler/internal/{dev,serve,preview,ui}`. Run from `packages/puzzle` with
 `go test ./compiler/internal/...`.
 
-- **Build:** option resolution, JavaScript config loading, import aliases, the
-  esbuild plugin's resolution and CSS collection, SVG assets, scoped styles, the
-  Tailwind-first style pipeline and its resolver, public asset copying with
-  case-insensitive collision refusal, atomic staging and swap (a failed build
-  keeps the last good output), working-directory handling, runtime env defines,
-  both prerender passes, static page emission, route dependency tracking, route
-  head warnings, SPA code splitting and chunk pruning, locale files, and the
-  fixtures flag.
-- **Caching and performance:** the build-scoped compile cache and its eviction,
-  the scan memo, the pass context, route-level invalidation, and the build
-  profile output.
-- **Dev:** change detection, the rebuild pipeline, warm static rebuilds, the
-  local server with SSE reload, port scanning, proxy prefix validation, preview
-  serving, and terminal UI rendering.
+- **Build** (`internal/build`): option resolution, JavaScript config loading, import
+  aliases, the esbuild plugin's resolution and CSS collection, SVG assets, scoped styles,
+  the Tailwind pipeline, public asset copying with case-insensitive collision refusal,
+  atomic staging and swap (a failed build keeps the last good output), runtime env
+  defines (`TestBuildDevDefineDCE` proves dev-only modules are erased), both prerender
+  passes, static page emission, route dependency tracking, route head warnings, SPA code
+  splitting and chunk pruning, locale files, the fixtures flag, and `.pzl` files read
+  from installed packages (`package_pzl_test.go`).
+- **Runtime preflight** (`build/preflight_test.go`): a missing install names the nearest
+  lockfile's install command, a mistyped directory says so, and an installed runtime
+  across a breaking release from the CLI stops the command, naming both versions and
+  which one to upgrade. A patch difference passes, and `PUZZLE_RUNTIME` or an app inside
+  the repo is never compared ([[DECISION-D202-CLI-RUNTIME-VERSION-PAIR]]).
+- **Hashed names and preloads** (D181): `shell_test.go` and `shell_base_test.go` build
+  SPA, hybrid and static output, including under single- and multi-segment deploy
+  prefixes and every locale page and 404. They pin deterministic content-hashed
+  entry/CSS/page names, `build.hashNames` on, off and default, modulepreloads in static
+  BFS order (diamonds, externals and dynamic imports excluded), that every emitted
+  CSS/JS/preload target exists, that copied public scripts stay byte-identical, and that
+  a missing stylesheet fails before `dist/` is replaced. Development output stays
+  unhashed.
+- **Caching and performance**: the build-scoped compile cache and its eviction, the scan
+  memo, the pass context, route-level invalidation, the build profile output.
+- **Dev**: change detection, the rebuild pipeline, warm static rebuilds, the local server
+  with SSE reload, port scanning, proxy prefix and entry validation, the proxied `Host`
+  with and without `changeOrigin` for requests and upgrades (`TestDevProxyChangeOrigin`),
+  preview serving (it recognizes hashed entries), and terminal UI rendering.
 
-Watch tests include benchmark-shaped cases that measure rebuild cost; they are
-not a pass/fail timing gate.
-
-Production asset coverage spans shell_test.go and build/prerender/static_pages
-integration tests: exact local reference spellings, quoting/query/fragment
-preservation, credentials and indentation, metafile static BFS order/diamonds/external
-and dynamic exclusions, cwd/staging keys and symlink spelling, deterministic entry/CSS
-names, unlinked stylesheets, imported CSS, opt-in/opt-out/default config, and
-failure-before-swap. Unrecognized unhashed shell entries skip preloads, and
-non-missing shell read errors report their I/O cause. The preload integration
-assertion identifies the fixture's expected shared chunk directly; source-map and
-determinism checks have separate tests. Hybrid shells/pages and every static locale
-page inherit the
-emitted URLs; default static output keeps names and gains preloads. Development byte
-stability and the warm watch suites remain covered. Preview recognizes hashed app
-entries; the JS static-docs acceptance test checks production preloads without
-changing the prerender summary contract.
-
-`shell_base_test.go` builds SPA, hybrid and static output under single- and multi-segment deployment prefixes, including every locale page and 404. Emitted CSS/JS/preload targets exist, copied public scripts stay unchanged, static output drops the discarded app script, and a missing compiler stylesheet fails before replacing dist.
+Gotchas: `watch_bench_test.go` and `watch_static_bench_test.go` measure rebuild cost
+but are not a pass/fail timing gate. Multi-tab dev reload is a browser concern, covered
+by `dev-reload` in [[TEST-BROWSER-SMOKE]].

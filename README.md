@@ -7,8 +7,8 @@ read change. The router, the store, schema validation, animations and
 translations all come in the box.
 
 A Go compiler with esbuild inside turns the app into one small bundle. A
-minimal app is **23.0 KB gzip** with the router, store and validation
-included, and the complete todos example is **27.0 KB gzip**. The CLI is a
+minimal app is **23.9 KB gzip** with the router, store and validation
+included, and the complete todos example is **27.8 KB gzip**. The CLI is a
 single prebuilt binary: no Babel, no bundler config, no postinstall scripts.
 
 **[Live demo: Puzzle Sounds](https://puzzle-music-demo.vercel.app/)**, a
@@ -25,12 +25,22 @@ puzzle init my-app
 cd my-app
 npm install
 
-puzzle dev     # dev server with live reload
-puzzle build   # production build to dist/
+npm run dev     # dev server with live reload
+npm test        # run the starter tests in tests/ with Vitest
+npm run build   # production build to dist/
 ```
 
-`puzzle init my-app --template todos` starts from a todo app with a model and
-the store instead. Prebuilt binaries ship for macOS and Linux (arm64, x64) and
+Inside a project, run Puzzle through its npm scripts or `npx puzzle <command>`.
+Both use the CLI installed with the project, which always matches the
+project's Puzzle; a global `puzzle` 0.10 or later from another 0.x minor stops
+and says so, but an older one builds against the wrong runtime without a word,
+so upgrade it (`puzzle upgrade`) or use the project's CLI.
+The global install is for `puzzle init`, and `npx @magic-spells/puzzle init
+my-app` works without it.
+
+`puzzle init my-site --template static` starts from a static site instead:
+plain HTML pages for Home and About, with a header and a 404. Puzzle needs
+Node 24 or later. Prebuilt binaries ship for macOS and Linux (arm64, x64) and
 Windows x64. Puzzle is pre-1.0, so a 0.x minor can carry breaking changes; read
 the [CHANGELOG](packages/puzzle/CHANGELOG.md) before you upgrade.
 
@@ -39,29 +49,31 @@ the [CHANGELOG](packages/puzzle/CHANGELOG.md) before you upgrade.
 ```
 my-app/
 ├── app/
-│   ├── app.js              # creates the PuzzleApp: mount target, routes, models, formatters
+│   ├── app.js              # creates the PuzzleApp: mount target, routes, models, functions
 │   ├── routes.js           # the route table: path → view, layout, child routes
 │   ├── views/              # routed pages
 │   │   ├── Home.pzl
 │   │   └── NotFound.pzl    # the '*' catch-all
-│   ├── layouts/            # page shells; the routed view renders at <Slot/>
+│   ├── layouts/            # page shells; the routed view renders at <Outlet/>
 │   │   └── Default.pzl
 │   ├── components/         # reusable .pzl components
 │   │   └── Counter.pzl
-│   ├── models/             # store models: schema, getters, methods (todos template)
+│   ├── models/             # store models: schema, getters, methods
 │   ├── locales/            # en.json, es.json, … once i18n is configured
 │   ├── assets/             # source assets, e.g. SVGs inlined with {#svg 'icons/heart.svg'}
 │   ├── styles/
 │   │   └── styles.css      # Tailwind entry and global CSS
 │   └── public/             # static files copied into dist/
 │       └── index.html      # the page shell with <div id="app">
+├── tests/                  # Vitest tests: Counter.test.js mounts and clicks the counter
 ├── puzzle.config.js        # build config: style pipeline, output mode, i18n
+├── vitest.config.js        # puzzle() compiles .pzl imports in tests; jsdom for the DOM
 ├── jsconfig.json           # maps the @/ import alias to app/
 └── package.json
 ```
 
 `puzzle build` writes `dist/`. `.puzzle/` is the compiler's scratch directory
-and is gitignored. `puzzle generate view Album` (or `component`, `layout`,
+and is gitignored. `npx puzzle generate view Album` (or `component`, `layout`,
 `model`) adds a stub in the right folder.
 
 ## How it works
@@ -103,7 +115,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 
 export default class TrackList extends PuzzleView {
   // Runs on mount and whenever the props or the store data it read change.
-  data(params, props) {
+  data({ props }) {
     return { title: props.title, tracks: props.tracks };
   }
 
@@ -147,7 +159,7 @@ import Default from './layouts/Default.pzl';
 export default [
   { path: '/', name: 'home', view: Home, layout: Default, meta: { title: 'Home' } },
   { path: '/album/:id', name: 'album', view: Album, layout: Default },
-  // Downloaded the first time a navigation needs it.
+  // Downloaded on demand; a link to it starts the download on hover, touch or focus.
   { path: '/settings', name: 'settings', view: lazy(() => import('./views/Settings.pzl')), layout: Default },
   { path: '*', name: 'not-found', view: NotFound, layout: Default },
 ];
@@ -205,7 +217,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 import TrackList from '@/components/TrackList.pzl';
 
 export default class Album extends PuzzleView {
-  data(params) {
+  data({ params }) {
     // Reading the store here subscribes the view: a like, a new track or a
     // deleted one re-runs data() and re-renders.
     const tracks = this.ctx.store
@@ -309,6 +321,8 @@ Every example is a complete app under
 | [i18n](packages/puzzle/examples/i18n) | Translations in three languages, plural forms, a live locale switch |
 | [stays](packages/puzzle/examples/stays) | An Airbnb-style marketplace: nested routes, callback props, store updates across pages |
 | [blog](packages/puzzle/examples/blog) | Several models, route params, auto-fetching server data, `lazy()` routes, plain `<style>` blocks |
+| [paginated-posts](packages/puzzle/examples/paginated-posts) | Paginated server queries, a cursor "load more", save status and invalidation, over the fixtures mock |
+| [auth](packages/puzzle/examples/auth) | Sign-in, token refresh, a guarded route and logout, against a mock backend that checks the token |
 | [chirp](packages/puzzle/examples/chirp) | A Twitter-style feed: skeleton loaders, `{#case}` and `{#unless}`, event modifiers |
 | [kanban-morph](packages/puzzle/examples/kanban-morph) | A drag-and-drop board whose cards morph open into a detail dialog |
 | [grimoire](packages/puzzle/examples/grimoire) | A Notion-style block editor built on DOM islands |
@@ -340,7 +354,7 @@ Every package in the release train carries the framework's version.
 
 [Puzzle Pieces](packages/puzzle-pieces) is the official component library:
 ready-made `.pzl` components you copy into an app with
-`puzzle add piece <name>`. Preview them at
+`npx puzzle add piece <name>`. Preview them at
 [magicspells.io/puzzle-pieces](https://magicspells.io/puzzle-pieces).
 
 ### Editor support

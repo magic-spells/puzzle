@@ -283,7 +283,7 @@ function blockDom(node, ctx, atRoot = false) {
 }
 
 export default class RichText extends PuzzleView {
-	data(params, props) {
+	data({ props }) {
 		return {
 			rootClass: props.class || '',
 		};

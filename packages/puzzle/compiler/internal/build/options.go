@@ -1,6 +1,7 @@
 package build
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -12,12 +13,14 @@ import (
 	"github.com/magic-spells/puzzle/compiler/internal/plugin"
 )
 
-// bundleFlags carries the per-call BUILD facts that select the literal defines.
+// bundleFlags carries the per-call build and config facts that select the literal defines.
 // Every field is decided by the caller — the one-shot app build has already
 // resolved its output mode, the watch builder is always development — so no call
 // site has to re-derive a mode from an empty-string sentinel, and adding a
 // define does not silently default an existing caller to the wrong value.
 type bundleFlags struct {
+	Env map[string]json.RawMessage
+
 	// Dev selects __PUZZLE_DEV__ (§27, D57): the HMR snapshot/restore machinery,
 	// the window publish, the DevTools bridge, and the profiler seam.
 	Dev bool
@@ -130,7 +133,7 @@ func newBundleOptions(absRoot, entry, outdir string, pl *plugin.Plugin, flags bu
 // a separate, always-in concern handled by head.js syncTitle.
 func bundleDefines(pl *plugin.Plugin, flags bundleFlags) map[string]string {
 	f := pl.Features()
-	return map[string]string{
+	defines := map[string]string{
 		"__PUZZLE_DEV__":                  strconv.FormatBool(flags.Dev),
 		"__PUZZLE_HAS_FLIP__":             strconv.FormatBool(f.Flip),
 		"__PUZZLE_HAS_PORTAL__":           strconv.FormatBool(f.Portal),
@@ -155,6 +158,17 @@ func bundleDefines(pl *plugin.Plugin, flags bundleFlags) map[string]string {
 		// same bytes it did before prefixes existed.
 		"__PUZZLE_HAS_LOCALE_ROUTING__": strconv.FormatBool(pl.LocaleRoutingEnabled()),
 	}
+	// A bare read supports destructuring and computed keys. Direct reads use only
+	// their literal, so unused config values never add bytes to those bundles.
+	defines["import.meta.env"] = "{}"
+	if len(flags.Env) > 0 {
+		object, _ := json.Marshal(flags.Env) // validated JSON literals from config
+		defines["import.meta.env"] = string(object)
+		for key, value := range flags.Env {
+			defines["import.meta.env."+key] = string(value)
+		}
+	}
+	return defines
 }
 
 // scanUsage refreshes pl's usage bits from a walk of absRoot. scanner may be nil
@@ -215,7 +229,7 @@ func configureRuntime(absRoot string, buildOpts *api.BuildOptions, pl *plugin.Pl
 	// '@', so there is no collision surface.
 	buildOpts.Alias["@"] = filepath.Join(absRoot, "app")
 
-	// Resolution of '@magic-spells/puzzle' (constellation/doc/DOC-COMPILER-DESIGN.md §b).
+	// Resolution of '@magic-spells/puzzle' (constellation/component/COMPONENT-ESBUILD-PLUGIN.md, "Config and resolution").
 	//
 	// Three sources, most explicit first:
 	//
@@ -248,8 +262,9 @@ func configureRuntime(absRoot string, buildOpts *api.BuildOptions, pl *plugin.Pl
 // It exists for the `puzzle-dev`-style workflow: building a working-tree
 // COMPILER against a working-tree RUNTIME in some other project. Without it the
 // compiler can only ever swap itself — the runtime is whatever that project's
-// node_modules holds — so a dev CLI silently pairs new compiler with published
-// runtime, and nothing says so.
+// node_modules holds — so a dev CLI pairs new compiler with published runtime:
+// PreflightRuntime stops that pair across a breaking release, and within one
+// nothing says so.
 //
 // The value is the package ROOT (the directory holding client-runtime/), not
 // the index.js inside it, so it reads the same as a repo path:
@@ -304,6 +319,8 @@ func aliasRuntime(buildOpts *api.BuildOptions, pl *plugin.Plugin, runtime string
 	buildOpts.Alias["@magic-spells/puzzle"] = runtime
 	buildOpts.Alias["@magic-spells/puzzle/adapter"] = filepath.Join(dir, "datastore", "adapter.js")
 	buildOpts.Alias["@magic-spells/puzzle/morph"] = filepath.Join(dir, "morph.js")
+	// The opt-in forms controller (D192): only an app that imports it ships it.
+	buildOpts.Alias["@magic-spells/puzzle/forms"] = filepath.Join(dir, "forms.js")
 	// The opt-in router modes (D159): hashRouter()/memoryRouter() live in their
 	// own module so a path-mode app never pulls them into the graph.
 	buildOpts.Alias["@magic-spells/puzzle/router-modes"] = filepath.Join(dir, "router", "modes.js")
@@ -321,5 +338,8 @@ func aliasRuntime(buildOpts *api.BuildOptions, pl *plugin.Plugin, runtime string
 	// wrapper lives under <appRoot>/.puzzle/, so node_modules resolution walks up
 	// to the project root on its own.
 	buildOpts.Alias["@magic-spells/puzzle/fixtures"] = filepath.Join(dir, "fixtures", "index.js")
+	// The Vitest plugin (D194) is Node-only and no app bundle imports it; the
+	// alias only keeps every export pointing into the named checkout.
+	buildOpts.Alias["@magic-spells/puzzle/vitest"] = filepath.Join(dir, "vitest", "index.js")
 	pl.SetRuntimeDir(dir)
 }

@@ -1,6 +1,6 @@
 ---
 name: Tabs family
-status: built
+status: verified
 framework: puzzle
 props:
   - name: value
@@ -14,15 +14,25 @@ props:
 variants:
   - underline
   - pills
+  - buttons
 connections:
   - DECISION-WRAP-WEB-COMPONENTS
   - DECISION-CONFIG-FIRST-API
+notes:
+  - kind: state
+    text: >-
+      Known bug: adding or inserting a tab and selecting it in the same update can activate the
+      wrong tab. tab-group's `active` setter resolves the index against the buttons it last
+      collected while DOM mutations are still queued for its MutationObserver; the piece's
+      member-key edge (`#members`/`#memberKey`) only works around part of it. The fix is upstream:
+      flush the observer in tab-group's `set active` (`takeRecords()`, then `_sync()`), then delete
+      the member tracking from the piece and bump the floor.
+verified_at: '2026-11-24T18:13:21.786Z'
+verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
 ---
 
 `Tabs` · `Tabs.List` · `Tabs.Tab` · `Tabs.Panel`, a D167 family over
-`@magic-spells/tab-group` 1.2.0. Replaced the 0.6 port (a `tabs` config array
-that rendered only the strip and left panels parent-owned with hand-wired
-`role="tabpanel"` ids).
+`@magic-spells/tab-group` 1.2.0.
 
 ## value ↔ index
 
@@ -63,8 +73,10 @@ member key.
 ## Variant without context
 
 Puzzle has no cross-component context, so the root stamps `data-variant` and
-List/Tab carry both looks, switching on a descendant attribute selector
-(`[tab-group[data-variant=pills]_&]:…`). Underline is unconditional; pills wins on
-specificity. Documented limitation: a nested Tabs with a DIFFERENT variant
-collides, because the match has equal specificity at both depths — escape with
-`class=` on the inner members.
+List/Tab carry every look (`underline`, `pills`, `buttons`), switching on a descendant
+attribute selector (`[tab-group[data-variant=pills]_&]:…`). Underline is unconditional;
+pills and buttons win on specificity. Documented limitation: a nested Tabs with a
+DIFFERENT variant collides, because the match has equal specificity at both depths. The
+same specificity means a plain call-site utility on a List or Tab loses to any property a
+pills/buttons rule sets: override with the `!` suffix or the same
+`[tab-group[data-variant=…]_&]:` prefix in `class=` on the inner members.

@@ -42,7 +42,7 @@ import { devperfListRows } from '../devperf.js';
  * receives (it adds its own `h0…` handler slots on first use).
  *
  * @typedef {{ k: any, item: any, i: number, rev: number, vnode: any,
- *   controls: ViewNode[] | null, gen: number, c: any[], __lists: any[] | undefined }} ListRow
+ *   gen: number, c: any[], __lists: any[] | undefined }} ListRow
  */
 
 /**
@@ -192,11 +192,10 @@ export function listRows(view, owner, id, items, factory, meta) {
 			row.vnode = factory(row);
 			// Controlled form values inside a CACHED row are re-asserted from this
 			// list by patch()'s identity short-circuit, which is the contract
-			// patchAttrs/reassertSelectValue carry for every other subtree (§3.2).
+			// patchAttrs/syncControl carry for every other subtree (§3.2).
 			// Collected once per build, walked once per clean pass: O(controls).
 			if (ctrl) {
 				const controls = collectControls(row.vnode);
-				row.controls = controls;
 				if (controls) row.vnode.controls = controls;
 			}
 		} else {
@@ -331,7 +330,6 @@ function newRow(k, item, i, gen, rev) {
 		i,
 		rev: rev >= 0 ? rev : 0,
 		vnode: null,
-		controls: null,
 		gen,
 		c: [],
 		__lists: undefined,

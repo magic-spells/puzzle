@@ -48,7 +48,10 @@ const STATUS_TEXT = {
 	201: 'Created',
 	204: 'No Content',
 	400: 'Bad Request',
+	401: 'Unauthorized',
+	403: 'Forbidden',
 	404: 'Not Found',
+	422: 'Unprocessable Content',
 	500: 'Internal Server Error',
 };
 
@@ -197,6 +200,35 @@ function parseBody(raw) {
 	}
 }
 
+/**
+ * the request's headers as a plain object with lower-case names, so a handler
+ * reads `headers.authorization` whatever spelling or container beforeRequest
+ * used: a plain object, a `Headers` instance, or an array of pairs.
+ *
+ * @param {HeadersInit | undefined} raw the post-hook `init.headers`
+ * @returns {Record<string, string>}
+ */
+function headerObject(raw) {
+	/** @type {Record<string, string>} */
+	const out = {};
+	if (!raw) return out;
+	// an array of [name, value] pairs
+	if (Array.isArray(raw)) {
+		for (const [name, value] of raw) out[String(name).toLowerCase()] = String(value);
+		return out;
+	}
+	// a Headers instance (already lower-cases its names)
+	if (typeof (/** @type {any} */ (raw).forEach) === 'function') {
+		/** @type {Headers} */ (raw).forEach((value, name) => (out[name.toLowerCase()] = value));
+		return out;
+	}
+	// a plain object; a nullish value means "no header", as fetch treats it
+	for (const [name, value] of Object.entries(raw)) {
+		if (value != null) out[name.toLowerCase()] = String(value);
+	}
+	return out;
+}
+
 /** @param {unknown} value @returns {value is Record<string, any>} */
 const isPlainObject = (value) => value != null && typeof value === 'object' && !Array.isArray(value);
 
@@ -235,7 +267,16 @@ function defaultCrud({ method, path, body, collection, pk, state, url }) {
 	const id = segment !== null && !segment.includes('/') ? safeDecode(segment) : null;
 
 	if (method === 'GET') {
-		if (isCollection) return mockResponse(200, [...collection.values()]);
+		if (isCollection) {
+			const all = [...collection.values()];
+			// D193: a collection GET carrying page, limit or after answers one page
+			// as { records, meta }; any other query param is ignored.
+			const params = new URLSearchParams(path.split('?')[1] ?? '');
+			if (params.has('page') || params.has('limit') || params.has('after')) {
+				return mockResponse(200, mockPage(all, params, pk));
+			}
+			return mockResponse(200, all);
+		}
 		if (id === null) return notFound(method, url);
 		const key = resolveKey(collection, id);
 		return key === undefined ? notFound(method, url) : mockResponse(200, collection.get(key));
@@ -275,6 +316,42 @@ function defaultCrud({ method, path, body, collection, pk, state, url }) {
 }
 
 /**
+ * One page of a mock collection (D193), in insertion order. `limit` (default 10,
+ * 1 to 100) sizes it; `after` is a cursor — the primary key of the last row of
+ * the previous page — and wins over `page` (1-based) when both are present.
+ * `meta.nextPage`/`meta.nextCursor` are null on the last page.
+ * @param {Record<string, any>[]} all
+ * @param {URLSearchParams} params
+ * @param {string} pk
+ * @returns {{ records: Record<string, any>[], meta: Record<string, any> }}
+ */
+function mockPage(all, params, pk) {
+	const limit = Math.min(100, Math.max(1, Number.parseInt(params.get('limit') ?? '', 10) || 10));
+	const after = params.get('after');
+	let page = null;
+	let start;
+	if (after !== null) {
+		// an unknown cursor starts from the top rather than answering nothing
+		start = all.findIndex((row) => String(row[pk]) === after) + 1;
+	} else {
+		page = Math.max(1, Number.parseInt(params.get('page') ?? '', 10) || 1);
+		start = (page - 1) * limit;
+	}
+	const records = all.slice(start, start + limit);
+	const more = start + limit < all.length;
+	return {
+		records,
+		meta: {
+			page,
+			limit,
+			total: all.length,
+			nextPage: more && page !== null ? page + 1 : null,
+			nextCursor: more && records.length ? String(records[records.length - 1][pk]) : null,
+		},
+	};
+}
+
+/**
  * Serve one adapter request from the merged mock config (v1.57, D95). Called by
  * the `/fixtures` module's `_network` replacement, i.e. AFTER `beforeRequest` has
  * run — the hook still fires in mock mode (a test can assert it fired and inspect
@@ -303,7 +380,7 @@ export function mockFetch(store, type, config, url, init) {
 	if (!WARNED.has(Model)) {
 		WARNED.add(Model);
 		console.warn(
-			`[puzzle] model '${type}' is served by its adapter mock — no request reaches ${Model.adapter?.endpoint}`
+			`[puzzle] model '${type}' is served by its adapter mock — no request reaches ${Model.adapter?.endpoint ?? 'the network'}`
 		);
 	}
 
@@ -320,6 +397,9 @@ export function mockFetch(store, type, config, url, init) {
 	const method = String(init.method || 'GET').toUpperCase();
 	const path = requestPath(store, Model.adapter?.endpoint || '', url);
 	const body = parseBody(init.body);
+	// read after beforeRequest ran (_fetch calls it first), so a handler sees the
+	// headers a real server would: an auth mock can check `authorization`.
+	const headers = headerObject(init.headers);
 
 	const respond = () => {
 		if (failed) {
@@ -328,7 +408,7 @@ export function mockFetch(store, type, config, url, init) {
 		if (typeof config.handler === 'function') {
 			// Escape hatch for the arbitrary paths request() can build — without it
 			// a custom endpoint cannot be mocked at all. A falsy return falls through.
-			const handled = config.handler({ method, url, path, body, collection });
+			const handled = config.handler({ method, url, path, body, headers, collection });
 			if (handled) return mockResponse(handled.status ?? 200, handled.body);
 		}
 		return defaultCrud({ method, path, body, collection, pk, state, url });

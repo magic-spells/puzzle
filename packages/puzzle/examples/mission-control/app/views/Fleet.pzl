@@ -19,7 +19,7 @@
 
     <!-- Detail child route renders here (nested routes, D30): /fleet fills the
          slot with the empty index child; /fleet/:id slides in Detail.pzl. -->
-    <Slot />
+    <Outlet />
   </div>
 </puzzle-view>
 
@@ -34,7 +34,7 @@ export default class FleetView extends PuzzleView {
   // re-runs this data() with the chain's full merged params (awaited before
   // the URL commits), so the row highlight tracks navigation with no local
   // state. Deep links and back/forward come along for free.
-  data(params) {
+  data({ params }) {
     return {
       items: fleet,
       selectedId: params.id || null,

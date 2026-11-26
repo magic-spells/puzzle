@@ -27,6 +27,5 @@ export function isViewClass(value) {
  */
 export function describeValue(value) {
 	if (value === null) return 'null';
-	if (value === undefined) return 'undefined';
 	return typeof value;
 }

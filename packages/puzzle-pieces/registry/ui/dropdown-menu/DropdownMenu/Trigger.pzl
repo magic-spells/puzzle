@@ -12,7 +12,7 @@ import DropdownPanel from '../DropdownPanel/index.js';
 // its single root with no wrapper — the direct-children contract holds.
 //
 //   <DropdownMenu.Trigger>Options</DropdownMenu.Trigger>
-//   <DropdownMenu.Trigger variant="item">Export as</DropdownMenu.Trigger>
+//   <DropdownMenu.Trigger variant="item" label="Export as"/>
 //   <DropdownMenu.Trigger variant="bare" class="p-1.5" label="Actions">
 //     <svg …/>
 //   </DropdownMenu.Trigger>
@@ -50,11 +50,11 @@ import DropdownPanel from '../DropdownPanel/index.js';
 const FOCUS =
   'focus-visible:outline-2 focus-visible:outline-offset-2 outline-ring focus-visible:outline-ring';
 
-// The menu-button pill — today's flat-port TRIGGER recipe, verbatim.
+// The menu-button pill — Button's outline variant at size md.
 const BUTTON =
   'inline-flex items-center justify-center gap-2 whitespace-nowrap select-none ' +
   'rounded-lg font-medium cursor-pointer transition-colors h-9 px-4 text-sm ' +
-  'border border-border bg-surface text-ink hover:border-border-strong hover:bg-surface-sunken ' +
+  'border border-border-strong text-ink hover:bg-ink/6 ' +
   FOCUS;
 
 // A submenu row: Item's box, with the chevron pushed to the trailing edge.
@@ -69,7 +69,7 @@ const BARE = 'inline-flex items-center select-none cursor-pointer ' + FOCUS;
 const VARIANT = { button: BUTTON, item: ITEM, bare: BARE };
 
 export default class Trigger extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     return {
       label: props.label != null ? String(props.label) : '',
       triggerClass: [VARIANT[props.variant] || BUTTON, props.class]

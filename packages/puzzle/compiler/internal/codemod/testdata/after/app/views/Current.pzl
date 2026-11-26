@@ -1,0 +1,20 @@
+<puzzle-view>
+  <Outlet/>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import { share } from '@/lib/share.js';
+
+export default class Current extends PuzzleView {
+  data({ params }) {
+    return { id: params.id };
+  }
+  pick() {
+    this.setState('x', 1);
+  }
+  send() {
+    return navigator.share ? share(location.href, document.title) : null;
+  }
+}
+</script>

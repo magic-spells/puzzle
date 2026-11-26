@@ -1,35 +1,43 @@
 ---
-name: USER_GUIDE.md — application building guide
+name: App-building guide (worked against examples/blog)
 status: built
 connections:
   - DOC-SPEC
   - DOC-PUZZLE-FILE
-  - DOC-DATASTORE
-  - DOC-COMPILATION-FLOW
   - DOC-TEMPLATE-SYNTAX
+  - DOC-EVENTS
   - DOC-MODELS
+  - DOC-DATASTORE
   - DOC-ROUTER
+  - DOC-TESTING
+  - DOC-APP-STRUCTURE
+  - DECISION-D194-VITEST-PLUGIN
 ---
 
-End-to-end app-building guide, worked against the in-repo `examples/blog` reference app ("Puzzle Press"). It walks the path an app author takes and links the reference cards for detail: [[DOC-TEMPLATE-SYNTAX]] (template grammar), [[DOC-MODELS]] and [[DOC-DATASTORE]] (data), [[DOC-ROUTER]] (routing), [[DOC-EVENTS]] (events), and the enforceable contract in [[DOC-SPEC]] and its `DOC-SPEC-*` chapters.
+# Puzzle app-building guide
 
-# Puzzle User Guide
+The path an app author takes, worked against the in-repo `examples/blog` reference app. It teaches the patterns and gotchas; the reference cards hold detail — [[DOC-TEMPLATE-SYNTAX]], [[DOC-EVENTS]], [[DOC-MODELS]], [[DOC-DATASTORE]], [[DOC-ROUTER]] — and [[DOC-SPEC]] holds the contract.
 
 ## Quick start
 
-The CLI is a prebuilt Go binary shipped through npm; no JavaScript toolchain is needed to run it.
+The CLI is a prebuilt Go binary shipped through npm. Puzzle needs Node 24 or later.
 
 ```bash
 npm install -g @magic-spells/puzzle
-puzzle init my-app            # --template default|todos, --typescript
+puzzle init my-app            # --template default|static, --typescript
 cd my-app && npm install
-puzzle dev                    # watch + live reload
-puzzle build                  # production build
+npm run dev                   # watch + live reload
+npm test                      # the starter tests in tests/ (Vitest)
+npm run build                 # production build
 ```
 
-`puzzle init` is the only onboarding path; there is no `npx create-*` wrapper ([[DECISION-D77-INIT-PROMPTS]]). The generated app depends on `@magic-spells/puzzle` locally, so collaborators only need `npm install`. To add Puzzle to an existing project, `npm install -D @magic-spells/puzzle` gives both the client runtime and the CLI.
+`puzzle init` is the only onboarding path; there is no `npx create-*` wrapper ([[DECISION-D77-INIT-PROMPTS]]). The app depends on `@magic-spells/puzzle` locally, so collaborators only need `npm install`; `npm install -D @magic-spells/puzzle` adds runtime + CLI to an existing project.
 
-`--typescript` scaffolds `<script lang="ts">` components, `.ts` modules and entry `app/app.ts`, a strict `tsconfig.json`, and a `check` script (`puzzle check`). The build starts from `app/app.ts` when it exists, otherwise `app/app.js`, and refuses an app with both. It strips types without checking them; `puzzle check` is the type check. In an app with a `tsconfig.json`, `puzzle generate` writes TypeScript stubs.
+Inside a project, run Puzzle through its npm scripts or `npx puzzle <command>`: the project's own CLI always matches its installed Puzzle. A global `puzzle` 0.10 or later stops when it is across a breaking release from the project ([[DECISION-D202-CLI-RUNTIME-VERSION-PAIR]]); an older one builds against the wrong runtime without a word.
+
+`--typescript` scaffolds `<script lang="ts">` components, `app/app.ts`, a strict `tsconfig.json` and a `check` script. The build strips types without checking them; `puzzle check` is the type check. With a `tsconfig.json`, `puzzle generate` writes TypeScript stubs.
+
+Every template also ships a working test suite ([[DECISION-D194-VITEST-PLUGIN]]): `tests/` holds a component test (`default`: `Counter.test.js`) or a home-page test (`static`: `Home.test.js`), `vitest.config.js` registers the `puzzle()` plugin from `@magic-spells/puzzle/vitest` so tests can import `.pzl` files, and `npm test` runs them. Testing, below, covers writing more.
 
 ## Project structure
 
@@ -39,20 +47,20 @@ my-app/
 │   ├── app.js | app.ts   # PuzzleApp config + mount
 │   ├── routes.js         # route table
 │   ├── models/           # PuzzleModel classes + index.js registry
-│   ├── views/            # routed .pzl views (subfolders allowed)
+│   ├── views/            # routed .pzl views
 │   ├── components/       # reusable .pzl components
-│   ├── layouts/          # route layouts with <Slot/>
+│   ├── layouts/          # route layouts with <Outlet/>
 │   ├── assets/           # source assets, incl. {#svg} files
-│   ├── locales/          # <tag>.json translation files (optional)
+│   ├── locales/          # <tag>.json translations (optional)
 │   ├── styles/           # Tailwind entry + global CSS
 │   └── public/           # index.html + static files (copied to dist/)
+├── tests/                # Vitest tests (*.test.js | *.test.ts)
 ├── puzzle.config.js      # styles, i18n, dev proxy, output, build options
-└── package.json          # dist/ is build output, git-ignored
+├── vitest.config.js      # puzzle() plugin + jsdom, for npm test
+└── package.json
 ```
 
-`@` is a built-in alias for `app/` in every module import (`import PostCard from '@/components/PostCard.pzl'`), from any depth, mixing freely with relative imports. `puzzle init` writes the matching `paths` entry (`"@/*": ["./app/*"]`) into `jsconfig.json`/`tsconfig.json` for editors; an older app adds it by hand. It applies to module imports only: `{#svg '…'}` paths already resolve against `app/assets/`, and CSS `@import`s are unaffected.
-
-Styling is either per-file `<style>` blocks (optionally `scoped`) or the Tailwind pipeline: `puzzle add tailwind` wires `styles: { use: ['tailwindcss'] }` in `puzzle.config.js`, and `puzzle dev`/`build` run it automatically. `puzzle add theme` lists and installs registry palettes. `examples/blog` uses Tailwind.
+`@/` resolves to `app/` in every module import, from any depth (`import PostCard from '@/components/PostCard.pzl'`); `puzzle init` writes the matching `paths` entry for editors. `{#svg '…'}` paths resolve against `app/assets/`. Styling is per-file `<style>` (optionally `scoped`) or Tailwind: `puzzle add tailwind` wires `styles: { use: ['tailwindcss'] }`. Every `<style>` block lands in the one global stylesheet, minified in production. CSS only one page needs goes in a file its view (or layout, or a component it uses) imports from `<script>`: `import './agency.css';`. With `output: 'static'` each page links its own sheet holding just the CSS its views import, in `puzzle build` and `puzzle dev` alike, so that CSS loads only on that page. A CSS file imported from `app.js` reaches no static page (the build warns); import it from a layout instead. [[DOC-APP-STRUCTURE]] has the layout rules.
 
 ## App entry
 
@@ -67,9 +75,9 @@ const app = new PuzzleApp({
   target: '#app',
   routes,
   models,
-  adapter,          // opt-in server sync; tracked finds fetch on miss (D161)
+  adapter,          // opt-in server sync; tracked finds fetch on miss
   apiURL: '/api',   // adapter endpoints join onto this
-  formatters: {     // app display functions, called by name in templates
+  functions: {      // app functions, called by name in templates
     byline: (name) => (name ? `By ${name}` : 'By an unknown author')
   }
 });
@@ -78,11 +86,11 @@ app.mount();
 export default app;
 ```
 
-The core config is `target`, `routes`, `models`, `formatters`, `apiURL`, plus optional capabilities and hooks (`adapter`, `scrollBehavior`, `routerMode`, `beforeMount`/`mounted`/`beforeUnmount`, `onError`, …); see [[DOC-SPEC-ANATOMY]] §2 and [[DOC-SPEC-VIEW]] §34/§60. There is no seeding step.
+All config keys: [[DOC-SPEC-ANATOMY]] §2. There is no seeding step.
 
 ## Routes
 
-`app/routes.js` exports an array of `{ path, name, view, layout?, meta? }` entries (`{ path: '/posts/:id', name: 'post', view: PostDetailView, layout: DefaultLayout }`). A `:id` segment arrives as `params.id` in `data(params, props)`; `'*'` is matched last and renders the 404 view. A layout renders the routed view at `<Slot/>`. Nested routes, guards, lazy views, query, head tags, scroll and focus behavior are in [[DOC-ROUTER]].
+`app/routes.js` exports `{ path, name, view, layout?, meta? }` entries. A `:id` segment arrives as `params.id` in `data({ params, props })`; `'*'` matches last and renders the 404 view. A layout renders the routed view at `<Outlet/>`. Nesting, guards, lazy views, query, head, scroll and focus: [[DOC-ROUTER]].
 
 ## Models
 
@@ -102,14 +110,13 @@ export default class Post extends PuzzleModel {
     comments:    Puzzle.hasMany('comment')    // FK 'postId' inferred
   };
 
-  // Computed properties are plain getters (the blog also defines readingTime).
-  // Server dates arrive as ISO strings, so coerce.
+  // Computed properties are plain getters. Server dates arrive as ISO strings.
   get publishedDate() { return new Date(this.publishedAt); }
 
   static adapter = {
     endpoint: '/posts.json',   // findMany('post') GETs /api/posts.json
-    // Any single verb can be replaced by a fetch function. The static demo
-    // "server" has no per-record URLs, so loadOne reads the collection file.
+    // Any one verb can be a fetch function. This static demo "server" has no
+    // per-record URLs, so loadOne reads the collection file.
     async loadOne(fetch, id) {
       const res = await fetch('/api/posts.json');
       if (!res.ok) return res;
@@ -120,20 +127,16 @@ export default class Post extends PuzzleModel {
 }
 ```
 
-`models/index.js` exports `{ user: User, post: Post, comment: Comment }`. A model with no `adapter` (the blog's browser-created `Comment`) keeps every find a local read.
+`models/index.js` exports `{ user: User, post: Post, comment: Comment }`. A model with no `adapter` keeps every find a local read.
 
-- `endpoint` generates the REST transports; a fetch function overrides one verb, or several form a no-endpoint adapter. A non-OK `Response` becomes a `PuzzleAdapterError`; a 404 on the auto-fetch path commits `null`.
-- Passing `adapter` to `PuzzleApp` installs `loadMany`/`loadOne`, `upsert`/`request`, record `save()`/`delete()` and auto-fetching finds; without it none of that runtime ships. `record.destroy()` is always local-only.
+- A non-OK `Response` becomes a `PuzzleAdapterError`; a 404 on the auto-fetch path commits `null`.
+- Without `adapter` in the app config, none of the sync runtime ships. `record.destroy()` is always local-only; `save()`/`delete()` sync.
 - Validation is core: `createRecord` and `update` throw `PuzzleValidationError`; `Model.validate(data, { fields })` returns `{ valid, errors }` for form UX.
-
-Builders, relationships, write sync, fixtures and the mock adapter: [[DOC-MODELS]], [[DOC-DATASTORE]], [[DOC-SPEC-DATA]].
 
 ## Views
 
-A view is a `.pzl` file: a `<puzzle-view>` template, a `<script>` exporting a `PuzzleView` subclass, and an optional `<style>`. Anatomy and the full component reference: [[DOC-PUZZLE-FILE]].
-
 ```html
-<!-- app/views/PostDetail.pzl (abridged) -->
+<!-- a post page with a hand-written comment form; examples/blog's PostDetail.pzl uses createForm (Forms, below) -->
 <puzzle-view class="detail">
   {#if post}
     <h1>{ post.title }</h1>
@@ -164,15 +167,15 @@ import CommentItem from '@/components/CommentItem.pzl';
 
 export default class PostDetailView extends PuzzleView {
   created() {
-    this.setData({ commentText: '', authorName: '' });   // local form state
+    this.setState({ commentText: '', authorName: '' });   // local form state
   }
 
-  data(params, props) {
+  data({ params }) {
     const store = this.ctx.store;
     const local = this.getData();
     const post = store.findOne('post', params.id);
-    // Relationships never fetch; a view that needs the related record asks
-    // for it with one more tracked find on the foreign key.
+    // Relationships never fetch; ask for the related record with one more
+    // tracked find on the foreign key.
     const author = post ? store.findOne('user', post.authorId) : null;
     const comments = post ? [...post.comments].sort((a, b) => a.createdAt - b.createdAt) : [];
     return {
@@ -191,8 +194,7 @@ export default class PostDetailView extends PuzzleView {
       this.ctx.store.createRecord('comment', {
         postId: this.params.id, author: authorName.trim() || 'Anonymous', text: commentText.trim()
       });
-      this.setData({ commentText: '', authorName: '' });
-      this.refresh();
+      this.setState({ commentText: '', authorName: '' });
     },
     removeComment: (comment) => comment.destroy()   // the parent owns the mutation
   };
@@ -202,40 +204,59 @@ export default class PostDetailView extends PuzzleView {
 
 What this shows:
 
-- **`data(params, props)`** receives only route params and props; nothing ambient is injected, and props flow parent to child. It may be `async`, runs on mount, on param/prop change and when a store read it made changes, and auto-subscribes to every store query it runs.
-- **Auto-fetch (D161):** with the adapter installed, a tracked `findOne`/`findMany` miss runs the model's read verb, and the view commits only once every read settles (here: the post in round 1, the author in round 2). A committed `null` means "does not exist", never "still loading", so the `{:else}` branch needs no loading flag.
-- **Display functions are calls** (D176): `byline` is the app function from `app.js`; `date` and `pluralize` are standard. The count is `.length`.
-- **Templates never reach the instance**: `this` is a compile error in a template, so view logic lives in `data()` and the template reads named fields like `canComment`.
-- **Components are any tag whose first character is not `a-z`** (D167): `<CommentItem>`, or a dotted family member like `<Frame.Content>`, resolved against the script's imports.
+- **`data({ params, props, shared })`** takes one object: route params, props, and `shared`, the values ancestor views hand down with `share()` (always an object, so `shared: { filter = {} }` is safe). It may be `async`, runs on mount, on param/prop change and when a store read it made changes, and subscribes to every store query it runs.
+- **Auto-fetch:** with the adapter installed, a tracked `findOne`/`findMany` miss runs the model's read verb, and the view commits only once every read settles (here the post in round 1, the author in round 2). A committed `null` means "does not exist", never "still loading", so `{:else}` needs no loading flag.
+- **Templates never reach the instance:** `this` is a compile error in a template, so logic lives in `data()` and the template reads named fields like `canComment`. Functions are calls (`byline(…)`, `date(…)`); the count is `.length`.
+- **Components** are tags whose first character is not `a`–`z`, resolved against the script's imports.
 
-### Template essentials
+## Form binding
+
+`value={ … }` and `checked={ … }` on a plain `<input>`, `<textarea>` or `<select>` bind both ways when the expression is a bare key or a plain member path of any depth, such as `profile.hue` or `form.values.title` ([[DECISION-D147-IMPLICIT-TWO-WAY-BINDING]]). **Bind the path you want written:**
+
+- **Local draft, bare key** (`value={ authorName }`): the write is `setState` + `refresh`, so everything `data()` derives from the key recomputes within the same keystroke. Seed the key in `created()` and read it back in `data()` with `this.getData()`.
+- **Record field, member path** (`checked={ profile.subscribed }`): each edit goes through `record.update()`, so validation runs and subscribed views re-render. Bind the record path rather than copying the field into a local key `data()` also derives from the record — that key is overwritten on the next commit (dev warns once per key).
+- **Constrained field, draft + submit:** a bound record path validates every keystroke, so a `required()` field could never be emptied. Bind a draft instead and validate on submit; the forms module below does this for you. A rejected bind reaches `onError` with `phase: 'bind'`.
+- **Opting out:** an author `@input`/`@change` suppresses the synthesized write; a non-path expression (`value={ name ?? '' }`) or a static `readonly` does not bind. Use the non-path form when Escape must revert.
+
+`@magic-spells/puzzle/testing`'s `type()` drives a bound control the way a real edit does ([[DOC-TESTING]]).
+
+### Forms
+
+For a form with rules, `@magic-spells/puzzle/forms` holds the draft and its bookkeeping ([[FEATURE-FORMS]]). It is opt-in; an app that never imports it ships none of it.
 
 ```html
-{#if user.isLoggedIn}<p>Welcome, { user.name }!</p>{:else}<p>Please log in</p>{/if}
-{#for post in posts, i}<div>{ i + 1 }. { post.title }</div>{/for}
-{ capitalize(user.name) }  { currency(price, '$', 2) }  { tags.join(', ') }
-{ t('cart.items', { count: cart.count }) }
-{ raw(post.bodyHtml) }
+<form @submit={ save(event) } @focusout={ touch(event) } novalidate>
+  <input name="text" value={ form.values.text } />
+  {#if form.errors.text}<p class="error">{ form.errors.text }</p>{/if}
+  <button disabled={ form.submitting }>Post</button>
+</form>
 ```
 
-Expressions are JavaScript-shaped from a closed table: operators, `??`, optional chaining, arrow callbacks, `Math.*`, and allowlisted string/array methods (`.trim()`, `.toUpperCase()`, `.filter(…)`, `.toSorted(…)`, `.at(-1)`, `.join(…)`). Display functions are the 19-function standard library plus browser-only `link` and `timeago`, plus the app's own `formatters`; an app function reusing a standard name wins with a dev warning, and an unregistered name passes the value through with one `console.error`. `raw` and `newline_to_br` must be the outermost call of a text interpolation; `raw` always sanitizes. Grammar, the function list, markup-function rules, `{#svg}`, `{#raw}`, snippets and whitespace: [[DOC-TEMPLATE-SYNTAX]] and [[DOC-SPEC-TEMPLATE]].
+```js
+import { createForm } from '@magic-spells/puzzle/forms';
 
-Translations: `i18n: { locales, defaultLocale }` in `puzzle.config.js`, one `app/locales/<tag>.json` per locale, `{ t('key', { name }) }` in templates (a numeric `count` picks the plural form, a missing key prints the key), and `this.ctx.i18n.setLocale('es')` to switch. See [[DECISION-D175-TRANSLATIONS]].
+created() {
+  this.form = createForm(this, Comment, { from: { author: '', text: '' }, fields: ['author', 'text'] });
+}
+events = {
+  touch: (event) => this.form.touch(event),
+  save: async (event) => {
+    const saved = await this.form.submit(event, (values) => this.ctx.store.createRecord('comment', values));
+    if (saved) this.form.reset({ author: '', text: '' });
+  },
+};
+```
 
-## Form binding (D147)
-
-`value={ … }` and `checked={ … }` on a plain `<input>`, `<textarea>` or `<select>` bind both ways when the expression is a bare key or a one-member path; the compiler writes the handler. **Bind the path you want written:**
-
-- **Local draft, bare key** (`value={ authorName }`): the write is `setData` + `refresh`, so everything `data()` derives from the key recomputes as the user types. Seed the key in `created()` and read it back in `data()` with `this.getData()` so it survives store-driven re-runs.
-- **Record field, one-member path** (`checked={ profile.subscribed }`): each edit goes through `record.update()`, so validation runs and every subscribed view re-renders. Bind the record path rather than copying the field into a local key: a local key `data()` also derives from the record is overwritten on the next commit (dev warns once per key).
-- **Constrained field, draft + submit:** a bound record path validates every keystroke, so a `required()` field could never be emptied and a `min(3)` rule rejects mid-word. Bind a local draft, check it with `Model.validate({ text: draft }, { fields: ['text'] })` on submit, then `record.update(...)`. A rejected `update()` throws and changes nothing; when a bind triggers the rejection, `onError` receives `phase: 'bind'`.
-- **Opting out:** your own `@input`/`@change` suppresses the synthesized write; a non-path expression (`value={ name ?? '' }`) or a static `readonly` does not bind. Handlers on other events (`@blur`, `@keydown:enter`) coexist with the bind, so a bound field is never an abandonable edit buffer; use the non-path form when Escape must revert.
-
-`@magic-spells/puzzle/testing` ships `mountView` and `type()`: `await view.type('.name', 'Ada')` replaces the value, fires the events a real edit produces, and waits for the view to settle. See [[DOC-TESTING]] and [[DOC-SPEC-BUILD]] §53.
+- **Errors come from the model** (`Model.validate`), and show once the user leaves a field (the `@focusout` handler, which needs a `name` on each control) or tries to submit. After that they clear the moment the value is fixed.
+- **`submit()`** focuses the first invalid control, ignores a second submit while one is running, and maps a server's field errors (a thrown `PuzzleValidationError`, or a 4xx body with `errors`) onto `form.errors`. Anything else lands in `form.error` and reaches `onError` with `phase: 'submit'`.
+- **`form.dirty`**, **`form.changed.title`** and **`form.valid`** are ready for a Save button or a leave-page prompt; `form.reset()` goes back to the saved values.
+- **The Field piece** takes `form={ form } name="text"` and wires the value, the error and the blur itself. It writes the input's text as a string, so bind a number field with a plain `<input type="number" name="price" value={ form.values.price } />` instead.
+- **Bind a field itself, never a step inside it.** A bind on `form.values.address.city` writes onto the source's own object, so `dirty` stays false and `reset()` cannot undo it. Change an object field whole in a handler: `this.form.set('address', { ...this.form.values.address, city })`.
+- Import it as `createForm`. A template reading `form` means the state key, and an imported `form` would shadow it.
 
 ## Components
 
-A reusable component renders inline: its `<puzzle-view>` carries no attributes and wraps a single root element (attributes on it are a compile error; put them on the root). Default child content is projected through `<Children/>`; named regions are `<Slot name="header"/>`, filled by a direct child with a static `slot="header"`.
+A component's `<puzzle-view>` carries no attributes and wraps one root element. Default content projects through `<Children/>`; named regions are `<Slot name="header"/>`, filled by a direct child with a static `slot="header"`.
 
 ```html
 <!-- app/components/Button.pzl -->
@@ -249,7 +270,7 @@ A reusable component renders inline: its `<puzzle-view>` carries no attributes a
 import { PuzzleView } from '@magic-spells/puzzle';
 
 export default class Button extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     return { variant: props.variant || 'primary', type: props.type || 'button', disabled: props.disabled || false };
   }
   events = {
@@ -263,68 +284,52 @@ export default class Button extends PuzzleView {
 </script>
 ```
 
-The parent writes `<Button variant="primary" @press={ goToPosts }>Browse</Button>`. `@press` on a component tag is a **callback prop** (D16): the child receives a function on `this.props.press` and calls it from its own DOM listener. There is no `$emit`; the child reports intent and the parent owns mutations. Related components can ship as a family: a directory with a JS barrel (`export default Object.assign(Frame, { Wrapper, Content })`), used as `<Frame.Wrapper>`; `puzzle generate component Frame --family Wrapper,Content` scaffolds it.
+The parent writes `<Button variant="primary" @press={ goToPosts }>Browse</Button>`. `@press` on a component is a **callback prop**: the child calls `this.props.press`. There is no `$emit`; the child reports intent and the parent owns mutations. Related components ship as a family (`<Frame.Wrapper>`); `puzzle generate component Frame --family Wrapper,Content` scaffolds one.
 
 ## Key patterns
 
-### data() rules
+- **Never call `store.loadMany`/`loadOne` inside `data()`** — tracked finds already fetch, and dev warns. The explicit loads are for event handlers; `store.loadOne` there is the force-refresh idiom.
+- **Relationships never fetch** (`post.author`), so a 50-row list never fires 50 GETs; write the tracked find on the foreign key when a view needs the record.
+- **`setState()` is enough** ([[DECISION-D23-REFRESH-PATTERN]]). When `data()` read the key through `this.getData()` or `this.getState()`, the next render re-runs `data()` first, once however many writes came before it; a key `data()` never read just re-renders. In an async `data()`, call `getData()`/`getState()` before the first `await`; a call after it is not tracked. Call `this.refresh()` only to re-run `data()` on purpose, when it derives from an instance field or other state the runtime cannot see, or when you need the new model rendered before your next line runs.
+- **`getState()` reads only what `setState()` wrote** ([[DECISION-D191-SET-STATE-GET-STATE]]); `getData()` reads the merged model, with `data()`'s values over local state.
+- **Stable object props:** props compare with `===`, so a fresh object from every `data()` run re-runs the child. Wrap derived objects in `this.memo(key, deps, factory)` ([[DOC-SPEC-VIEW]] §32). Primitive props need no memo, and data-independent callback props are cached by the compiler.
+- **Animations:** an `animations = { in, out }` class field animates the instance root via WAAPI; `to` must equal the resting style and height cannot animate to `auto` ([[DOC-SPEC-VIEW]] §12, §39).
 
-- **Never call `store.loadMany`/`loadOne` inside `data()`**: tracked finds already fetch, and dev warns about the redundant load. The explicit loads are escape hatches outside tracked runs; `store.loadOne` in an event handler is the force-refresh idiom (it bypasses the negative cache).
-- **Relationships never fetch** (`post.author`), which keeps a 50-row list from firing 50 GETs; write the tracked find on the foreign key when a view needs the record.
-- **`setData()` does not re-run `data()`** (D23). When `data()` derives something from local state (a filtered list, a flag), follow `setData(...)` with `this.refresh()`:
+## Testing
 
-```javascript
-events = {
-  setTag: (tag) => {
-    this.setData('activeTag', tag);
-    this.refresh();   // re-run data() so the filtered list follows
-  }
-};
-```
-
-### Stable object props: `this.memo()`
-
-Props compare with shallow `===`, so an object or array prop compares by reference. If `data()` builds a fresh object every run, the child re-runs its `data()` on every unrelated change. Wrap derived objects in `this.memo(key, deps, factory)`; the cached value returns until an entry of `deps` differs by `Object.is`:
+`npm test` runs Vitest over `tests/`. A test imports the `.pzl` file it covers, mounts it with `@magic-spells/puzzle/testing`, and drives it through its handle; every handle action waits for the re-render, so assertions read the page right after it.
 
 ```javascript
-data() {
-  const { effect = 'carousel' } = this.getData();
-  return { carouselOptions: this.memo('opts', [effect], () => ({ effect, loop: true })) };
-}
+import { expect, test } from 'vitest';
+import { mountView } from '@magic-spells/puzzle/testing';
+import Counter from '../app/components/Counter.pzl';
+
+test('the counter goes up', async () => {
+  const view = await mountView(Counter, { props: { label: 'Clicks' } });
+  await view.click('[aria-label="Increase"]');
+  expect(view.find('.count').textContent).toBe('1');
+  view.destroy();
+});
 ```
 
-Primitive props need no memo, and data-independent callback props are cached by the compiler. See [[DOC-SPEC-VIEW]] §32.
-
-### Events
-
-`events` is a class field of arrow functions. A bare identifier (`@click={ handleClick }`) receives the DOM `event`; a call (`@submit={ addComment(event) }`) passes exactly the arguments written, evaluated at event time with `event` in scope. Modifiers stack: `@keydown:enter`, `@keydown:escape:prevent`, `@click:once`, `@click:outside`. Full rules, cached handlers and the `@ready` callback-ref idiom: [[DOC-EVENTS]].
-
-### Animations
-
-An `animations` class field on any view, layout or component animates it in and out via the Web Animations API. `in`/`out` are `{ from, to, duration, easing?, delay? }`:
-
-```js
-animations = {
-  in:  { from: { opacity: 0, transform: 'translateY(10px)' }, to: { opacity: 1, transform: 'translateY(0)' }, duration: 260, easing: 'ease-out' },
-  out: { from: { opacity: 1 }, to: { opacity: 0 }, duration: 160 }
-};
-```
-
-- The target is the instance's root element, and `to` must equal its resting style (enter styles are released when it finishes). Height cannot animate to `auto`; use explicit `px` or a `grid-template-rows: 0fr → 1fr` wrapper.
-- Views animate on route change (old `out`, then new `in`); components animate when added to or removed from a list. `viewWillShow`/`viewDidShow`/`viewWillHide`/`viewDidHide` bracket the phases even with no `animations` field. `prefers-reduced-motion: reduce` zeroes durations; a malformed spec warns once and is skipped.
-- `trigger: 'visible'` holds the element at `from` until it scrolls into view, then plays once per mount. `triggerOffset` (px or `'%'`) raises the trigger line above the viewport bottom; `triggerAnchor: '.section'` reveals when a matching ancestor enters, so siblings fire together and stagger by `delay`. Without `IntersectionObserver`, or under reduced motion, content shows immediately. Keep above-the-fold content on the default mount trigger.
-
-FLIP reorders, cross-view morphs, skeletons and refs: [[DOC-SPEC-VIEW]].
+Pass `models` to `mountView` for a view that reads the store, or boot the whole app with `createTestApp({ routes, models })` to test models and navigation. The `puzzle()` plugin in `vitest.config.js` compiles each `.pzl` import with the installed CLI and resolves `@/` like the build. [[DOC-TESTING]] lists the full helper surface.
 
 ## Backends in dev
 
 ```javascript
 // puzzle.config.js
-export default { dev: { proxy: { '/api': 'http://localhost:3091' } } };
+export default {
+	dev: {
+		proxy: {
+			'/api': 'http://localhost:3091',
+			'/cms': { target: 'https://cms.example.com', changeOrigin: true },
+		},
+	},
+};
 ```
 
-`puzzle dev` forwards `/api` and `/api/*` with the path unchanged, so the app can use `apiURL: ''` and stay same-origin with no CORS. A prefix must start with `/` and cannot be the root. Restart the dev server after changing it; production builds ignore it.
+`puzzle dev` forwards `/api` and `/api/*` with the path unchanged, so the app can use `apiURL: ''` and stay same-origin. The backend gets the browser's `Host` header (`localhost:<dev port>`), which is what a local backend expects. A hosted backend behind a platform router, CDN or virtual host picks the site by `Host` and answers that with an error page (404, 403 or 421) or the wrong site; give it the object form with `changeOrigin: true` and it gets its own host instead, for requests and WebSocket upgrades alike. As in Vite, `changeOrigin` never touches `Origin`, so a backend that compares `Origin` with `Host` (Django's CSRF check, Rails' origin check, Go WebSocket servers) then rejects POSTs and WebSocket connects unless it is set to accept the dev origin: Django through `CSRF_TRUSTED_ORIGINS`, the Go WebSocket libraries through their origin options. Rails has no allowlist, so there only turning its origin check off helps. In Vite the string form also sets `changeOrigin`; here it does not, so a Vite string entry for a hosted API needs the object form. Only `target` and `changeOrigin` are read: Vite's `rewrite` and other options are ignored, and a path in the target URL is dropped. A prefix must start with `/` and cannot be the root. Restart after changing it; production builds ignore it.
 
 ## Commands
 
-`puzzle dev`, `puzzle build` (`--static`, `--hybrid` for prerendered output), `puzzle preview`, `puzzle check`, `puzzle generate`, `puzzle add tailwind|theme|piece|skills`, `puzzle doctor`, `puzzle info`, `puzzle upgrade`. Flags, output modes and the dev loop: [[DOC-SPEC-BUILD]] and [[DOC-COMPILATION-FLOW]].
+In a project, run these as `npx puzzle <command>` (or the npm scripts) so the CLI matches the installed Puzzle. `puzzle dev`, `puzzle build` (`--static`, `--hybrid`), `puzzle preview`, `puzzle check` (`--fix` rewrites code written for an older Puzzle), `puzzle generate`, `puzzle add tailwind|theme|piece|deploy|skills`, `puzzle doctor`, `puzzle info`, `puzzle upgrade`. Flags: [[DOC-RELEASE-SURFACE]] and [[DOC-SPEC-BUILD]] §13.

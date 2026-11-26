@@ -2,7 +2,7 @@
 import { PuzzleView } from '@magic-spells/puzzle';
 
 export default class SkeletonMinDuration extends PuzzleView {
-  async data(params) {
+  async data({ params }) {
     const post = await this.ctx.store.findOne('post', params.id);
     return { post };
   }
@@ -22,7 +22,6 @@ SkeletonMinDuration.prototype.render = function () {
     ]),
   ]);
 };
-SkeletonMinDuration.__pzlModule = 'skeleton_min_duration.pzl';
 
 SkeletonMinDuration.prototype.renderSkeleton = function () {
   const __d = this.getData();

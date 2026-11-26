@@ -172,7 +172,7 @@ const tokens = Lexer.lex(md, { gfm: true });
 `;
 
 export default class MarkdownDoc extends PuzzleView {
-	data(params, props) {
+	data() {
 		return {
 			sampleMd: SAMPLE_MD,
 			installCmd,

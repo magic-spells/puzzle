@@ -7,15 +7,14 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"io/fs"
 	"os"
 	"path"
 	"path/filepath"
-	"sort"
 	"strconv"
 	"strings"
 
 	"github.com/magic-spells/puzzle/compiler/internal/codegen"
+	"github.com/magic-spells/puzzle/compiler/internal/codemod"
 	"github.com/magic-spells/puzzle/compiler/internal/fsutil"
 	"github.com/magic-spells/puzzle/packages/puzzle-lang/expr"
 	"github.com/magic-spells/puzzle/packages/puzzle-lang/parser"
@@ -73,9 +72,11 @@ __LIBRARY_SIGNATURES__
   function __puzzle_app_fn(name: string): (...args: any[]) => any;
 
   // A method call whose arguments hold an arrow function takes its receiver
-  // through here. An untyped data value (any) becomes any[], so the arrow's
-  // parameters are typed any instead of an implicit-any error under strict; a
-  // typed receiver passes through unchanged and keeps its own checking.
+  // through here, and Object.keys/values/entries their argument. An untyped
+  // data value (any) becomes any[], so the arrow's parameters are typed any
+  // instead of an implicit-any error under strict, and Object.values/entries
+  // return any rather than the unknown TypeScript infers from an any argument;
+  // a typed value passes through unchanged and keeps its own checking.
   function __puzzle_check_list<T>(value: T): 0 extends (1 & T) ? any[] : T;
 
   type __PuzzleCheckView = PuzzleView;
@@ -87,14 +88,15 @@ __LIBRARY_SIGNATURES__
   // this type, which lets every handler take any arguments and closes the set
   // of handler NAMES to the keys of its events field: TypeScript reads a JS
   // object literal as open, so a misspelled handler was never reported until
-  // this type made it one. A handler attached at runtime rather than declared
-  // in events (this.events.play = … in the constructor or created()) is
-  // reported too. The argument expressions are still checked where they are
-  // written. A TypeScript component is never wrapped, so its handler calls
-  // stay fully checked.
+  // this type made it one. A component with no events field has no handlers
+  // at all (the base's optional events would pass any name), and a handler
+  // attached at runtime rather than declared in events (this.events.play = …
+  // in the constructor or created()) is reported too. The argument expressions
+  // are still checked where they are written. A TypeScript component is never
+  // wrapped, so its handler calls stay fully checked.
   type __PuzzleCheckJSView<V> = V extends { events: infer E }
     ? Omit<V, 'events'> & { events: { [K in keyof E]: (...args: any[]) => any } }
-    : V;
+    : V & { events: never };
 }
 
 export {};
@@ -139,35 +141,25 @@ var libraryFunctionSignatures = []struct{ name, signature string }{
 // JavaScript method, so its declaration must be in the program whatever the
 // app's own target: an app on `target: ES2020` would otherwise see `.at()`,
 // `.replaceAll()`, and `.toSorted()` reported as missing. A `/// <reference
-// lib>` adds a file without replacing the app's `lib` list. es2023.array
-// first ships with TypeScript 5.0, typing findLast, so it is referenced from
-// 5.0 on; toSorted and toReversed join that file only in 5.2, so on 5.0 and
-// 5.1 no lib reference can type them and they report as missing, as they
-// would in the app's own code. Every other file exists in 4.9, the oldest
-// compiler puzzle check supports.
-var languageLibs = []struct {
-	lib string
-	min TypeScriptVersion
-}{
-	{"es2016.array.include", TypeScriptVersion{}}, // includes
-	{"es2017.object", TypeScriptVersion{}},        // Object.values, Object.entries
-	{"es2017.string", TypeScriptVersion{}},        // padStart, padEnd
-	{"es2019.array", TypeScriptVersion{}},         // flat
-	{"es2019.string", TypeScriptVersion{}},        // trimStart, trimEnd
-	{"es2021.string", TypeScriptVersion{}},        // replaceAll
-	{"es2022.array", TypeScriptVersion{}},         // at
-	{"es2022.string", TypeScriptVersion{}},        // at
-	{"es2023.array", TypeScriptVersion{5, 0}},     // findLast; toSorted, toReversed from 5.2
+// lib>` adds a file without replacing the app's `lib` list.
+var languageLibs = []string{
+	"es2016.array.include", // includes
+	"es2017.object",        // Object.values, Object.entries
+	"es2017.string",        // padStart, padEnd
+	"es2019.array",         // flat
+	"es2019.string",        // trimStart, trimEnd
+	"es2021.string",        // replaceAll
+	"es2022.array",         // at
+	"es2022.string",        // at
+	"es2023.array",         // findLast, toSorted, toReversed
 }
 
-// shimSource is the shim for the app's TypeScript version, with the method
-// table's lib files and the library signatures filled in.
-func shimSource(ts TypeScriptVersion) string {
+// shimSource is the shim with the method table's lib files and the library
+// signatures filled in.
+func shimSource() string {
 	var libs strings.Builder
-	for _, l := range languageLibs {
-		if ts.AtLeast(l.min) {
-			libs.WriteString("/// <reference lib=\"" + l.lib + "\" />\n")
-		}
+	for _, lib := range languageLibs {
+		libs.WriteString("/// <reference lib=\"" + lib + "\" />\n")
 	}
 	var sigs strings.Builder
 	for _, fn := range libraryFunctionSignatures {
@@ -215,14 +207,13 @@ func sourceDir(root string) (string, error) {
 	dir := filepath.Join(root, "app")
 	info, err := os.Stat(dir)
 	if err != nil || !info.IsDir() {
-		return "", fmt.Errorf("no app/ directory in %s — run puzzle check from a Puzzle project root", root)
+		return "", fmt.Errorf("no app/ directory in %s — run npx puzzle check from a Puzzle project root", root)
 	}
 	return dir, nil
 }
 
-// Generate rebuilds <appRoot>/.puzzle/check from the .pzl files under app/
-// for the app's TypeScript compiler version.
-func Generate(appRoot string, ts TypeScriptVersion) (*Result, error) {
+// Generate rebuilds <appRoot>/.puzzle/check from the .pzl files under app/.
+func Generate(appRoot string) (*Result, error) {
 	root, err := filepath.Abs(appRoot)
 	if err != nil {
 		return nil, err
@@ -243,20 +234,16 @@ func Generate(appRoot string, ts TypeScriptVersion) (*Result, error) {
 		return nil, err
 	}
 
-	var files []string
-	err = filepath.WalkDir(appDir, func(path string, entry fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if !entry.IsDir() && strings.EqualFold(filepath.Ext(path), ".pzl") {
-			files = append(files, path)
-		}
-		return nil
-	})
+	sources, err := codemod.SourceFiles(root)
 	if err != nil {
 		return nil, err
 	}
-	sort.Strings(files)
+	var files []string
+	for _, rel := range sources {
+		if strings.HasPrefix(rel, "app/") && strings.HasSuffix(rel, ".pzl") {
+			files = append(files, filepath.Join(root, filepath.FromSlash(rel)))
+		}
+	}
 
 	result := &Result{Dir: checkDir, Files: len(files)}
 	for _, sourceFile := range files {
@@ -291,10 +278,10 @@ func Generate(appRoot string, ts TypeScriptVersion) (*Result, error) {
 		}
 	}
 
-	if err := os.WriteFile(filepath.Join(checkDir, "puzzle-check.d.ts"), []byte(shimSource(ts)), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(checkDir, "puzzle-check.d.ts"), []byte(shimSource()), 0o644); err != nil {
 		return nil, err
 	}
-	config, err := tsconfig(root, ts.Major)
+	config, err := tsconfig(root)
 	if err != nil {
 		return nil, err
 	}
@@ -304,7 +291,7 @@ func Generate(appRoot string, ts TypeScriptVersion) (*Result, error) {
 	return result, nil
 }
 
-func tsconfig(appRoot string, typescriptMajor int) ([]byte, error) {
+func tsconfig(appRoot string) ([]byte, error) {
 	appConfig, err := os.ReadFile(filepath.Join(appRoot, "tsconfig.json"))
 	hasAppConfig := err == nil
 	if err != nil && !os.IsNotExist(err) {
@@ -354,43 +341,24 @@ func tsconfig(appRoot string, typescriptMajor int) ([]byte, error) {
 		"exclude": []string{},
 	}
 	opts := config["compilerOptions"].(map[string]any)
+	// JSON null deliberately clears either setting inherited from the app:
+	// TypeScript 7 removed baseUrl and node10/node module resolution. With no
+	// baseUrl, a paths target resolves from this config's directory.
+	opts["baseUrl"] = nil
+	opts["moduleResolution"] = nil
 	// Paths is always written here, never inherited: an inherited target is
 	// relative to the app's baseUrl or tsconfig, not to this config, and may be
 	// non-relative, which is illegal once baseUrl is cleared. The app's own
-	// entries are merged in with their targets rewritten from here — `prefix`
-	// is where the app root sits relative to the directory targets resolve from
-	// — and the @ alias is written over them last.
-	var aliasTarget, prefix string
-	if typescriptMajor >= 6 {
-		// JSON null deliberately clears either setting inherited from the app.
-		// TypeScript 7 removed baseUrl and node10/node module resolution, and
-		// TypeScript 6 deprecates both (an error unless the app silences it).
-		// With no baseUrl, a target resolves from this config's directory.
-		opts["baseUrl"] = nil
-		opts["moduleResolution"] = nil
-		aliasTarget, prefix = "../../app/*", "../.."
-	} else {
-		// Before TypeScript 6, module: ESNext defaults to classic resolution. Keep
-		// the proven node/baseUrl pair so package imports and the @ alias resolve
-		// under the oldest supported compiler (4.9). Module is pinned with it: an
-		// app's node16/nodenext module rejects node resolution (TS5109). Pinning
-		// it drops the default-import interop node16/nodenext imply, so a default
-		// import of an `export =` package would be TS1259; the check emits
-		// nothing, and esbuild interops those imports, so allow them.
-		opts["baseUrl"] = "../.."
-		opts["moduleResolution"] = "node"
-		opts["module"] = "ESNext"
-		opts["allowSyntheticDefaultImports"] = true
-		aliasTarget = "app/*"
-	}
+	// entries are merged in with their targets rewritten from here, and the @
+	// alias is written over them last.
 	paths := map[string]any{}
 	if hasAppConfig {
 		config["extends"] = "../../tsconfig.json"
-		for key, targets := range appPaths(appConfig, prefix) {
+		for key, targets := range appPaths(appConfig) {
 			paths[key] = targets
 		}
 	} else {
-		// TypeScript 6 and 7 turn strict on by default; a plain-JavaScript app
+		// TypeScript 7 turns strict on by default; a plain-JavaScript app
 		// with no tsconfig gets the lenient checking it had before, as it does
 		// for noImplicitAny.
 		opts["target"] = "ES2020"
@@ -400,7 +368,7 @@ func tsconfig(appRoot string, typescriptMajor int) ([]byte, error) {
 	}
 	// Written after the app's entries: the build aliases @ to app/ in esbuild,
 	// which wins over tsconfig paths, so the check must resolve it the same way.
-	paths["@/*"] = []string{aliasTarget}
+	paths["@/*"] = []string{"../../app/*"}
 	opts["paths"] = paths
 	data, err := json.MarshalIndent(config, "", "  ")
 	if err != nil {
@@ -412,11 +380,11 @@ func tsconfig(appRoot string, typescriptMajor int) ([]byte, error) {
 // appPaths reads the app tsconfig's own compilerOptions.paths, each target
 // rewritten to resolve from the generated config: joined onto the app's
 // baseUrl (a target is relative to it when set, to the app root otherwise) and
-// then onto prefix. Only the app's tsconfig.json itself is read: `extends`
+// then onto the app root as seen from .puzzle/check. Only the app's tsconfig.json itself is read: `extends`
 // chains are not followed, so paths the app inherits from another config do
 // not reach the check, and neither does a baseUrl it inherits. A config this
 // cannot parse contributes nothing, leaving the @ alias.
-func appPaths(data []byte, prefix string) map[string][]string {
+func appPaths(data []byte) map[string][]string {
 	var config struct {
 		CompilerOptions struct {
 			BaseURL string              `json:"baseUrl"`
@@ -427,6 +395,7 @@ func appPaths(data []byte, prefix string) map[string][]string {
 		return nil
 	}
 	base := filepath.ToSlash(config.CompilerOptions.BaseURL)
+	prefix := "../.."
 	if path.IsAbs(base) || filepath.IsAbs(base) {
 		prefix = ""
 	}
@@ -493,10 +462,8 @@ func stripJSONC(data []byte) []byte {
 }
 
 type emitter struct {
-	b                  *mappedBuilder
-	eventSite          int
-	moduleBindings     map[string]int
-	componentSelectors map[string]string
+	b         *mappedBuilder
+	eventSite int
 }
 
 func emitFiles(source []byte, sourcePath, generatedBase, assetsDir string) ([]virtualFile, error) {
@@ -513,10 +480,6 @@ func emitFiles(source []byte, sourcePath, generatedBase, assetsDir string) ([]vi
 	if err != nil {
 		return nil, err
 	}
-	className, err := compiledClassName(compiled.JS)
-	if err != nil {
-		return nil, fmt.Errorf("%s: %w", sourcePath, err)
-	}
 	root, err := parser.ParseTemplate(sec, sourcePath)
 	if err != nil {
 		return nil, err
@@ -527,7 +490,7 @@ func emitFiles(source []byte, sourcePath, generatedBase, assetsDir string) ([]vi
 	}
 
 	if sec.ScriptsLang == "ts" {
-		checked, err := emitCheckedFile(source, sourcePath, generatedBase+".ts", sec, root, skeleton, className, true, "")
+		checked, err := emitCheckedFile(source, sourcePath, generatedBase+".ts", sec, root, skeleton, compiled.ClassName, true, "")
 		if err != nil {
 			return nil, err
 		}
@@ -536,7 +499,7 @@ func emitFiles(source []byte, sourcePath, generatedBase, assetsDir string) ([]vi
 
 	// A .script infix prevents TypeScript's extension substitution from resolving
 	// an import of the JS mirror back to the sibling .pzl.ts wrapper itself.
-	mirror := emitJSMirror(source, sourcePath, generatedBase+".script.js", sec, className, codegen.ComponentSelectorBindings(sec.Scripts, root, skeleton))
+	mirror := emitJSMirror(source, sourcePath, generatedBase+".script.js", sec, compiled.ClassName)
 	importPath := "./" + filepath.Base(filepath.FromSlash(generatedBase)) + ".script.js"
 	checked, err := emitCheckedFile(source, sourcePath, generatedBase+".ts", sec, root, skeleton, "__PuzzleCheckViewClass", false, importPath)
 	if err != nil {
@@ -545,7 +508,7 @@ func emitFiles(source []byte, sourcePath, generatedBase, assetsDir string) ([]vi
 	return []virtualFile{mirror, checked}, nil
 }
 
-func emitJSMirror(source []byte, sourcePath, generatedPath string, sec *parser.Sections, className string, selectors []string) virtualFile {
+func emitJSMirror(source []byte, sourcePath, generatedPath string, sec *parser.Sections, className string) virtualFile {
 	b := newMappedBuilder(sourcePath, generatedPath, source)
 	if sec.Scripts != "" {
 		b.WriteMapped(sec.Scripts, sec.ScriptsPos.Offset)
@@ -556,9 +519,6 @@ func emitJSMirror(source []byte, sourcePath, generatedPath string, sec *parser.S
 		}
 		b.WriteString("import { PuzzleView } from '@magic-spells/puzzle';\n")
 		b.WriteString("export default class " + className + " extends PuzzleView {}\n")
-	}
-	for _, binding := range selectorAliases(sec.Scripts, selectors) {
-		b.WriteString("\nexport { " + binding.name + " as " + binding.alias + " };\n")
 	}
 	b.table.generatedBytes = []byte(b.String())
 	b.table.sourceBytes = source
@@ -584,16 +544,9 @@ func emitCheckedFile(
 		b.WriteString("\n")
 	} else {
 		b.WriteString("import " + className + " from " + strconv.Quote(importPath) + ";\n")
-		for _, binding := range selectorAliases(sec.Scripts, codegen.ComponentSelectorBindings(sec.Scripts, root, skeleton)) {
-			b.WriteString("import { " + binding.alias + " as " + binding.name + " } from " + strconv.Quote(importPath) + ";\n")
-		}
 		b.WriteString("export default " + className + ";\n\n")
 	}
 	b.WriteString("// Generated by puzzle check. This function is never executed.\n")
-	getters := componentSelectorGetters(sec.Source+sec.Scripts, codegen.ComponentSelectorBindings(sec.Scripts, root, skeleton))
-	for _, getter := range getters {
-		b.WriteString("const " + getter.alias + " = () => " + getter.name + ";\n")
-	}
 	if includeScript && strings.TrimSpace(sec.Scripts) == "" {
 		b.WriteString("declare const " + className + ": typeof import('@magic-spells/puzzle').PuzzleView;\n")
 	}
@@ -604,17 +557,13 @@ func emitCheckedFile(
 		// says why).
 		view = "__PuzzleCheckJSView<" + view + ">"
 	}
-	b.WriteString("void function (this: " + view + " & { [key: string]: any }): void {\n")
-	b.WriteString("  const __d = this;\n")
+	// `this` is typed, so a handler name is checked against the view's events.
+	// Template data is not: a template reads what data() returns, which can
+	// drop, rename or reshape the class's fields, so __d is any.
+	b.WriteString("void function (this: " + view + "): void {\n")
+	b.WriteString("  const __d: any = this;\n")
 
-	e := &emitter{b: b, moduleBindings: codegen.ScriptValueBindings(sec.Scripts)}
-	e.componentSelectors = make(map[string]string, len(e.moduleBindings))
-	for name := range e.moduleBindings {
-		e.componentSelectors[name] = ""
-	}
-	for _, getter := range getters {
-		e.componentSelectors[getter.name] = getter.alias + "()"
-	}
+	e := &emitter{b: b}
 	// The <puzzle-view> tag's own attributes are real bindings (they become the
 	// root ViewNode's attributes), so they are checked like any other element's.
 	if err := e.emitAttrs(root.Attrs, map[string]bool{}, 2); err != nil {
@@ -635,29 +584,6 @@ func emitCheckedFile(
 	return virtualFile{GeneratedPath: generatedPath, Contents: []byte(b.String()), Table: b.table}, nil
 }
 
-func compiledClassName(js string) (string, error) {
-	const marker = ".prototype.render = function () {"
-	i := strings.LastIndex(js, marker)
-	if i < 0 {
-		return "", fmt.Errorf("generated render function is missing")
-	}
-	j := i
-	for j > 0 && isIdentByte(js[j-1]) {
-		j--
-	}
-	if j == i {
-		return "", fmt.Errorf("generated render function has no class name")
-	}
-	return js[j:i], nil
-}
-
-// isIdentByte reports whether c can belong to the class name codegen wrote
-// before the render tail. Any byte >= 0x80 does: the name is a valid
-// identifier (`Übersicht`, `概要`) and the byte before it is a newline.
-func isIdentByte(c byte) bool {
-	return c == '_' || c == '$' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c >= 0x80
-}
-
 func (e *emitter) emitNodes(nodes []parser.Node, scope map[string]bool, indent int) error {
 	for _, node := range nodes {
 		switch n := node.(type) {
@@ -669,14 +595,8 @@ func (e *emitter) emitNodes(nodes []parser.Node, scope map[string]bool, indent i
 				return err
 			}
 		case *parser.Component:
-			for _, prop := range n.Props {
-				if attr, ok := prop.(*parser.DynamicAttr); ok && n.Name == "Component" && attr.Name == "is" {
-					e.emitComponentSelector(attr, scope, indent)
-					continue
-				}
-				if err := e.emitAttrs([]parser.Attr{prop}, scope, indent); err != nil {
-					return err
-				}
+			if err := e.emitAttrs(n.Props, scope, indent); err != nil {
+				return err
 			}
 			if err := e.emitNodes(n.Children, scope, indent); err != nil {
 				return err

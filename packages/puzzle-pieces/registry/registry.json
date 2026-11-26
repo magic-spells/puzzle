@@ -70,6 +70,9 @@
       "dependencies": [
         "@magic-spells/dialog-panel@^2.0.3"
       ],
+      "styles": [
+        "@magic-spells/dialog-panel/css"
+      ],
       "targetDir": "app/components/ui"
     },
     {
@@ -163,6 +166,10 @@
       "dependencies": [
         "@magic-spells/bottom-sheet@^2.0.2",
         "@magic-spells/dialog-panel@^2.0.3"
+      ],
+      "styles": [
+        "@magic-spells/dialog-panel/css",
+        "@magic-spells/bottom-sheet/css"
       ],
       "targetDir": "app/components/ui"
     },
@@ -296,6 +303,9 @@
       "dependencies": [
         "@magic-spells/collapsible-content@^1.2.0"
       ],
+      "styles": [
+        "@magic-spells/collapsible-content/css"
+      ],
       "targetDir": "app/components/ui"
     },
     {
@@ -317,6 +327,9 @@
       "registryDependencies": [],
       "dependencies": [
         "@magic-spells/dialog-panel@^2.0.3"
+      ],
+      "styles": [
+        "@magic-spells/dialog-panel/css"
       ],
       "targetDir": "app/components/ui"
     },
@@ -404,6 +417,9 @@
       "dependencies": [
         "@magic-spells/dialog-panel@^2.0.3"
       ],
+      "styles": [
+        "@magic-spells/dialog-panel/css"
+      ],
       "targetDir": "app/components/ui"
     },
     {
@@ -440,6 +456,9 @@
       "registryDependencies": [],
       "dependencies": [
         "@magic-spells/dropdown-panel@^2.1.1"
+      ],
+      "styles": [
+        "@magic-spells/dropdown-panel/css"
       ],
       "targetDir": "app/components/ui"
     },
@@ -508,7 +527,7 @@
     },
     {
       "name": "field",
-      "description": "Labeled text input with hint/error helper text, danger invalid state, and full ARIA wiring",
+      "description": "Labeled text input with hint/error helper text, danger invalid state, full ARIA wiring, and optional form + name wiring for @magic-spells/puzzle/forms",
       "files": [
         "Field.pzl"
       ],
@@ -550,6 +569,9 @@
       "registryDependencies": [],
       "dependencies": [
         "@magic-spells/image-zoom@^0.1.0"
+      ],
+      "styles": [
+        "@magic-spells/image-zoom/css"
       ],
       "targetDir": "app/components/ui"
     },
@@ -682,6 +704,9 @@
       "dependencies": [
         "@magic-spells/scrolling-content@^2.1.0"
       ],
+      "styles": [
+        "@magic-spells/scrolling-content/css"
+      ],
       "targetDir": "app/components/ui"
     },
     {
@@ -784,6 +809,9 @@
       "registryDependencies": [],
       "dependencies": [
         "@magic-spells/panel-stack@^0.2.0"
+      ],
+      "styles": [
+        "@magic-spells/panel-stack/css"
       ],
       "targetDir": "app/components/ui"
     },
@@ -939,6 +967,9 @@
       "dependencies": [
         "@magic-spells/scroll-stack@^0.1.0"
       ],
+      "styles": [
+        "@magic-spells/scroll-stack/css"
+      ],
       "targetDir": "app/components/ui"
     },
     {
@@ -965,6 +996,9 @@
       "dependencies": [
         "@magic-spells/select-dropdown@^0.3.0"
       ],
+      "styles": [
+        "@magic-spells/select-dropdown/css"
+      ],
       "targetDir": "app/components/ui"
     },
     {
@@ -987,6 +1021,10 @@
       "dependencies": [
         "@magic-spells/sheet@^0.2.0",
         "@magic-spells/dialog-panel@^2.0.3"
+      ],
+      "styles": [
+        "@magic-spells/dialog-panel/css",
+        "@magic-spells/sheet/css"
       ],
       "targetDir": "app/components/ui"
     },
@@ -1082,6 +1120,9 @@
       "dependencies": [
         "@magic-spells/split-panel@^0.2.0"
       ],
+      "styles": [
+        "@magic-spells/split-panel/css"
+      ],
       "targetDir": "app/components/ui"
     },
     {
@@ -1093,6 +1134,9 @@
       "registryDependencies": [],
       "dependencies": [
         "@magic-spells/split-text@^0.2.0"
+      ],
+      "styles": [
+        "@magic-spells/split-text/css"
       ],
       "targetDir": "app/components/ui"
     },
@@ -1151,6 +1195,9 @@
       "registryDependencies": [],
       "dependencies": [
         "@magic-spells/tab-group@^1.2.0"
+      ],
+      "styles": [
+        "@magic-spells/tab-group/css"
       ],
       "targetDir": "app/components/ui"
     },

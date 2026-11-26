@@ -8,5 +8,8 @@
   "dependencies": [
     "@magic-spells/dialog-panel@^2.0.3"
   ],
+  "styles": [
+    "@magic-spells/dialog-panel/css"
+  ],
   "targetDir": "app/components/ui"
 }

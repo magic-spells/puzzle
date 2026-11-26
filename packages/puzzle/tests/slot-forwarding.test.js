@@ -144,7 +144,7 @@ describe('default-slot forwarding through a component (D71)', () => {
 	it('keeps forwarded DOM stable across an unrelated host re-render', async () => {
 		class Layout extends PuzzleView {
 			created() {
-				this.setData({ mode: 'x' });
+				this.setState({ mode: 'x' });
 			}
 			data() {
 				return { mode: this.getData().mode };
@@ -159,7 +159,7 @@ describe('default-slot forwarding through a component (D71)', () => {
 		});
 		const pageEl = el.querySelector('p.page');
 
-		layout.setData('mode', 'y');
+		layout.setState('mode', 'y');
 		layout.flushUpdates();
 
 		expect(el.querySelector('div.y')).not.toBeNull();
@@ -186,7 +186,7 @@ describe('default-slot forwarding through a component (D71)', () => {
 });
 
 describe('default-slot forwarding — router end-to-end (D71)', () => {
-	// The original bug scenario: a routed layout wraps its <Slot/> in a global
+	// The original bug scenario: a routed layout wraps its <Outlet/> in a global
 	// wrapper component. Pre-D71 this mounted a literal <slot> element and the
 	// routed view never appeared.
 	let routers = [];

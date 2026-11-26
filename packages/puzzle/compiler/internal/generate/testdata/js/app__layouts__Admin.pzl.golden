@@ -4,7 +4,7 @@
   </header>
 
   <main>
-    <Slot/>
+    <Outlet/>
   </main>
 </puzzle-view>
 
@@ -12,9 +12,9 @@
 import { PuzzleView } from '@magic-spells/puzzle';
 
 export default class Admin extends PuzzleView {
-  data(params, props) {
+  data() {
     return {
-      title: props.title || 'Admin'
+      title: 'Admin'
     };
   }
 }

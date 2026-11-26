@@ -44,4 +44,3 @@ EventMods.prototype.render = function () {
     ]),
   ]);
 };
-EventMods.__pzlModule = 'event_modifiers.pzl';

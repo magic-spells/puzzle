@@ -26,7 +26,7 @@
         </div>
       {/if}
 
-      <div class={ bubbleClass }><div class="text-sm leading-relaxed whitespace-pre-wrap"><Slot/></div></div>
+      <div class={ bubbleClass }><div class="text-sm leading-relaxed whitespace-pre-wrap"><Children/></div></div>
 
       <div class={ attachClass }><Slot name="attachments"/></div>
     </div>
@@ -99,7 +99,7 @@ const VARIANT = {
 };
 
 export default class ChatMessage extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     const end = props.align === 'end';
     const showMeta = props.showMeta !== false;
     const avatarSrc = props.avatarSrc || '';
@@ -124,7 +124,7 @@ export default class ChatMessage extends PuzzleView {
       author: props.author || '',
       time: props.time || '',
       initials: hasName ? initials(name) : '',
-      avatarStyle: hasName && !showImg ? `background:hsl(${hue} 45% 45%)` : '',
+      avatarStyle: hasName && !showImg ? `background:hsl(${hue} 45% 32%)` : '',
       avatarClass: [AVATAR_BASE, showImg ? '' : tone].join(' '),
       rowClass: [
         'flex gap-2.5',

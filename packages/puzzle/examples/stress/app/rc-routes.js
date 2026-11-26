@@ -66,14 +66,14 @@
  *     something other than the cascade.
  *
  * This mirrors `examples/photo-gallery`, where the behaviour was first noticed:
- * `/album/:slug` (AlbumView) keeps its instance while its `<Slot/>` child swaps
+ * `/album/:slug` (AlbumView) keeps its instance while its `<Outlet/>` child swaps
  * between the index and a photo — divergence below a reused ancestor, exactly
  * the first shape.
  */
 
 // These are ROUTED views, not stage components, so they live in app/views and
-// app/layouts — `codegen.ModeForPath` compiles those two directories as views
-// (which is what makes `<Slot/>` legal) and everything else as a component.
+// app/layouts — `codegen.ModeForPath` compiles those two as views, where a routed
+// `<Outlet/>` belongs (in a component it warns, D199), and the rest as components.
 import RcLayout from './layouts/RcLayout.pzl';
 import RcLeaf from './views/RcLeaf.pzl';
 import RcNode from './views/RcNode.pzl';

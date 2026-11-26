@@ -1,4 +1,12 @@
 
+
+
+
+
+
+
+
+        
 import { PuzzleView } from '@magic-spells/puzzle';
 
 // Argument-free markers, so plain call-site content fills them. `label`'s
@@ -7,7 +15,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 // after it is the sibling whose identity must survive a toggling call-site
 // {#if} (a fallback that builds nothing keeps the marker's arity constant).
 export default class LazyCard extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     return { label: props.label, tips: Array.isArray(props.tips) ? props.tips : [] };
   }
 }
@@ -41,4 +49,3 @@ LazyCard.prototype.render = function () {
     new ViewNode('input', { class: 'lazy-card-input' }, []),
   ]);
 };
-LazyCard.__pzlModule = 'LazyCard.pzl';

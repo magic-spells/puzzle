@@ -12,7 +12,6 @@
 import {
 	EVENTS,
 	REQUESTS,
-	PROTOCOL_VERSION,
 	SUPPORTED_PROTOCOL_VERSIONS,
 	isEnvelope,
 } from '../../protocol/constants.js';
@@ -81,10 +80,8 @@ let profileSeq = 0;
  * state and every request rejects.
  */
 function offlineBridge() {
-	const noop = () => () => {};
+	const noop = () => {};
 	return {
-		tabId: null,
-		themeName: 'default',
 		offline: true,
 		onMessage: noop,
 		onStatus: noop,
@@ -267,44 +264,26 @@ function onFlush(payload) {
 		if (bucket) bucket.update({ dirty: true });
 	}
 
-	pulseViews(notified);
-	pulseSubscriptions(keys);
+	pulse('pview', notified);
+	pulse('subscription', keys);
 }
 
 /**
- * Light up the subscription keys this flush named. Same 600ms class discipline
- * as the tree's rows, and the same shared timer clears both.
- */
-function pulseSubscriptions(keys) {
-	const now = Date.now();
-	let lit = false;
-	for (const key of keys) {
-		const entry = store.findOne('subscription', String(key));
-		if (!entry) continue;
-		entry.update({ pulseAt: now });
-		lit = true;
-	}
-	if (!lit) return;
-	clearTimeout(pulseTimer);
-	pulseTimer = setTimeout(clearPulses, PULSE_MS);
-}
-
-/**
- * Light up the views this flush actually re-rendered. `notified` carries view
- * ids plus the literal 'fn' for function subscribers (SPEC §55) — the lookup
- * simply misses on those.
+ * Light up the views this flush re-rendered and the subscription keys it named.
+ * `notified` carries view ids plus the literal 'fn' for function subscribers
+ * (SPEC §55) — the lookup simply misses on those.
  *
  * One shared timer clears every pulse: overlapping flushes extend the glow
  * rather than each arming their own timeout, which keeps a chatty app from
  * queueing hundreds of timers.
  */
-function pulseViews(notified) {
+function pulse(type, ids) {
 	const now = Date.now();
 	let lit = false;
-	for (const id of notified) {
-		const view = store.findOne('pview', id);
-		if (!view) continue;
-		view.update({ pulseAt: now });
+	for (const id of ids) {
+		const record = store.findOne(type, id);
+		if (!record) continue;
+		record.update({ pulseAt: now });
 		lit = true;
 	}
 	if (!lit) return;
@@ -392,7 +371,6 @@ export function applyRecordSnapshot(result, type) {
 			records: rows,
 			count: rows.length,
 			dirty: false,
-			snapshotAt: Date.now(),
 		});
 		names.push(name);
 	}
@@ -505,7 +483,7 @@ export function applyProfileSnapshot(report) {
 	const source = report && typeof report === 'object' ? report : {};
 
 	profileSeq += 1;
-	upsert('profileSample', {
+	const sample = upsert('profileSample', {
 		id: profileSeq,
 		at: Date.now(),
 		recording: source.recording === true,
@@ -524,7 +502,7 @@ export function applyProfileSnapshot(report) {
 		for (let i = 0; i < overflow; i++) samples[i].destroy();
 	}
 
-	return store.findOne('profileSample', profileSeq);
+	return sample;
 }
 
 /**
@@ -580,9 +558,7 @@ export function ensureViews({ maxAgeMs = 250, force = false } = {}) {
 /** Ask the Views panel to select `id` the next time it renders. */
 export function requestViewSelection(id) {
 	if (!store) return;
-	const current = store.findOne('ui', UI_ID);
-	if (current) current.update({ pendingViewId: id });
-	else upsert('ui', { id: UI_ID, pendingViewId: id });
+	upsert('ui', { id: UI_ID, pendingViewId: id });
 }
 
 /** Consume the pending selection, if any. Reading it clears it. */
@@ -601,13 +577,12 @@ export function takeViewSelection() {
 /** Merge fields into the singleton connection record, creating it if needed. */
 export function patchConnection(patch) {
 	if (!store) return null;
-	const current = store.findOne('connection', CONNECTION_ID);
-	if (!current) {
-		upsert('connection', { id: CONNECTION_ID, ...patch });
-		return store.findOne('connection', CONNECTION_ID);
-	}
-	current.update(patch);
-	return current;
+	return upsert('connection', { id: CONNECTION_ID, ...patch });
+}
+
+/** True once `hello` landed with a protocol version this build renders. */
+export function isConnected() {
+	return store.findOne('connection', CONNECTION_ID)?.state === CONNECTION_STATE.CONNECTED;
 }
 
 /** Drop everything the previous document told us and start listening again. */
@@ -631,8 +606,7 @@ export function resetSession({ port = 'connected' } = {}) {
 	const ui = store.findOne('ui', UI_ID);
 	if (ui) ui.update({ pendingViewId: null });
 
-	const existing = store.findOne('connection', CONNECTION_ID);
-	const fresh = {
+	upsert('connection', {
 		id: CONNECTION_ID,
 		state: CONNECTION_STATE.WAITING,
 		port,
@@ -645,11 +619,8 @@ export function resetSession({ port = 'connected' } = {}) {
 		flushSeq: 0,
 		perfSeq: 0,
 		eventCount: 0,
-		lastEventAt: 0,
 		error: null,
-	};
-	if (existing) existing.update(fresh);
-	else upsert('connection', fresh);
+	});
 }
 
 /** Push one message onto the capped event ring. */
@@ -672,10 +643,7 @@ function recordEvent(message) {
 	}
 
 	const connection = store.findOne('connection', CONNECTION_ID);
-	patchConnection({
-		eventCount: (connection?.eventCount ?? 0) + 1,
-		lastEventAt: Date.now(),
-	});
+	patchConnection({ eventCount: (connection?.eventCount ?? 0) + 1 });
 }
 
 let eventSeq = 0;
@@ -709,5 +677,3 @@ function summarize(message) {
 			return '';
 	}
 }
-
-export { PROTOCOL_VERSION, CONNECTION_STATE, CONNECTION_ID };

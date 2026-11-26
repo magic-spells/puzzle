@@ -11,7 +11,7 @@ import (
 // static-pages build reads to map a route's view/layout classes back to their
 // source .pzl. It is emitted immediately after the render tail; ModulePath
 // (threaded by the esbuild plugin) is the stamped value, and its absence
-// (standalone pzlc / goldens) falls back to the plain basename of Filename.
+// (production SPA builds, standalone pzlc, goldens) means no stamp.
 
 func compileStamp(t *testing.T, src string, opts Options) string {
 	t.Helper()
@@ -49,25 +49,19 @@ func TestModuleStampUsesModulePath(t *testing.T) {
 	}
 }
 
-// TestModuleStampFallsBackToBasename: with no ModulePath (pzlc single-file /
-// goldens), the stamp is the plain basename of Filename, even for a nested path.
-func TestModuleStampFallsBackToBasename(t *testing.T) {
-	got := compileStamp(t, stampSrc, Options{
-		Filename: "some/deep/dir/Home.pzl",
-		Mode:     ModeView,
-	})
-	if !strings.Contains(got, `Home.__pzlModule = 'Home.pzl';`) {
-		t.Errorf("expected basename module stamp, got:\n%s", got)
-	}
-	if strings.Contains(got, "some/deep/dir") {
-		t.Errorf("basename fallback must not leak the directory path:\n%s", got)
+// TestModuleStampAbsentWithoutModulePath: with no ModulePath (a production SPA
+// build, pzlc single-file, goldens) nothing is stamped.
+func TestModuleStampAbsentWithoutModulePath(t *testing.T) {
+	got := compileStamp(t, stampSrc, Options{Filename: "some/deep/dir/Home.pzl", Mode: ModeView})
+	if strings.Contains(got, "__pzlModule") {
+		t.Errorf("expected no module stamp without a ModulePath, got:\n%s", got)
 	}
 }
 
 // TestModuleStampFollowsRender: the stamp is emitted immediately after the
 // render function's closing `};`, before any skeleton tail.
 func TestModuleStampFollowsRender(t *testing.T) {
-	got := compileStamp(t, stampSrc, Options{Filename: "Home.pzl", Mode: ModeView})
+	got := compileStamp(t, stampSrc, Options{Filename: "Home.pzl", Mode: ModeView, ModulePath: "Home.pzl"})
 	renderIdx := strings.Index(got, "Home.prototype.render = function")
 	stampIdx := strings.Index(got, "Home.__pzlModule = ")
 	if renderIdx < 0 || stampIdx < 0 {

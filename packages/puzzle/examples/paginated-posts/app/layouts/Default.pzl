@@ -1,0 +1,39 @@
+<puzzle-view class="shell">
+  <header>
+    <a class="brand" href="/">Paginated posts</a>
+    <nav>
+      <a href="/">Posts</a>
+      <a href="/comments">Comments</a>
+    </nav>
+  </header>
+  <main>
+    <Outlet/>
+  </main>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// the one layout: a header with two links around the routed view
+export default class DefaultLayout extends PuzzleView {}
+</script>
+
+<style>
+/* the whole stylesheet for the example: plain css, no tailwind */
+* { box-sizing: border-box; }
+body { margin: 0; font: 16px/1.5 system-ui, sans-serif; color: #1f2430; background: #f6f7f9; }
+.shell header { display: flex; justify-content: space-between; align-items: center; padding: 16px 24px; background: #fff; border-bottom: 1px solid #e3e6eb; }
+.shell nav { display: flex; gap: 16px; }
+.shell main { max-width: 680px; margin: 0 auto; padding: 32px 24px; }
+a { color: #3554d1; text-decoration: none; }
+a:hover { text-decoration: underline; }
+.brand { font-weight: 700; color: #1f2430; }
+.rows { list-style: none; padding: 0; margin: 0 0 24px; display: flex; flex-direction: column; gap: 8px; }
+.rows li { background: #fff; border: 1px solid #e3e6eb; border-radius: 8px; padding: 12px 16px; display: flex; justify-content: space-between; gap: 12px; }
+.badge { font-size: 12px; font-weight: 600; color: #146c43; background: #d8f3e3; border-radius: 999px; padding: 2px 8px; align-self: center; }
+.pager { display: flex; justify-content: space-between; align-items: center; color: #5b6170; }
+.muted { color: #5b6170; }
+button { font: inherit; padding: 8px 16px; border-radius: 8px; border: 0; background: #3554d1; color: #fff; cursor: pointer; }
+button:disabled { opacity: 0.6; cursor: progress; }
+.error { color: #b42318; }
+</style>

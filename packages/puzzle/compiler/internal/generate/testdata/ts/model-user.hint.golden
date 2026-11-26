@@ -1,4 +1,4 @@
-Register it in app/models/index.ts:
+Register it in app/models/index.ts (create it if the app has none, and pass it to new PuzzleApp as models):
     import User from './user';
     // then add to the registry object:
     user: User

@@ -17,8 +17,9 @@ a Go + esbuild toolchain, with an optional static-prerender (SSG) mode. Puzzle i
 NEW — assume you have no training data about it; this skill is the source of
 truth, and Puzzle is not React/Vue/Svelte (no hooks, no `$emit`, no SFC
 `<template>` conventions). When you need more than this file covers, learn from
-the working example apps in `examples/` at https://github.com/magic-spells/puzzle
-(`examples/todos` is the canonical app).
+the working example apps in `packages/puzzle/examples/` at
+https://github.com/magic-spells/puzzle (`packages/puzzle/examples/todos` is the
+canonical app).
 
 ## App skeleton
 
@@ -26,42 +27,91 @@ the working example apps in `examples/` at https://github.com/magic-spells/puzzl
 my-app/
 ├── puzzle.config.js       # { styles: { use: ['tailwindcss'] }, output: 'static' | 'hybrid' }
 └── app/
-    ├── app.js             # new PuzzleApp({ target: '#app', routes, models, formatters }); MUST `export default app` for prerender modes
+    ├── app.js             # new PuzzleApp({ target: '#app', routes, models, functions }); MUST `export default app` for prerender modes
     │                      #   (app.ts in a TypeScript app — the build takes app/app.ts over app/app.js and refuses both)
     ├── routes.js          # route table (see below)
     ├── public/index.html  # the shell: #app mount + <script type="module" src="/app.js">
     ├── styles/styles.css  # global entry; Tailwind v4 via the config's styles pipeline
-    ├── layouts/*.pzl      # chrome with <Slot/>
+    ├── layouts/*.pzl      # chrome with <Outlet/>
     ├── views/*.pzl        # pages
     ├── components/*.pzl
     ├── locales/<tag>.json # translations, only with `i18n` in puzzle.config.js (see Translations)
     └── models/*.js
 ```
 
-CLI (bin `puzzle`, installed with `@magic-spells/puzzle`):
+CLI (bin `puzzle`, installed with `@magic-spells/puzzle`; needs Node 24 or later):
 `dev` (SSE live reload, state-preserving full-page refresh), `build` (`--static`,
 `--hybrid`, `--mode production|development`), `check` (run the app-installed
 TypeScript compiler over `.pzl` scripts and template expressions), `preview`
-(serve an existing `dist/` with production-host semantics), `init` (`--template
-default|todos`; `--typescript` scaffolds `<script lang="ts">` components, `.ts`
-modules with an `app/app.ts` entry, a strict tsconfig and an
-`npm run check` script), `generate` (TypeScript stubs — `<script lang="ts">`,
+(serve an existing `dist/` with production-host semantics), `init` (`puzzle create`
+is the same command; `--template default|static`, the second an `output: 'static'` site; `--typescript`
+scaffolds `<script lang="ts">` components, `.ts` modules with an `app/app.ts`
+entry, a strict tsconfig and an `npm run check` script), `generate` (TypeScript stubs — `<script lang="ts">`,
 `app/models/<name>.ts`, an `index.ts` family barrel — when the project root
 has a `tsconfig.json`),
-`add` (tailwind integration, `piece <name…>`, `theme <name…>`, `skills`),
+`add` (tailwind integration, `piece <name…>`, `theme <name…>`, `deploy <host>`,
+`skills`),
 `upgrade`, `doctor`, `info`.
 
+- Inside a project, run the CLI as `npm run dev`, `npm run build` or
+  `npx puzzle <command>`, never a bare global `puzzle`: the project's own CLI
+  always matches its installed `@magic-spells/puzzle`. A CLI 0.10 or later from
+  another 0.x minor stops `build`, `dev`, `check`, `generate` and `add piece`,
+  naming both versions, and `puzzle doctor` fails its runtime row the same way;
+  an older one builds against the wrong runtime without a word.
 - `dev` and `build` both take `--fixtures` (see Fixtures below).
 - `dev` and `build` both take `--profile-build` (or `PUZZLE_PROFILE_BUILD=1`):
   per-phase timing tables on stderr — check it before guessing why a build or
   save feels slow.
 - A busy `--port` is not fatal: `dev` scans upward for the first free one and
   warns when it moved. `--strict-port` restores bind-or-fail.
+- `puzzle upgrade` lists the global CLI and the current project's
+  `@magic-spells/puzzle` with their versions, then asks about each one that is
+  behind (`--check` only lists, `--yes` upgrades all). Without a terminal it
+  upgrades only the install it was run from and prints the command for the
+  other, so in a script pass `--yes` (it upgrades the project too, across a
+  breaking release if there is one) or run that command.
 - `puzzle upgrade skills` refreshes the installed agent skill from the running
   binary. `puzzle upgrade` also offers the refresh after it installs a new
   version. Re-running `puzzle add skills` skips an install that is already
   current and asks before replacing an older one (a non-interactive run needs
-  `--overwrite` for that).
+  `--force` for that).
+- Upgrading from 0.9: `npx puzzle check` lists every site 0.10 renamed (a bare
+  `<Slot/>` router outlet, `this.setData(`, positional `data(params, props)`,
+  the `formatters` config key) and fails; `npx puzzle check --fix` rewrites them
+  (`<Outlet/>` in layouts and views, `<Children/>` in components), then
+  type-checks.
+
+## Build configuration
+
+Public values that vary by environment belong in the top-level `env` object:
+
+```js
+// puzzle.config.js
+export default {
+  env: {
+    API_URL: process.env.API_URL ?? 'http://localhost:3000',
+    BETA: false,
+  },
+};
+
+// app code (including .pzl scripts)
+fetch(import.meta.env.API_URL + '/users');
+```
+
+Keys must be JavaScript identifiers; values must be strings, finite numbers or
+booleans. The compiler substitutes JSON literals in build, dev and prerender
+bundles; these values are written into the public bundle, so secrets do not
+belong in them. `import.meta.env` is always an object (empty without config),
+and undeclared keys read `undefined`; destructuring and computed reads work.
+Read `process.env` in the config itself: Puzzle adds no `.env` loading, modes
+or built-in keys. `puzzle dev` reads the config once; restart it after an edit.
+
+For TypeScript, reference `@magic-spells/puzzle/puzzle-env` and augment the global
+`ImportMetaEnv` interface with exact keys, for example
+`interface ImportMetaEnv { readonly API_URL: string; readonly BETA: boolean; }`.
+A view test under Vitest sees Vitest's own `import.meta.env`, not the values in
+`puzzle.config.js`; supply test values through Vitest's configuration.
 
 Production builds default to ES2022, minification, and **console stripping** —
 set `build: { dropConsole: false }` in puzzle.config.js to keep console calls.
@@ -69,29 +119,33 @@ Linked source maps are **opt-in** in production (`build: { sourceMap: true }`);
 dev always emits them. Note that a JSON `null` means "unset" for these keys, not
 `false`.
 
-**Code splitting.** By default the SPA build emits ONE `dist/app.js` and a
-dynamic `import()` is inlined into it — a heavy on-demand dependency (mermaid, a
-chart library, an editor) is paid for on every page load. Set
+**Code splitting.** By default the SPA build emits ONE app bundle
+(`dist/app-<hash>.js` in production) and a dynamic `import()` is inlined into
+it — a heavy on-demand dependency (mermaid, a chart library, an editor) is paid
+for on every page load. Set
 `build: { splitting: true }` and each dynamic `import()` becomes a lazy chunk
 under `dist/chunks/`, fetched by the browser only when that code path runs.
-Production split builds emit `app-<hash>.js`, `styles-<hash>.css`, and
-`app-<hash>.css` when the entry imports CSS. The build rewrites the shell's
-references and adds `modulepreload` links for the entry's transitive
+The build adds `modulepreload` links to the shell for the entry's transitive
 static-import chunks; lazy chunks stay on demand. esbuild's ESM splitting has
 no chunk-loader runtime, so it adds no runtime bytes. Notes:
 
-- **`build.hashNames` defaults to `build.splitting`.** Set
-  `build: { splitting: true, hashNames: false }` for fixed names with preloads,
-  or `build: { hashNames: true }` to hash without splitting. Development builds
-  keep fixed names and add no preloads. `public/` files are never renamed.
-- A hashed SPA/hybrid build needs a shell reference to `/app.js`, `./app.js` or
-  `app.js`. A shell with no entry reference fails the build and points to
-  `build.hashNames: false`; choose that when another page needs a fixed URL.
+- **Production names are content-hashed by default, split or not:**
+  `app-<hash>.js`, `styles-<hash>.css`, and `app-<hash>.css` when the entry
+  imports CSS; the shell's references are rewritten to match. Set
+  `build: { hashNames: false }` for the fixed `app.js` / `styles.css` (preloads
+  stay on with splitting). Development builds keep fixed names and add no
+  preloads. `public/` files are never renamed.
+- Hashing needs a shell reference to `/app.js`, `./app.js` or `app.js` (and the
+  same for `styles.css`). With `hashNames` unset, an unreferenced file (or one
+  another `public/*.html` page names by its fixed name) keeps its fixed name and
+  the build warns once for it; an explicit `hashNames: true` fails on a shell
+  with no entry reference and rewrites the other public pages. Choose
+  `hashNames: false` when another page or a host rule needs a fixed URL.
 - **`chunks/` becomes a reserved output name** while the flag is on: a
   root-level `public/chunks` asset fails the build (as `app.js` already does).
 - `output: 'static'` always splits its own per-page bundles and ships no app
-  entry. Its hashing default still follows the configured `build.splitting`.
-  `hybrid` splits like the SPA.
+  entry. Its page modules and stylesheet are hashed in production too;
+  `hashNames: false` keeps the fixed names. `hybrid` splits like the SPA.
 - The build's size banner prints a **largest-dependencies** breakdown from
   esbuild's metafile and, in production, flags any single dependency over
   200 KB — the signal to move it behind a dynamic `import()`. Your own code and
@@ -102,9 +156,19 @@ no chunk-loader runtime, so it adds no runtime bytes. Notes:
 
 **Dev API proxy.** `dev: { proxy: { '/api': 'http://localhost:3091' } }` forwards
 matching prefixes to a backend so the app can use same-origin paths
-(`apiURL: ''`) with no CORS middleware. Paths are forwarded unrewritten. A `/`
-prefix and two prefixes differing only by a trailing slash are both config
-errors — proxy a specific prefix.
+(`apiURL: ''`) with no CORS middleware. Paths are forwarded unrewritten, and the
+backend sees the browser's `Host` (`localhost:<dev port>`), as a local backend
+expects. A hosted API that picks the site by `Host` answers that with an error
+page (404, 403 or 421) or the wrong site; for one, write Vite's object form,
+`'/api': { target: 'https://api.example.com', changeOrigin: true }`, which sends
+the target's host instead. As in Vite, `changeOrigin` changes `Host` only (for
+WebSocket upgrades too) and never `Origin`, so a backend that checks `Origin`
+against `Host` (Django's CSRF check, Rails, Go WebSocket servers) rejects POSTs
+and WebSocket connects through it. Unlike Vite, the string form never sets it,
+and only `target` and `changeOrigin` are read: Vite's `rewrite` and other
+options are ignored, and a path in the target URL is dropped. A `/` prefix and
+two prefixes differing only by a trailing slash are both config errors — proxy a
+specific prefix.
 
 ## .pzl anatomy
 
@@ -120,7 +184,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 export default class Counter extends PuzzleView {
   data() { return { count: this.getData()?.count ?? 0 }; }  // runs at render — and under NODE during prerender
   events = {
-    increment: () => this.setData('count', this.getData().count + 1),
+    increment: () => this.setState('count', this.getData().count + 1),
   };  // handlers should be arrow functions in the `events` class field so
       // `this` is the component — method shorthand gets the events object as `this`
       // (development builds warn when a non-arrow handler uses `this`)
@@ -129,6 +193,24 @@ export default class Counter extends PuzzleView {
 }
 </script>
 ```
+
+`data()` takes **one object**: `data({ params, props, shared })` — route
+params, props, and what ancestors share. Destructure only what you use
+(`data({ props })`, `data({ params })`, `data()`); the old positional
+`data(params, props)` is gone (0.10.0, D197) and gets the object as `params`.
+
+`share()` hands values and callbacks to every view a component's template
+mounts, at any depth and through slots, under `shared.<camelCaseClassName>`
+(`Tabs` → `shared.tabs`). It takes the same object, runs after each `data()`
+commit, and must be synchronous. `shared` is always an object, so
+`data({ shared: { tabs = {} } })` is safe; handlers read `this.shared`.
+Children change the parent only by calling a shared callback
+(`select: (id) => this.setState({ active: id })`); there is no `setShared()`.
+The nearest same-named ancestor wins, and a layout's `share()` does not reach
+its routed page. A view whose `data()` read a changed key runs `data()` again
+after the sharer renders and before the sharer's `afterUpdate()`, so a view
+that render removes does not run. Don't name a component `Params`, `Props` or
+`Shared`.
 
 Names starting with `__` belong to the compiler: don't define `__`-prefixed
 fields or methods on a component (`__c`, `__lists`, `__dirty`, `__rgen`,
@@ -150,7 +232,9 @@ counter after the range: `{#for 1...n, i}`. HTML void elements (`<br>`,
 `<img …>`, `<input …>`) need no `/>`, and a closer such as `</br>` is a
 compile error.
 `<script lang="ts">` for TypeScript (build remains transpile-only; run
-`puzzle check` separately for static checks).
+`puzzle check` separately for static checks). Name the props interface on the
+base class — `class Card extends PuzzleView<CardProps>` — and the script reads
+its props typed, with no cast.
 
 The function library is the standard set shared with Sites plus the
 PuzzleKit-only `link` and `timeago`; a template calls one by name, and calls
@@ -181,8 +265,8 @@ functions** either — shape a list with array methods (`items.filter(…)`,
 call (`upcase(name)`) is NOT a compile error: it passes the value through
 unchanged, with a dev error naming the replacement, so convert an old pipe
 to the method, never to a same-named call. App functions register through the
-`formatters` config map (the key keeps its name) and are called like the
-built-ins: `{ specialFormat(product.title) }`. Don't register one under a
+`functions` config map (the pre-0.10 `formatters` key throws) and are called
+like the built-ins: `{ specialFormat(product.title) }`. Don't register one under a
 standard name (it wins, with a dev warning, and changes what the name means).
 Keep an app function a pure function of its arguments: a cached `{#for}` row
 does not re-run its calls, so one that reads the clock or other ambient state
@@ -327,8 +411,8 @@ Rules that bite:
   value, a block header, a function argument, or an `@event` handler's
   arguments or ternary condition is a compile error. Every value a template
   shows comes through `data()` — move a getter's body into a `data()` field,
-  and call `this.refresh()` after a `setData()` that field depends on
-  (`setData()` alone does not re-run `data()`).
+  and read the local state it depends on with `getData()` there; a later
+  `setState()` of that key re-runs `data()` on its own.
   Member access is guarded, so `{ user.address.city }` prints nothing when
   `address` is missing instead of throwing (`?.` is legal but unnecessary),
   and a method call on a missing value prints nothing too (dev warning). A
@@ -339,7 +423,7 @@ Rules that bite:
   characters are `{#for c in text.split('')}`. `==` keeps its
   JavaScript meaning; `x == null` is the absence test. Object literals work as
   function arguments (`{ t('cart.count', { count: n }) }`) but cannot START an
-  expression. A component with no `<script>` reads its props by bare name
+  expression. A component with no `data()` reads its props by bare name
   (`{ tone }`).
 - **Handlers are the one door into the view.** `@click={ save(items.length - 1) }`
   calls the view's `save` with arguments in the same expression language,
@@ -356,23 +440,27 @@ Rules that bite:
   `event` reads as data (`<EventCard event={ item } />` works), but a template
   that both reads one and uses `event` inside a handler is a compile error:
   rename the field or prop.
-- **`puzzle check` types the language.** Methods are checked as the same
-  JavaScript methods, so a wrong method or argument is a real TypeScript error
-  at its line and column, and library calls check against the function
-  signatures (an app function is `any`). The check adds the ES2019–ES2023
+- **`puzzle check` types the language where a type is known.** Methods are
+  checked as the same JavaScript methods and library calls against the function
+  signatures (an app function is `any`), and template handlers against the
+  component's `events`, each error at its line and column. A value read from
+  `data()` is `any`, so a misspelled data field (`{ user.nmae }`) or a method
+  its real type lacks passes unreported. The check adds the ES2019–ES2023
   string and array libs whatever the app's `target`, so `.at()`,
   `.replaceAll()` and `.toSorted()` type in templates — and in that file's
   `<script>` too, which can hide a method your `target` lacks from the check
-  (the build is unaffected). `toSorted`/`toReversed` need TypeScript ≥ 5.2.
-- **Three marker tags, four meanings.** `<Children/>` marks where a component's
-  default children render; `<Slot name="x"/>` declares a named region (the
-  caller routes a direct child in with a static `slot="x"` attribute);
-  `<Slot/>` is the ROUTER outlet where a child route or routed view renders;
+  (the build is unaffected). `puzzle check` needs TypeScript 7 or later.
+- **Four marker tags, one meaning each.** `<Children/>` marks where a
+  component's default children render; `<Slot name="x"/>` declares a named
+  region (the caller routes a direct child in with a static `slot="x"`
+  attribute); `<Outlet/>` is the ROUTER outlet in a layout or view, where a
+  child route or routed view renders (a `<Slot>` with no name is a compile
+  error since 0.10);
   `<Snippet>` passes a reusable template that the component may stamp repeatedly
   with fresh data. Composition `<Children>` and named `<Slot>` markers may carry
   data attributes, and a snippet declares matching parameters as bare
   attributes; binding is by name. `fits="x"` routes it to `<Slot name="x">`,
-  while omitted `fits` targets `<Children>`. Ordinary Children/Slot markers may
+  while omitted `fits` targets `<Children>`. Children, Outlet and Slot markers may
   be paired with fallback content, which supplied content replaces entirely —
   and content only counts when it renders something, so a false `{#if}` or an
   empty `{#for}` at the call site shows the fallback (the empty-state idiom).
@@ -398,7 +486,7 @@ Rules that bite:
 - **Component families are dotted tags + a barrel** (puzzle ≥ 0.7.0). A
   capitalized tag must be `Ident('.'Ident)*` — `<Card>` or `<Frame.Wrapper>`;
   a dash, a colon, or an empty segment is a compile error, and a marker name
-  (`Children`/`Slot`/`Snippet`/`Portal`/`Component`) cannot be a family root. A dotted tag
+  (`Children`/`Outlet`/`Slot`/`Snippet`/`Portal`/`Component`) cannot be a family root. A dotted tag
   is a plain member expression resolved against module scope, so group the
   family in a directory with a plain JS barrel — `.pzl` stays ONE class per
   file, and there is no registry or compiler magic:
@@ -442,7 +530,6 @@ Rules that bite:
   const cards = { task: TaskCard, backtest: BacktestCard };
 
   export default class EmbedHost extends PuzzleView {
-    data(params, props) { return props; }
     events = { close: () => {} };
   }
   </script>
@@ -523,14 +610,16 @@ Rules that bite:
   the other modifiers (`@pointerdown:outside:passive`). `passive` with
   `prevent` is a compile error: a passive listener cannot cancel.
 - On COMPONENT tags, `@save={ savePost }` is NOT a DOM event — it's a **callback
-  prop**. The child invokes it as `this.props.save(...)`. There is no `$emit`
-  and no event bubbling between components; child→parent communication is
-  callback props. Modifiers are compile errors on component callback props.
+  prop**. The child invokes it as `this.props.save(payload)`, with one argument.
+  A second argument never reaches the parent, so send one object to pass more.
+  There is no `$emit` and no event bubbling between components; child→parent
+  communication is callback props. Modifiers are compile errors on component
+  callback props.
 - `ref="name"` on a plain element in your OWN template gives `this.refs.name`
   (live node, populated before `mounted()`). `ref` is NOT allowed on component
   tags — when a parent needs a child's imperative handle (a carousel's
   `.next()`), the child delivers it up once via an `@ready` callback prop; store
-  it on an instance field (not `setData`) and guard every use with `?.`.
+  it on an instance field (not `setState`) and guard every use with `?.`.
 - If a callback prop is wired into a long-lived external system, read it at fire
   time (`(e) => this.props.name?.(e)`), never capture it at wiring time.
 
@@ -544,7 +633,8 @@ Form controls bind themselves — write NO input handler:
 <input type="number" value={ profile.hue } />         <!-- commits on change -->
 ```
 
-- Binds when the expression is exactly `ident` or `ident.ident` on a plain
+- Binds when the expression is a plain path (`draft`, `profile.hue`,
+  `form.values.title`: any depth of `.name` steps, no `[k]` or `?.`) on a plain
   `<input>`/`<textarea>`/`<select>` with no author `@input`/`@change`, no
   static `readonly`/`disabled`, and an absent or static classifiable `type`.
   Never on components (their `value` is a plain prop). Excluded: radio, file,
@@ -561,7 +651,9 @@ Form controls bind themselves — write NO input handler:
   (dev warns once per key).
 - Constrained fields (`required()`, `min(3)`): bind a local draft, commit
   with `record.update()` on submit, pre-check with the non-throwing
-  `validate()` — a bind can never clear a `required()` field.
+  `validate()` — a bind can never clear a `required()` field. The optional
+  `@magic-spells/puzzle/forms` module (puzzle ≥ 0.10.0, below) does this
+  bookkeeping for you.
 - Opting out needs no syntax: write your own `@input`/`@change` (the author
   handler owns the write — nothing is synthesized), use a non-path expression
   (`value={ x ?? '' }`), or add static `readonly`. Migration gotcha: a
@@ -570,6 +662,59 @@ Form controls bind themselves — write NO input handler:
   semantics (Enter-commit / Escape-cancel).
 - In tests, `await handle.type('input.search', 'hello')` (from
   `@magic-spells/puzzle/testing`) drives a bound control and settles.
+
+## Forms (puzzle ≥ 0.10.0)
+
+For a form with rules, use the optional `/forms` module instead of hand-rolling
+the draft, errors and submitting flag:
+
+```html
+<form @submit={ save(event) } @focusout={ touch(event) } novalidate>
+  <input name="title" value={ form.values.title } />
+  {#if form.errors.title}<p class="error">{ form.errors.title }</p>{/if}
+  <Field form={ form } name="body" label="Body" />
+  {#if form.error}<p class="error">{ form.error }</p>{/if}
+  <button disabled={ form.submitting }>Save</button>
+</form>
+```
+
+```js
+import { createForm } from '@magic-spells/puzzle/forms';
+
+export default class EditPost extends PuzzleView {
+  created() {
+    this.form = createForm(this, Post, { from: this.props.post, fields: ['title', 'body'] });
+  }
+  events = {
+    save: (event) => this.form.submit(event, (values) => this.props.post.update(values)),
+    touch: (event) => this.form.touch(event),
+  };
+}
+```
+
+- `createForm(view, Model, { from, fields, key, serverErrors })` writes the
+  controller to view state under `key` (default `'form'`). Name the import
+  `createForm`; an import named `form` makes the build warn about the
+  template's `form` reads.
+- `form.values.x` binds directly. Rules come from `Model.validate()`; an error
+  shows once the field is touched (blurred, given a `name`) or after a submit
+  attempt, then clears as soon as the value is fixed.
+- Bind a field itself, never a step inside it. A bind on
+  `form.values.address.city` writes into the source's own object, so `dirty`
+  stays false and `reset()` cannot undo it. Change an object field whole, in a
+  handler: `this.form.set('address', { ...this.form.values.address, city })`.
+- `submit(event, fn)` validates, focuses the first invalid control, guards a
+  double submit, and awaits `fn(values)`. A thrown `PuzzleValidationError` or a
+  4xx body with `errors` maps onto fields; anything else becomes `form.error`
+  and reaches `onError` with `phase: 'submit'`. It resolves `true` on success.
+- `form.dirty`, `form.changed.x`, `form.valid`, `form.reset(from?)`. A record
+  that `data()` loads is not there in `created()`: seed it in both `mounted()`
+  and `afterUpdate()` (which skips the first render) with
+  `if (post && this.form.source !== post) this.form.reset(post)`. Without the
+  `source` check, every render resets the form and wipes the draft.
+- The Field piece takes `form` + `name` and wires value, error and blur itself.
+  It writes the input's text, a string, so a number field binds a plain
+  `<input type="number" name="price" value={ form.values.price } />` instead.
 
 ## Routing
 
@@ -582,7 +727,7 @@ Form controls bind themselves — write NO input handler:
   strings `'hash'`/`'memory'` throw at construction (the error names the
   import) — path-mode apps ship none of the other modes' code.
 - Nested routes: `children` with **relative** paths render at the parent view's
-  `<Slot/>`; `layout` is top-level-only; params merge down the chain.
+  `<Outlet/>`; `layout` is top-level-only; params merge down the chain.
 - **Route guards** (puzzle ≥ 0.2.0): `guard: ({ to, from, ctx }) => verdict` on
   any route covers that node AND all its children — guard the top-level route
   once to lock the whole layout subtree; a child may add its own stricter
@@ -606,6 +751,15 @@ Form controls bind themselves — write NO input handler:
   order). Route views/layouts may be statically imported or wrapped in
   `lazy(() => import('./View.pzl'))`; guards run before a lazy module downloads,
   and `build.splitting: true` lets the dynamic import become its own chunk.
+- **Links prefetch lazy routes** (puzzle ≥ 0.10.0). A link to a `lazy()` route
+  loads that route's code when the pointer rests on it, a touch lands on it or
+  it takes focus. Only code loads: no guard and no `data()` runs. A route
+  behind a guard is skipped. Per link: a bare `data-prefetch` loads a guarded
+  route too, `data-prefetch="visible"` also loads when the link scrolls into
+  view, and `data-prefetch="off"` never loads. `prefetch: false` in the app
+  config turns the default off. `await router.prefetch(path)` loads a route's
+  code from a script (a named target works too) and resolves `true` when it
+  is ready. Links do not prefetch under Save-Data or on a 2g connection.
 - **Head metadata lives on `meta`** (puzzle ≥ 0.2.0): `title`, `description`,
   `canonical`, `socialImage` — static strings, each inherited leaf→root
   independently (`null` suppresses an inherited value). Define root-route
@@ -626,8 +780,10 @@ Form controls bind themselves — write NO input handler:
   a transient `tabindex="-1"` that also suppresses `outline`/`box-shadow` for
   its lifetime — no focus ring around the view) and announces the committed
   title in a
-  framework-owned visually-hidden `aria-live` region. You get accessible SPA
-  navigation for free — don't hand-roll it. `focusBehavior` mirrors
+  framework-owned visually-hidden `aria-live` region. A view can choose its own
+  focus: focus that `mounted()` put inside the view stays there, and an
+  `autofocus` element in the view is focused instead of the root. You get
+  accessible SPA navigation for free — don't hand-roll it. `focusBehavior` mirrors
   `scrollBehavior`: omit for the default, `false` to disable entirely
   (announcement included), or a function to take over. Memory mode and
   navigation #0 are no-ops; static output has no router, so it gets neither.
@@ -667,6 +823,13 @@ Form controls bind themselves — write NO input handler:
   hash mode); strings not starting with `/` pass through (external URLs,
   `mailto:`, `#anchor`). Hand-written `#/...` hrefs still work in hash mode,
   but `link()` hrefs are the portable spelling.
+- Link or navigate **by route name** (puzzle ≥ 0.10.0) with an object of
+  `name`, `params` and optional `query` and `hash`:
+  `href="{ link({ name: 'todo', params: { id: t.id } }) }"`,
+  `router.push({ name: 'todo', params: { id } })`, `replace()`,
+  `router.prefetch()`, or a guard's redirect. Names must be unique;
+  nested and index routes resolve by full path; params are URI-encoded. An
+  unknown name or a missing param throws.
 
 ## Translations (puzzle ≥ 0.8.0)
 
@@ -690,7 +853,7 @@ many other`) is a plural entry and must have `other`.
   `.defaultLocale`, and `this.ctx.i18n.setLocale('es')` — it fetches the file
   first, then switches, stores the choice, sets `<html lang>` (except in
   memory mode, which never touches the document), and rebuilds the page at the
-  same location (store records survive; `setData` state does not — keep state
+  same location (store records survive; `setState` state does not — keep state
   that must survive a switch in the store). It resolves once the new strings
   are active; if a navigation (push, replace or pop) is in flight, that
   navigation lands first and the page is rebuilt after it. So a root layout's
@@ -707,9 +870,15 @@ many other`) is a plural entry and must have `other`.
 - With `i18n` configured, `date`/`time`/`datetime`, `number_with_delimiter`,
   `compact_number`, the `pluralize` count and `timeago` follow the ACTIVE
   locale (not the browser's); pass an explicit locale to `date(…)` to pin one.
-- Route `meta.title` stays a static string — it is not translated.
+- Translate a route's `meta.title` or `meta.description` with a reference in
+  place of the string: `meta: { title: { t: 'products.title' } }`. A plain
+  string is not translated.
 - Prerendered pages (`--hybrid`/`--static`) render in `defaultLocale` and carry
   its table inline; a viewer in another locale sees one swap after load.
+- `ctx.i18n.locales` is a list of objects, one per configured locale: `locale`
+  is the tag, `label` the language's own name, `href` the current page in that
+  locale and `active` marks the active one. Return it from `data()` to render
+  a language switcher that calls `setLocale(entry.locale)`.
 
 ## Data layer
 
@@ -767,13 +936,20 @@ export default adapter.defaults({
 Builders: `string() number() boolean() date() array() object()`, plus
 `belongsTo(type)` / `hasMany(type)` relationships (lazy getters backed by the
 store). Chainable modifiers: `.primary() .required() .default() .min() .max()
-.oneOf([...]) .validate(fn)`. **Always use the function form of `.default()` for
-arrays/objects** (`.default(() => [])`) so records don't share one instance.
-Register model classes in the app's `models` config.
+.oneOf([...]) .validate(fn)`. A literal array or object default
+(`.default([])`) is cloned for each record. Use the function form for a value
+computed per record (`.default(() => new Date())`).
+Register model classes in the app's `models` config. In TypeScript, type the
+fields with a fields interface (`type TodoRecord = Todo & TodoFields`, as
+`puzzle init --typescript` scaffolds) or `declare text: string`, never
+`text!: string`: unless your tsconfig sets a `target` below ES2022 (the
+scaffold uses ES2020), that emits a real class field, which resets the field to
+`undefined` on every record.
 
 Views reach the store as `this.ctx.store`:
 
-- Reads: `findOne(type, id)`, `findMany(type, { filter }?)`.
+- Reads: `findOne(type, id)`, `findMany(type, { filter }?)`, and with the
+  adapter `findMany(type, { query })` for one server page (below).
 - Writes: `createRecord(type, data)` (validates, defaults, notifies), then
   records mutate in place — `record.update(patch)`, `record.destroy()`,
   `record.validate()` → `{ valid, errors }` (non-throwing, for form UX).
@@ -803,7 +979,7 @@ the batch until a pass comes back with every read warm, and commits that one. So
 this is the entire data layer of a deep-linkable detail page:
 
 ```js
-data(params) {
+data({ params }) {
   const store = this.ctx.store;
   const post = store.findOne('post', params.id);
   const author = post ? store.findOne('user', post.authorId) : null;
@@ -825,8 +1001,9 @@ What follows from the rule:
   handle, and a read through it, by this view, during this view's own `data()`
   run is the one thing that can fault: event handlers, model methods, timers,
   and a store captured in a module variable all get a local snapshot and never
-  issue a request. A handler that needs fresh server data changes state and
-  calls `this.refresh()`, which re-enters the loop. Calling
+  issue a request. A handler that needs other server data writes a key
+  `data()` reads with `setState()` (or calls `this.refresh()`), which re-enters
+  the loop. Calling
   `store.loadOne`/`store.loadMany` from inside
   `data()` warns in dev and points you at `findOne`/`findMany` — the imperative
   loaders are a force-refresh escape hatch, not the read path.
@@ -844,7 +1021,9 @@ What follows from the rule:
 - **`data()` must tolerate running several times per navigation.** Keep it a
   pure derivation — no side effects, no one-shot gates.
 - **Errors fail the navigation.** A network failure, a 500, or a malformed body
-  rejects the run and goes to `errorView`. Only a 404 becomes a committed
+  rejects the run and reports to `onError`. A later navigation stays on the
+  current page; a first load shows `errorView` in the page's place, and a
+  skeleton view shows it in that view's place. Only a 404 becomes a committed
   `null`.
 
 Skeletons need no change: every settle round counts as one load, so a
@@ -873,11 +1052,44 @@ static adapter = {
   },
 };
 
-// Imperative loads (outside data()): a force refresh, or pagination.
-await store.loadMany('post', { page: 1 });
-await store.loadMany('post', { page: 2 }); // pages accumulate; existing ids merge
+// Imperative loads (outside data()): a force refresh.
+await store.loadMany('post');
 const post = store.upsert('post', await store.adapter('post').publish(id));
 ```
+
+**Pages, invalidation and write status (puzzle ≥ 0.10.0).** Don't load a big
+collection with `findMany(type)`. Read one page with `query`; each query is
+its own cached entry, fetched once and kept in server order:
+
+```js
+data() {
+  const page = Number(this.route.query.page ?? 1); // page in the url: links and back work
+  const posts = this.ctx.store.findMany('post', { query: { page } });
+  return { posts, page, hasNext: !!posts.meta?.nextPage };
+}
+```
+
+- `query` goes to the server (the REST shorthand puts it in the URL); `filter`
+  stays a local predicate. Values are strings, numbers, booleans or arrays of
+  those.
+- `posts.meta` is what the server sent beside the rows. An authored `loadMany`
+  returns an object with `records` and `meta` for an API that wraps rows; a plain array has no
+  meta. A cursor is just another param: put `meta.nextCursor` in the next query,
+  and keep the cursors walked so far in `setState` for a "load more" list.
+  The first page has no cursor, so send another param with it (`limit`, say):
+  a query whose values are all `null` or `undefined` is no query, and reads the
+  whole collection with no `meta`.
+- After a write that changes what lists show, call
+  `this.ctx.store.invalidate('post')` (or `invalidate('post', id)`,
+  `invalidate('post', { query })`). It never fetches: views reading that data
+  refetch on their next run and keep the old rows on screen until the new ones
+  land. Don't call `loadMany` to refresh a list.
+- Show a save without your own flags: `store.syncStatus(record)` in `data()`
+  returns `pending` (`'save'`, `'delete'` or `null`) and `error`, and re-runs the view
+  as it changes. The promise from `save()`/`delete()` carries its own
+  `pending` (`true` until it settles) and `error`. Those two do not re-run a
+  view, so read `syncStatus()` in `data()`.
+- No TTL, no refetch on focus: data stays until you invalidate it.
 
 Using global `fetch` instead of the supplied parameter is legal and literal:
 it bypasses both `beforeRequest` and fixtures interception.
@@ -919,13 +1131,22 @@ refresh outside the request path and let the hook read the current token. Mutate
 
 The reactivity contract — the three methods are not interchangeable:
 
-- **`data()`** owns the model layer. Store queries made inside `data()`
+- **`data()`** owns the derived layer. Store queries made inside `data()`
   **auto-subscribe** the view; when matching records change, `data()` re-runs
   and the result replaces the view's data wholesale (replace-on-commit).
-- **`setData(patch)`** owns persistent local UI state (open panels, drafts).
-  It rerenders WITHOUT re-running `data()` and survives it.
-- **`refresh()`** re-runs `data()` — use it when local state feeds
-  `data()`-derived values.
+- **`setState(patch)`** owns persistent local UI state (open panels, drafts).
+  It survives `data()` re-runs. When `data()` read the written key through
+  `getData()` or `getState()`, the next render re-runs `data()` first (one run
+  per burst of writes); any other key just re-renders. In an async `data()`,
+  only `getData()`/`getState()` calls made before the first `await` are
+  tracked, so read state above it. `getState()` reads the
+  state layer alone; `getData()` reads the merged model the template sees.
+  There is no `setData()` (removed in 0.10.0).
+- **`refresh()`** re-runs `data()` on purpose. Do not put it after a
+  `setState()`: the write already re-runs `data()` when `data()` reads that
+  key. Use it when `data()` derives from something the runtime cannot see (an
+  instance field, a module variable, the clock), or when the next line needs
+  the new model already rendered.
 - **A record prop tracks that record, and only that record.** Records mutate in
   place, so a record prop is always reference-equal — but it also carries a
   render revision, so a child receiving `todo={ todo }` DOES re-run `data()`
@@ -945,7 +1166,7 @@ tab). Two awaits observe that work; neither forces it:
 
 - `await this.renderTick()` in a view resolves once every scheduled store flush and
   view render has landed, including the renders those schedule. Use it after
-  `setData()` before measuring `this.refs`. It does not wait for async
+  `setState()` before measuring `this.refs`. It does not wait for async
   `data()`, fetches or navigation.
 - `await app.idle()` (or `this.ctx.idle()` from any view or component)
   resolves `true` once two consecutive frames find no mount, navigation,
@@ -959,6 +1180,14 @@ tab). Two awaits observe that work; neither forces it:
 
 Puzzle ships its own test utilities — do NOT hand-roll a harness, and do not
 reach into private fields to await renders.
+
+Tests run in Vitest. Apps from `puzzle init` already have the setup: `tests/`
+with a starter test, `npm test` (`vitest run`), and a `vitest.config.js` whose
+`plugins: [puzzle()]` (from `@magic-spells/puzzle/vitest`) compiles every
+`.pzl` a test imports and resolves `@/`, with `environment: 'jsdom'`. An older
+app adds that file plus `vitest` and `jsdom` dev dependencies; without the
+plugin, importing a `.pzl` file in a test fails. Put new tests in `tests/`
+(or next to the code; Vitest finds `*.test.js` anywhere).
 
 ```js
 import { mountView, createTestApp, settled } from '@magic-spells/puzzle/testing';
@@ -974,11 +1203,14 @@ await app.router.push('/todos/1');
 
 - `mountView(ViewClass, options)` mounts ONE view against a detached container.
   Options: `params`, `props`, `children`, `ref`, `route`, `models`, `store`,
-  `router`, `formatters`, `adapter`, `ctx`, `i18n: { locale, strings }` (a
+  `router`, `functions`, `adapter`, `ctx`, `i18n: { locale, strings }` (a
   translated view with no fetch; `strings` is the flat dotted-key table).
   Returns a handle: `instance`, `container`,
   `element`, `ctx`, `store`, `router`, `find(sel)`, `findAll(sel)`,
   `click(target)`, `type(target, text)`, `setProps(props)`, `destroy()`.
+  Without a `router` option the view gets a router with no routes, so a
+  navigation goes nowhere: test navigation with `createTestApp`, or pass a
+  `router`.
 - `createTestApp(config)` boots a REAL `PuzzleApp` — `target` and memory
   routing are forced (`routerInitialPath` seeds it), everything else passes
   through (`i18n: { locale, strings }` too). Handle: `app`, `store`, `router`, `ctx`,
@@ -997,9 +1229,11 @@ Schema-driven fake data, generated from the model `static schema` alone:
 ```js
 // app/fixtures.js
 export default {
-  seed: { todo: 12 },                       // generate 12 todos from the schema
+  seed: 42,                                 // one PRNG seed: the same fake data every run
   mock: { todo: { latency: 150 } },         // intercept adapter calls for this type
-  setup(store) { /* optional hand-tuning after seeding */ },
+  setup(app) {                              // runs before the first data()
+    app.store.seed('todo', 12);             // 12 todos generated from the schema
+  },
 };
 ```
 
@@ -1014,12 +1248,13 @@ mock, not a dev-only mock server.
 
 ## DevTools
 
-A Chrome DevTools extension (separate repo, `magic-spells/puzzle-devtools`)
-inspects views, store records, and the subscription graph. The framework ships
-only a dev-only bridge that activates when the extension is installed; it costs
-**zero production bytes** and needs no config. Nothing to wire up — but if you
-are debugging reactivity, `window.__PUZZLE_APP__` is also available in dev
-builds.
+A Chrome DevTools extension (`packages/puzzle-devtools` in the framework
+monorepo) inspects views, store records, and the subscription graph. The
+framework ships only a dev-only bridge that activates when the extension is
+installed; it costs **zero production bytes** and needs no config. Nothing to
+wire up — but if you are debugging reactivity, `window.__PUZZLE_APP__` is also
+available in dev builds. Pages built with `output: 'static'` have neither: they
+run no `PuzzleApp`, so the extension reports no app there.
 
 ## Loading skeletons
 
@@ -1079,23 +1314,23 @@ Rules that bite:
 - The initial page load never morphs (deep links render plainly), and
   `prefers-reduced-motion` disables morphing entirely — both by design.
 
-Working example: `examples/kanban-morph` in the framework repo.
+Working example: `packages/puzzle/examples/kanban-morph` in the framework repo.
 
 ## Prerendered output — THE RULES (bugs happen when these are missed)
 
 Two output modes, chosen in puzzle.config.js or by flag. Both emit
-`dist/<path>/index.html` per static route + `styles.css` (or
-`styles-<hash>.css` with `build.hashNames` on); top-level `*` renders to
+`dist/<path>/index.html` per static route + `styles-<hash>.css` (`styles.css`
+with `build: { hashNames: false }` or in development); top-level `*` renders to
 `dist/404.html`; the route's `meta.title` is injected via a leaf→root walk.
 
 - **`output: 'static'`** / `puzzle build --static` — a TRUE static site. No
   router, no SPA, no `app.js` in `dist/`. Each page ships a small module
-  (`/_puzzle/<slug>.js`, or `/_puzzle/<slug>-<hash>.js` with hashing on) that mounts
+  (`/_puzzle/<slug>-<hash>.js`, or `/_puzzle/<slug>.js` with `hashNames: false`) that mounts
   only that page's components over the prerendered markup, so `@event` handlers
   and local state work; navigation is
   plain `<a href="/path/">` page loads. Every production page preloads its shared
-  `/_puzzle/chunks/`, including with fixed names. With no `splitting` or
-  `hashNames` key, names stay fixed. Pick this for docs/marketing/blogs.
+  `/_puzzle/chunks/`, including with fixed names. Pick this for
+  docs/marketing/blogs.
 - **`output: 'hybrid'`** / `puzzle build --hybrid` — prerendered first paint,
   then the full SPA bundle takes over on load and re-renders (not true
   DOM-adoption hydration); all later navigation is client-side (transitions,
@@ -1107,6 +1342,10 @@ URLs, full page loads, real 404s, prerender on every rebuild); hybrid projects
 dev as the SPA. `puzzle preview` serves an existing `dist/` with
 production-host semantics for any mode (SPA deep-link fallback, static real
 404s) — use `puzzle build && puzzle preview` to check the shipped artifact.
+`puzzle add deploy <host>` (`vercel`, `netlify`, `cloudflare`, `nginx`,
+`apache`; no host lists them) writes that host's fallback and cache config
+for the app's output mode; don't hand-write a `/* /index.html 200` rule
+(on Cloudflare Pages it serves the shell in place of JavaScript).
 
 1. **`data()` and `beforeMount` run under Node at build time** (both modes).
    Guard every browser global: `typeof document !== 'undefined'` before touching
@@ -1121,31 +1360,44 @@ production-host semantics for any mode (SPA deep-link fallback, static real
    (CMS fetches etc.) are serialized into an inline JSON island per page and
    rehydrated before mount — so build-time credentials stay build-side, and
    browser-only setup must not live in `beforeMount`.
-3. **`:param` routes are SKIPPED by the prerenderer** (no `staticPaths()` hook
-   yet) — a warning is printed and no file is written. For content sites, every
-   page must be an explicit static route. Treat any "skipped" in the build
-   summary as a regression.
+3. **A `:param` route prerenders only the values its `staticPaths` lists.**
+   Declare `staticPaths` on the leaf route in `app/routes.js`. It is an array
+   of params objects (`staticPaths: [{ slug: 'hello' }, { slug: 'intro' }]`),
+   a function that returns one and runs at build time after `beforeMount`
+   (`staticPaths: async ({ store }) => (await store.loadMany('post')).map((post) => ({ slug: post.slug }))`),
+   or a model name: `staticPaths: 'post'` makes one page per `post` record and
+   reads each param from the record field of the same name. Each entry needs
+   every param in the route's full path. A `:param` route with no `staticPaths`
+   is skipped: a warning is printed and no file is written. Treat any
+   "skipped" in the build summary as a regression.
 4. **Inline `<script>` inside route markup is dead in both modes** — the mount
    over the prerendered markup discards it. Only the shell
    (`app/public/index.html`) may carry inline scripts (analytics, theme
    pre-paint). All other behavior: `mounted()` / cleanup in `destroyed()`.
 5. **Static mode has no router and emits only plain path hrefs.** Hash-style
-   `#/...` links are an SPA/hybrid concern (`routerMode: hashRouter()`) with no
-   meaning on a static site — never hand-write them in templates that build
-   statically; path-shaped `link()` hrefs render as plain paths in static
-   output and as `#/...` in a hash-mode SPA, from the same template.
+   `#/...` links belong to a hash-mode SPA (`routerMode: hashRouter()`) and
+   have no meaning on a static site — never hand-write them in templates that
+   build statically; path-shaped `link()` hrefs render as plain paths in
+   static output and as `#/...` in a hash-mode SPA, from the same template.
+   A hybrid build needs path routing: it fails when the app sets `routerMode`.
    `ctx.router` methods throw; `push()` calls
    are a bug — use plain links. App functions must be exported from
-   `app/formatters.js` to exist client-side (functions only in the app.js
-   `formatters` config trigger a build warning); models are picked up from
-   `app/models/index.js`. The `link` function is absent client-side in static
-   output — its pass-through fallback still yields correct plain-path hrefs.
+   `app/functions.js` to exist client-side (functions only in the app.js
+   `functions` config trigger a build warning); models are picked up from
+   `app/models/index.js`. `link()` works on a static page too: it returns a
+   plain path, base-prefixed under `routerBase`. A named link
+   (`link({ name })`) resolves in the browser only on a page whose prerender
+   rendered one. Markup that first shows a named link after a click should
+   link by path.
    A configured adapter (`adapter.defaults(...)`) is best exported from
    `app/adapter.js` and passed to the app from there: each static page then
    imports just that module. Configuring it inline in `app.js` still builds
    and behaves identically — the build falls back to importing the app entry
    from every page to reach the exact configured value (an advisory notes the
    page-weight cost). A bare `adapter` needs no file either way.
+   The app config's `storage`, `beforeRequest`, `onError` and `errorView` do
+   not reach a static page (`beforeRequest` still runs at build time). Use
+   `output: 'hybrid'` when a page needs one of them.
 6. `prerender: false` on a route emits an empty shell (invisible to any static
    search indexer): in hybrid it's an SPA island; in static it still gets its
    per-page module and renders fully client-side. Escape hatch for
@@ -1154,15 +1406,25 @@ production-host semantics for any mode (SPA deep-link fallback, static real
    (content is baked into `#app`). Since puzzle 0.2.0 the build writes
    `<title>` PLUS og/twitter/canonical tags from the route `meta` head fields
    (see Routing) — and the build is the ONLY place those tags are ever written,
-   so prerendering is what makes them exist at all. Sitemap generation still
-   needs your own Node script.
+   so prerendering is what makes them exist at all. Set the top-level
+   `site: 'https://example.com'` (the origin only) in puzzle.config.js and the
+   build writes `dist/sitemap.xml`; a `public/sitemap.xml` of your own is kept
+   instead.
 
 ## Styling
 
 Tailwind v4 is the supported pipeline (`styles: { use: ['tailwindcss'] }` — the
 CLI folds Tailwind output + collected `<style>` blocks into `dist/styles.css`
-or `dist/styles-<hash>.css` when production hashing is on;
-wire it with `puzzle add tailwind`). For puzzle-pieces apps, import the theme after
+or `dist/styles-<hash>.css` when production hashing is on, `<style>` blocks
+minified in production; wire it with `puzzle add tailwind`). A view, layout or
+component `<script>` may also `import './page.css'`: in `output: 'static'`
+every page links its own `_puzzle/<slug>.css` (hashed with the page module)
+holding only the CSS its graph imports, in `build` and `dev` alike, so
+page-only CSS loads only on that page. CSS imported from `app.js` reaches no
+static page (the build warns); import it from a layout. SPA/hybrid builds emit
+script-imported CSS as `app.css` (`app-<hash>.css` in production). Link
+`/app.css` in `public/index.html`; the build rewrites the link to the emitted
+name. For puzzle-pieces apps, import the theme after
 `@import "tailwindcss"` — `@import "@magic-spells/puzzle-pieces/themes/default.css"`
 (or the copied `app/styles/pieces.css`) plus any palette you offer
 (`/themes/cool.css`, `/themes/warm.css`, `/themes/void.css`) — and style ONLY via
@@ -1186,29 +1448,31 @@ the stored choice paints before first paint.
 
 ## puzzle-pieces (component library)
 
-Copy-in registry, shadcn-style: the piece files land in your app, and no
-piece imports the registry package (only the optional theme CSS and the
+Copy-in registry, shadcn-style: the piece files land in your app, and no piece
+imports the registry package (only the optional theme CSS and the
 `appearance`/`pre-paint` helpers under Styling come from it). Use
-`puzzle add piece <name…>` (copies each
-piece + its transitive piece/lib dependencies verbatim, records hashes in
-`pieces.lock`; refuses to overwrite any existing file unless `--overwrite`;
-never runs npm or edits styles.css: required npm packages and the theme
-merge are printed as next steps). When the app has no theme yet it writes
-`app/styles/pieces.css` and prints the `@import` line. When the app's
+`puzzle add piece <name…>` (copies each piece + its transitive piece/lib
+dependencies verbatim, records hashes in `pieces.lock`; refuses to overwrite any
+existing file unless `--force` (`-f`); never runs npm or edits styles.css:
+required npm packages, the theme merge and the stylesheets of the web components
+a piece wraps are printed as next steps). Add each printed
+`@import "…" layer(components);` once, after `@import "tailwindcss";` and in the
+printed order: each line names the one it follows. When the app has no theme yet
+it writes `app/styles/pieces.css` and prints the `@import` line. When the app's
 `pieces.css` differs from the registry's, it prints a hint: run
-`puzzle add theme default` for an unmodified older copy (0.8 pieces use
-tokens a 0.7 theme lacks, such as `surface-frame`, `bar-*` and `rail-*`),
-or hand-merge / `--overwrite` an edited one. A piece that needs extra
-palettes prints `puzzle add theme <names…>` for the missing ones. The printed install line carries each
-package's version floor — `npm install @magic-spells/collapsible-content@^1.2.0`
-— so a piece never resolves against an npm `latest` older than the component it
-wraps; run it as printed. The default source is the
-`@magic-spells/puzzle-pieces` npm package, version-locked to the CLI's
-major.minor (falls back to the newest OLDER release with a printed note).
+`puzzle add theme default` for an unmodified older copy (0.8 pieces use tokens a
+0.7 theme lacks, such as `surface-frame`, `bar-*` and `rail-*`), or hand-merge /
+`--force` an edited one. A piece that needs extra palettes prints
+`puzzle add theme <names…>` for the missing ones. The printed install line
+carries each package's version floor —
+`npm install @magic-spells/collapsible-content@^1.2.0` — so a piece never
+resolves against an npm `latest` older than the component it wraps; run it as
+printed. The default source is the `@magic-spells/puzzle-pieces` npm package:
+the newest release on the CLI's own major.minor, or an error when there is none.
 `--pieces-version` pins a release; `--registry` (or `$PUZZLE_PIECES_REGISTRY`)
 takes `npm:<package>[@version]`, a local directory, or an http(s) URL. Once
-copied, a piece is YOUR code: import it like any component (`import Button
-from '../components/ui/Button.pzl'`) and use it as a capitalized tag. Pieces
-follow a `BASE` + `VARIANT`/`SIZE` class-map convention with a
+copied, a piece is YOUR code: import it like any component
+(`import Button from '../components/ui/Button.pzl'`) and use it as a capitalized
+tag. Pieces follow a `BASE` + `VARIANT`/`SIZE` class-map convention with a
 `class` prop for caller overrides. Audit copied pieces for SSG rule #1 above
 before prerendering them.

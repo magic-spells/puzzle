@@ -8,7 +8,7 @@ surface the framework offers:
 | --- | --- | --- |
 | **View / route transition** | each view's `animations = { in, out }` | Switching sidebar sections fades the old view out, then the new one in (the sidebar stays put — one animator per transition, D28) |
 | **Component enter on mount** | `ListRow` / `StatTile` `get animations()` with `delay: index * N` | List rows and stat tiles **cascade in** when a section loads |
-| **Nested-route child swap** (v1.3, D30) | `Detail.pzl`, routed at `/fleet/:id`, `/missions/:id`, `/crew/:id` | Selecting a list item navigates to the `:id` child route and **slides the details panel in from the right** through the section view's `<Slot/>`; closing navigates back and slides it out |
+| **Nested-route child swap** (v1.3, D30) | `Detail.pzl`, routed at `/fleet/:id`, `/missions/:id`, `/crew/:id` | Selecting a list item navigates to the `:id` child route and **slides the details panel in from the right** through the section view's `<Outlet/>`; closing navigates back and slides it out |
 
 ## Run it
 
@@ -28,9 +28,9 @@ npm run dev        # serves on http://localhost:3000
   on motion.)
 - **Selection is URL state.** Each section route has `children`: an index child
   (`path: ''`) that renders nothing, and a `path: ':id'` child that renders the
-  shared [`Detail.pzl`](app/views/Detail.pzl) view at the section's `<Slot/>`.
+  shared [`Detail.pzl`](app/views/Detail.pzl) view at the section's `<Outlet/>`.
   Clicking a row calls `router.push('/fleet/<id>')`; the section view is a
-  *reused ancestor* on that swap, so its `data(params)` re-runs with the merged
+  *reused ancestor* on that swap, so its `data({ params })` re-runs with the merged
   params and the row highlight tracks the URL — no local selection state, and
   deep links / back / forward work for free.
 - **Only the swapped level animates.** The one-animator rule (D28, generalized

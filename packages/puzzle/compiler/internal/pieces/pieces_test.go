@@ -441,6 +441,42 @@ func TestAddNpmDepsAccumulateDedupedInOutput(t *testing.T) {
 	}
 }
 
+// Stylesheets union in resolution order, never sorted: dialog and sheet share
+// dialog-panel's sheet (sheet lists it first), and menu reaches its sheet only
+// through a registryDependency. Each line is anchored to the one before it.
+func TestAddPiecePrintsStylesInLoadOrder(t *testing.T) {
+	reg := buildRegistry(t, `{"version":1,"theme":"theme/pieces.css","pieces":[
+	  {"name":"dialog","files":["Dialog.pzl"],"styles":["dp/css"]},
+	  {"name":"sheet","files":["Sheet.pzl"],"styles":["dp/css","sheet/css"]},
+	  {"name":"menu","files":["Menu.pzl"],"registryDependencies":["panel"]},
+	  {"name":"panel","files":["Panel.pzl"],"styles":["dd/css"]},
+	  {"name":"button","files":["Button.pzl"]}]}`,
+		fixtureFile{"ui/dialog/Dialog.pzl", "d\n"}, fixtureFile{"ui/sheet/Sheet.pzl", "s\n"},
+		fixtureFile{"ui/menu/Menu.pzl", "m\n"}, fixtureFile{"ui/panel/Panel.pzl", "p\n"},
+		fixtureFile{"ui/button/Button.pzl", "b\n"},
+	)
+	res, err := Add(Options{AppRoot: newApp(t, true), Names: []string{"dialog", "sheet", "menu"}, Fetcher: NewFetcher(reg)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(res.Styles, " "); got != "dp/css sheet/css dd/css" {
+		t.Errorf("styles = %s, want dp/css sheet/css dd/css", got)
+	}
+	want := "→ add `@import \"dp/css\" layer(components);` to app/styles/styles.css (after `@import \"tailwindcss\";`)\n" +
+		"    → add `@import \"sheet/css\" layer(components);` to app/styles/styles.css (after `@import \"dp/css\" layer(components);`)\n" +
+		"    → add `@import \"dd/css\" layer(components);` to app/styles/styles.css (after `@import \"sheet/css\" layer(components);`)\n"
+	if out := render(res); !strings.Contains(out, want) {
+		t.Errorf("summary should print the three imports, chained, got:\n%s", out)
+	}
+	res, err = Add(Options{AppRoot: newApp(t, true), Names: []string{"button"}, Fetcher: NewFetcher(reg)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out := render(res); strings.Contains(out, "layer(components)") {
+		t.Errorf("a piece with no styles prints no import, got:\n%s", out)
+	}
+}
+
 // themeFixture is the standard one-piece registry whose theme carries the marker,
 // reused across the theme-state tests.
 func themeFixture(t *testing.T) string {
@@ -581,6 +617,23 @@ func TestAddThemeQuietWhenStylesImportsPiecesCss(t *testing.T) {
 	}
 }
 
+// A comment that mentions pieces.css is not wiring: the palette is still copied.
+func TestAddPieceCommentMentionIsNotWired(t *testing.T) {
+	reg := themeFixture(t)
+	app := newApp(t, false)
+	styles := filepath.Join(app, "app", "styles", "styles.css")
+	if err := os.WriteFile(styles, []byte("@import \"tailwindcss\";\n/* TODO: move tokens to pieces.css */\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	res, err := Add(Options{AppRoot: app, Names: []string{"button"}, Fetcher: NewFetcher(reg)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !fileExists(filepath.Join(app, "app", "styles", "pieces.css")) || !strings.Contains(res.Theme, "@import './pieces.css';") {
+		t.Errorf("a mention must not count as wiring: want pieces.css copied and the advisory, got %q", res.Theme)
+	}
+}
+
 // State (c): pieces.css exists but styles.css neither carries the marker nor
 // imports it — advise only, never rewrite the existing pieces.css, and it is not
 // treated as an overwrite conflict.
@@ -635,8 +688,8 @@ func TestAddOverwriteRefusalListsConflictsWritesNothing(t *testing.T) {
 	if !strings.Contains(err.Error(), "app/components/ui/Calendar.pzl") {
 		t.Errorf("error should list the conflicting path, got: %v", err)
 	}
-	if !strings.Contains(err.Error(), "--overwrite") {
-		t.Errorf("error should mention --overwrite, got: %v", err)
+	if !strings.Contains(err.Error(), "--force") {
+		t.Errorf("error should mention --force, got: %v", err)
 	}
 
 	// Pre-flight: NOTHING else was written, and the conflicting file is intact.
@@ -1228,13 +1281,13 @@ func (f *failFetcher) Source() string        { return f.source }
 func (f *failFetcher) Ref(rel string) string { return f.source + "/" + rel }
 
 func TestAddDefaultRegistryFailureHintsAtOverrides(t *testing.T) {
-	// The default npm source failing must name every override — that error is the
+	// The default npm source failing must name both overrides — that error is the
 	// first thing a user sees when no pieces release matches their CLI version.
 	_, err := Add(Options{AppRoot: t.TempDir(), Names: []string{"button"}, Fetcher: &failFetcher{source: defaultRegistry}})
 	if err == nil {
 		t.Fatal("expected error")
 	}
-	for _, want := range []string{"--pieces-version", "--registry", "PUZZLE_PIECES_REGISTRY"} {
+	for _, want := range []string{"--registry", "PUZZLE_PIECES_REGISTRY"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("default-source error should mention %s, got: %v", want, err)
 		}

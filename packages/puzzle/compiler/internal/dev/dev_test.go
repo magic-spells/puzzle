@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/magic-spells/puzzle/compiler/internal/config"
 	"github.com/magic-spells/puzzle/compiler/internal/serve"
 )
 
@@ -261,7 +262,7 @@ func TestDevProxy(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	backendURL := "http://backend.test"
-	srv := newServer(dist, serve.ModeSPA, ctx, map[string]string{"/api": backendURL})
+	srv := newServer(dist, serve.ModeSPA, ctx, map[string]config.Proxy{"/api": {Target: backendURL}})
 	var proxyLog bytes.Buffer
 	srv.proxyLog = &proxyLog
 	handler := srv.handler()
@@ -310,6 +311,39 @@ func TestDevProxy(t *testing.T) {
 	}
 }
 
+// TestDevProxyChangeOrigin pins the Host header the backend receives: the
+// browser's by default (the string form), the target's with changeOrigin, for a
+// plain request and a WebSocket upgrade alike.
+func TestDevProxyChangeOrigin(t *testing.T) {
+	sent := make(chan *http.Request, 1)
+	oldTransport := http.DefaultTransport
+	http.DefaultTransport = roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		sent <- r
+		return &http.Response{StatusCode: http.StatusNoContent, Body: http.NoBody, Request: r}, nil
+	})
+	t.Cleanup(func() { http.DefaultTransport = oldTransport })
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	dist := writeDist(t)
+	for _, tt := range []struct {
+		changeOrigin bool
+		want         string
+	}{{false, "puzzle.test"}, {true, "backend.test:8000"}} {
+		handler := newServer(dist, serve.ModeSPA, ctx, map[string]config.Proxy{"/api": {Target: "http://backend.test:8000", ChangeOrigin: tt.changeOrigin}}).handler()
+		for _, upgrade := range []bool{false, true} {
+			req := httptest.NewRequest(http.MethodGet, "http://puzzle.test/api/socket", nil)
+			if upgrade {
+				req.Header.Set("Connection", "Upgrade")
+				req.Header.Set("Upgrade", "websocket")
+			}
+			handler.ServeHTTP(httptest.NewRecorder(), req)
+			if got := <-sent; got.Host != tt.want || (got.Header.Get("Upgrade") == "websocket") != upgrade {
+				t.Errorf("changeOrigin %v, upgrade %v: backend got Host %q, Upgrade %q; want Host %q", tt.changeOrigin, upgrade, got.Host, got.Header.Get("Upgrade"), tt.want)
+			}
+		}
+	}
+}
+
 // TestProxyPrefixShapesDoNotPanic covers the two proxy maps that used to take
 // `puzzle dev` down with a raw http.ServeMux panic — an empty pattern from a "/"
 // prefix, and a repeated pattern from two prefixes that normalize to the same
@@ -328,25 +362,25 @@ func TestProxyPrefixShapesDoNotPanic(t *testing.T) {
 	dist := writeDist(t)
 	tests := []struct {
 		name           string
-		proxies        map[string]string
+		proxies        map[string]config.Proxy
 		proxiedPath    string
 		wantRootStatus int
 	}{
 		{
 			name:           "single prefix",
-			proxies:        map[string]string{"/api": down},
+			proxies:        map[string]config.Proxy{"/api": {Target: down}},
 			proxiedPath:    "/api/todos",
 			wantRootStatus: http.StatusOK, // the SPA shell still owns /
 		},
 		{
 			name:           "duplicate after normalization",
-			proxies:        map[string]string{"/api": down, "/api/": down},
+			proxies:        map[string]config.Proxy{"/api": {Target: down}, "/api/": {Target: down}},
 			proxiedPath:    "/api/todos",
 			wantRootStatus: http.StatusOK,
 		},
 		{
 			name:           "root prefix",
-			proxies:        map[string]string{"/": down},
+			proxies:        map[string]config.Proxy{"/": {Target: down}},
 			proxiedPath:    "/anything",
 			wantRootStatus: http.StatusBadGateway, // the proxy owns everything
 		},
@@ -386,7 +420,7 @@ func TestConfigFallbackWarningNamesProxy(t *testing.T) {
 	if !strings.Contains(msg, "puzzle.config.js: unexpected token") {
 		t.Errorf("warning drops the underlying load error: %q", msg)
 	}
-	for _, want := range []string{"dev.proxy", "Tailwind", "SPA shell"} {
+	for _, want := range []string{"dev.proxy", "Tailwind", "env values", "SPA shell"} {
 		if !strings.Contains(msg, want) {
 			t.Errorf("warning should mention %q, got: %q", want, msg)
 		}
@@ -902,70 +936,6 @@ func TestWatcherRootPublicAndConfig(t *testing.T) {
 		case <-deadline:
 			return
 		}
-	}
-}
-
-// TestWithinDir locks in the lexical path-traversal guard: in-root paths are
-// allowed; anything that resolves outside the root is rejected. (URL decoding and
-// path.Clean run upstream in serveStatic; withinDir is the lexical backstop that
-// must reject a candidate that still resolves outside dist.)
-func TestWithinDir(t *testing.T) {
-	root := filepath.Clean(t.TempDir())
-	parent := filepath.Dir(root)
-	cases := []struct {
-		name   string
-		target string
-		want   bool
-	}{
-		{"in-root file", filepath.Join(root, "app.js"), true},
-		{"in-root nested", filepath.Join(root, "assets", "img", "logo.png"), true},
-		{"root itself", root, true},
-		{"dotdot traversal", filepath.Join(root, "..", "etc", "passwd"), false},
-		{"escapes to parent", filepath.Join(parent, "secret.txt"), false},
-		{"prefix-only sibling", root + "-evil", false},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			if got := withinDir(root, tc.target); got != tc.want {
-				t.Fatalf("withinDir(%q, %q) = %v, want %v", root, tc.target, got, tc.want)
-			}
-		})
-	}
-}
-
-// TestWithinDirResolvedSymlinkEscape proves the symlink-aware backstop rejects a
-// symlink that is lexically inside the root but resolves outside it, while still
-// allowing a genuine in-root file (also exercising a symlinked root prefix such
-// as macOS /tmp → /private/tmp).
-func TestWithinDirResolvedSymlinkEscape(t *testing.T) {
-	root := t.TempDir()
-	outside := t.TempDir()
-	secret := filepath.Join(outside, "secret.txt")
-	if err := os.WriteFile(secret, []byte("top secret"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	link := filepath.Join(root, "escape")
-	if err := os.Symlink(secret, link); err != nil {
-		t.Skipf("symlinks unsupported on this platform: %v", err)
-	}
-
-	// Lexically the link lives inside root, so the plain guard is fooled...
-	if !withinDir(root, link) {
-		t.Fatalf("precondition: link should be lexically within root")
-	}
-	// ...but resolving symlinks reveals the escape, so it must be rejected.
-	if withinDirResolved(root, link) {
-		t.Fatalf("symlink escape not caught: %s -> %s", link, secret)
-	}
-
-	// A real in-root file resolves fine and stays allowed.
-	real := filepath.Join(root, "app.js")
-	if err := os.WriteFile(real, []byte("x"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if !withinDirResolved(root, real) {
-		t.Fatalf("legitimate in-root file wrongly rejected: %s", real)
 	}
 }
 

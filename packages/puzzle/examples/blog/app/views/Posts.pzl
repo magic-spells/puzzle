@@ -78,12 +78,12 @@ const SORTS = {
 
 export default class PostsView extends PuzzleView {
   created() {
-    this.setData({ activeTag: 'all', sortBy: 'newest' });
+    this.setState({ activeTag: 'all', sortBy: 'newest' });
   }
 
   // data() derives the tag list and the filtered, sorted posts from the store.
   // The active tag and sort order are local UI state read back from getData().
-  data(params, props) {
+  data() {
     const store = this.ctx.store;
     const activeTag = this.getData().activeTag;
     const sortBy = this.getData().sortBy || 'newest';
@@ -112,16 +112,10 @@ export default class PostsView extends PuzzleView {
   }
 
   events = {
-    setTag: (tag) => {
-      // D23 derived-list pattern: setData() updates local state but does not
-      // re-run data(), so refresh() recomputes the filtered list from it.
-      this.setData('activeTag', tag);
-      this.refresh();
-    },
-    setSort: (sortBy) => {
-      this.setData('sortBy', sortBy);
-      this.refresh();
-    }
+    // D23: data() reads activeTag and sortBy, so each write re-runs it and the
+    // filtered, sorted list follows.
+    setTag: (tag) => this.setState('activeTag', tag),
+    setSort: (sortBy) => this.setState('sortBy', sortBy)
   };
 
   // Route transition (constellation/doc/DOC-SPEC.md §12) — see Home.pzl for the full rationale.

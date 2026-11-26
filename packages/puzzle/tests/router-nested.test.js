@@ -3,7 +3,7 @@
 // Nested routes & nested view slots (D30, v1.3). Exercises the
 // chain-prefix navigation pipeline: relative-path composition, index children,
 // bare-parent no-match, merged params at every level, fail-fast route config
-// throws, deep composition through nested <Slot/>s, prefix REUSE (ancestor kept +
+// throws, deep composition through nested <Outlet/>s, prefix REUSE (ancestor kept +
 // awaited pre-commit, URL gated on all loads), the same-view-class sibling key
 // trap, params-only nested refresh, and failure/cancel teardown of the fresh
 // sub-chain only. Mirrors tests/router.test.js's fake view/layout helpers.
@@ -27,7 +27,7 @@ const container = () => {
 
 const ctx = (store = null) => ({ store, router: null, formatters: null });
 
-// A layout with a single <Slot/> the root view renders into.
+// A layout with a single <Outlet/> the root view renders into.
 class AppLayout extends PuzzleView {
 	render() {
 		return h('puzzle-view', { class: 'layout' }, [
@@ -37,10 +37,10 @@ class AppLayout extends PuzzleView {
 	}
 }
 
-// A parent SHELL view that hosts its child route at a <Slot/>.
+// A parent SHELL view that hosts its child route at an <Outlet/>.
 function makeShell(name, onData) {
 	return class extends PuzzleView {
-		data(params, props) {
+		data({ params, props }) {
 			if (onData) onData(params, props, this);
 			return { name };
 		}
@@ -53,10 +53,10 @@ function makeShell(name, onData) {
 	};
 }
 
-// A leaf view (no <Slot/>).
+// A leaf view (no <Outlet/>).
 function makeLeaf(name, onData) {
 	return class extends PuzzleView {
-		data(params, props) {
+		data({ params, props }) {
 			if (onData) onData(params, props, this);
 			return { name };
 		}
@@ -325,7 +325,7 @@ describe('Router nested — prefix reuse', () => {
 			created() {
 				settingsCreated++;
 			}
-			data(params) {
+			data({ params }) {
 				settingsParams.push(params.id ?? null);
 				return {};
 			}
@@ -401,7 +401,7 @@ describe('Router nested — prefix reuse', () => {
 			created() {
 				created.push(this);
 			}
-			data(params) {
+			data({ params }) {
 				return { pane: params.pane ?? this.props.pane };
 			}
 			render() {
@@ -443,7 +443,7 @@ describe('Router nested — params-only chain refresh', () => {
 			created() {
 				orgCreated++;
 			}
-			data(params) {
+			data({ params }) {
 				orgSeen.push(params.orgId);
 				return {};
 			}
@@ -455,7 +455,7 @@ describe('Router nested — params-only chain refresh', () => {
 			created() {
 				memberCreated++;
 			}
-			data(params) {
+			data({ params }) {
 				memberSeen.push(params.memberId);
 				return {};
 			}
@@ -486,7 +486,7 @@ describe('Router nested — params-only chain refresh', () => {
 	it('a rejection during a params-only chain refresh leaves the URL untouched', async () => {
 		const Org = makeShell('org');
 		const Member = class extends PuzzleView {
-			async data(params) {
+			async data({ params }) {
 				if (params.memberId === 'bad') throw new Error('boom');
 				return {};
 			}
@@ -624,7 +624,7 @@ describe('Router nested — failure & cancellation', () => {
 // After a mid-chain swap the router hands the FULL rebuilt vnode chain to the
 // topmost host, so every host's slot content describes the new chain (D30). If
 // only the survivor were updated, a later re-render of any host ABOVE it (store
-// change, setData) would push its stale slot vnodes back down through
+// change, setState) would push its stale slot vnodes back down through
 // patchComponent and revert the swap, resurrecting destroyed instances.
 
 describe('Router nested — ancestor re-renders after a swap', () => {
@@ -659,7 +659,7 @@ describe('Router nested — ancestor re-renders after a swap', () => {
 		expect(el.querySelector('.two')).not.toBeNull();
 
 		// The layout (ABOVE the survivor) re-renders from local UI state.
-		StatefulLayout.last.setData('z', 1);
+		StatefulLayout.last.setState('z', 1);
 		StatefulLayout.last.flushUpdates();
 		await tick();
 
@@ -701,7 +701,7 @@ describe('Router nested — ancestor re-renders after a swap', () => {
 		await router.push('/a/b/c2'); // keep=2, survivor = B; TopShell + layout sit above
 		expect(el.querySelector('.c2')).not.toBeNull();
 
-		TopShell.last.setData('z', 1);
+		TopShell.last.setState('z', 1);
 		TopShell.last.flushUpdates();
 		await tick();
 
@@ -730,7 +730,7 @@ describe('Router nested — skeleton leaf under a reused ancestor', () => {
 		const store = new Store();
 		const gate = deferred();
 
-		// Parent SHELL: SYNCHRONOUS data() + a <Slot/>. Its refresh is the thing
+		// Parent SHELL: SYNCHRONOUS data() + an <Outlet/>. Its refresh is the thing
 		// that must not get deferred behind the leaf's async preload.
 		let shellDataRuns = 0;
 		class Shell extends PuzzleView {

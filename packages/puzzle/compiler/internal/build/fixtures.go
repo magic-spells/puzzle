@@ -8,6 +8,7 @@ import (
 	"strconv"
 
 	"github.com/evanw/esbuild/pkg/api"
+	"github.com/magic-spells/puzzle/compiler/internal/fsutil"
 )
 
 // puzzleWorkDir is the compiler's per-app scratch directory under the app root.
@@ -46,7 +47,7 @@ type fixturesWrapper struct {
 func findFixturesConfig(absRoot string) string {
 	for _, candidate := range fixturesConfigCandidates {
 		path := filepath.Join(absRoot, filepath.FromSlash(candidate))
-		if FileExists(path) {
+		if fsutil.FileExists(path) {
 			return path
 		}
 	}

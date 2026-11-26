@@ -77,8 +77,8 @@ const codeHero = `<Progress value={ pct } max={ 100 } label="Uploading" showValu
 
 // parent
 events = {
-  bump: () => this.setData({ pct: Math.min(100, this.getData().pct + 10) }),
-  reset: () => this.setData({ pct: 0 }),
+  bump: () => this.setState({ pct: Math.min(100, this.getData().pct + 10) }),
+  reset: () => this.setState({ pct: 0 }),
 };`;
 
 const codeIndeterminate = `// Omit value to render the indeterminate (pulsing) state.
@@ -89,10 +89,10 @@ const codeSizes = `<Progress value={ 40 } size="sm" />
 
 export default class ProgressDoc extends PuzzleView {
   created() {
-    this.setData({ pct: 30 });
+    this.setState({ pct: 30 });
   }
 
-  data(params, props) {
+  data() {
     return {
       ...this.getData(),
       installCmd,
@@ -112,12 +112,10 @@ export default class ProgressDoc extends PuzzleView {
 
   events = {
     bump: () => {
-      this.setData({ pct: Math.min(100, this.getData().pct + 10) });
-      this.refresh();
+      this.setState({ pct: Math.min(100, this.getData().pct + 10) });
     },
     reset: () => {
-      this.setData({ pct: 0 });
-      this.refresh();
+      this.setState({ pct: 0 });
     },
   };
 }

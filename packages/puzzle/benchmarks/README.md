@@ -47,7 +47,7 @@ lab exists to make.
 
 | path | contents |
 | --- | --- |
-| `benchmarks/.build/stress-src/` | a scratch copy of the example's source (`app/`, `public/`, `puzzle.config.js`, `package.json`) **and its `dist/`** — the bundle actually served |
+| `benchmarks/.build/stress-src/` | a scratch copy of the example's source (`app/`, which holds its `public/`, plus `puzzle.config.js` and `package.json`) **and its `dist/`** — the bundle actually served |
 | `benchmarks/.last-run.json` | the most recent run, so a failed run can still be diffed by hand |
 
 Plus `benchmarks/baseline.json`, but only under `npm run bench:update`, and
@@ -57,7 +57,7 @@ Plus `benchmarks/baseline.json`, but only under `npm run bench:update`, and
 whoever is running `puzzle dev`, and the benchmark stays out of it. This is not
 a stylistic preference — it was a real incident. `puzzle build` has no
 output-dir flag (`--fixtures`, `--hybrid`, `--mode`, `--profile-build`,
-`--static` is the entire set), so building the example in place emits `examples/stress/dist` and
+`--quiet`, `--static` is the entire set), so building the example in place emits `examples/stress/dist` and
 overwrites the dev bundle a human's browser is holding open. Because a
 production build strips the DevTools bridge by design, their Performance panel
 went dead with "No Puzzle app detected" and nothing said why.
@@ -148,8 +148,9 @@ server in `runner.mjs`. The dev server is never involved and the example's own
 
 The runner does not trust the `--mode` flag; it greps the emitted bundle for
 `__PUZZLE_DEVTOOLS_HOOK__`, `import.meta.hot` and `puzzle:hmr` and refuses to
-run if a production build contains any of them. It also snapshots `dist/` before
-serving, so a rebuild in another terminal cannot change the bytes mid-suite.
+run if a production build contains any of them. It serves the staged copy's own
+`dist/`, which only this harness builds, so a `puzzle dev` rebuild in another
+terminal cannot change the bytes mid-suite.
 
 For the record, at 0.8.0 the production bundle is **238.6 KB** against the dev
 build's **690.4 KB**, and contains zero occurrences of the DevTools hook, HMR,
@@ -167,8 +168,12 @@ Alongside every median the table prints **MAD%** (median absolute deviation as a
 percentage of the median), the robust companion to a median. Quoting a standard
 deviation next to a median would describe a distribution nobody is reporting.
 
-No op is capped. If one ever is, the runner prints a `CAP` line in the LOG
-section and the table's `it` column shows the real count.
+Twelve ops record fewer than 15 iterations, declared in `scenarios.mjs`. The
+behaviour gates (`handlers-*/click-select`, `handlers-*/click-remove`,
+`virtual-list/native-scroll`, `listener-churn/click-select/*`,
+`form-state/type-event`) run once with no warmup, and
+`listener-churn/count-listeners/*` records 3. Each prints a `CAP` line in the
+LOG section, and the table's `it` column shows the real count.
 
 ### 3. Every iteration is prepared, and `validate()` gates the timed window
 
@@ -327,9 +332,9 @@ Nothing is truncated silently.
 ## Results
 
 Machine of record: Apple M1 Pro (10 cores, 32 GB), darwin-arm64, headless
-Chromium 151.0.7922.34, Node v25.1.0, production build (238.6 KB), 15
-iterations, medians. This is the committed `baseline.json` for 0.8.0, frozen as
-`history/0.8.0.json`.
+Chromium 151.0.7922.34, Node v25.1.0, production build (241.6 KB), 15
+iterations, medians. This is the committed `baseline.json` for 0.9.0, frozen as
+`history/0.9.0.json`.
 
 Only the three D170 gate ops (`keyed-list/update-one`, `update-all`,
 `reorder`) arm a `MutationObserver` over the list body inside the timed window.
@@ -342,48 +347,48 @@ inflates create and clear ([What the numbers say](#what-the-numbers-say) prices 
 
 | op | script ms | paint ms | layout ms | live nodes | views | records |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `create/1000` | 25.6 | 61.2 | 16.6 | 7,000 | 1,001 | 1,000 |
-| `update-every-10th/1000` | 3.00 | 11.6 | 1.45 | 7,000 | 1,001 | 1,000 |
-| `swap-rows/1000` | 5.40 | 38.9 | 15.6 | 7,000 | 1,001 | 1,000 |
-| `clear/1000` | 7.40 | 8.30 | 0.12 | 0 | 1 | 0 |
-| `create/10000` | **216** | **516** | 144 | 70,000 | 10,001 | 10,000 |
-| `update-every-10th/10000` | 23.7 | 59.3 | 15.1 | 70,000 | 10,001 | 10,000 |
-| `swap-rows/10000` | 16.0 | 91.1 | 28.3 | 70,000 | 10,001 | 10,000 |
-| `clear/10000` | 67.1 | 68.1 | 0.13 | 0 | 1 | 0 |
-| `create/50000` | 1023 | 2485 | 673 | 350,000 | 50,001 | 50,000 |
-| `update-every-10th/50000` | 124 | 369 | 84.8 | 350,000 | 50,001 | 50,000 |
-| `swap-rows/50000` | 61.0 | 280 | 50.0 | 350,000 | 50,001 | 50,000 |
-| `clear/50000` | 333 | 334 | 0.13 | 0 | 1 | 0 |
+| `create/1000` | 24.5 | 60.1 | 16.9 | 7,000 | 1,001 | 1,000 |
+| `update-every-10th/1000` | 2.80 | 11.5 | 1.43 | 7,000 | 1,001 | 1,000 |
+| `swap-rows/1000` | 5.40 | 38.2 | 15.3 | 7,000 | 1,001 | 1,000 |
+| `clear/1000` | 7.40 | 8.40 | 0.13 | 0 | 1 | 0 |
+| `create/10000` | **209** | **502** | 139 | 70,000 | 10,001 | 10,000 |
+| `update-every-10th/10000` | 23.6 | 59.4 | 15.3 | 70,000 | 10,001 | 10,000 |
+| `swap-rows/10000` | 15.5 | 87.4 | 27.8 | 70,000 | 10,001 | 10,000 |
+| `clear/10000` | 63.8 | 64.8 | 0.13 | 0 | 1 | 0 |
+| `create/50000` | 1015 | 2483 | 658 | 350,000 | 50,001 | 50,000 |
+| `update-every-10th/50000` | 118 | 360 | 83.6 | 350,000 | 50,001 | 50,000 |
+| `swap-rows/50000` | 65.0 | 285 | 51.1 | 350,000 | 50,001 | 50,000 |
+| `clear/50000` | 376 | 377 | 0.16 | 0 | 1 | 0 |
 
-The three D170 gate ops, all at 1,000 rows: `update-one` 1.50ms script (one row
-touched, one child `data()` run), `update-all` 9.90ms (1,000 and 1,000),
+The three D170 gate ops, all at 1,000 rows: `update-one` 1.60ms script (one row
+touched, one child `data()` run), `update-all` 10.4ms (1,000 and 1,000),
 `reorder` 6.10ms (zero rows touched, zero `data()` runs, moves only).
 
 ### virtual-list, same records, same row component, windowed
 
 | op | script ms | paint ms | layout ms | live nodes | views | records |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `create/1000` | 10.8 | 12.8 | 0.45 | 177 | 26 | 1,000 |
-| `update-every-10th/1000` | 0.60 | 1.60 | 0.13 | 177 | 26 | 1,000 |
-| `swap-rows/1000` | 0.30 | 1.40 | 0.11 | 177 | 26 | 1,000 |
-| `clear/1000` | 2.30 | 3.30 | 0.15 | 2 | 1 | 0 |
-| `create/10000` | **85.5** | **87.6** | 0.43 | 177 | 26 | 10,000 |
-| `update-every-10th/10000` | 3.70 | 4.70 | 0.13 | 177 | 26 | 10,000 |
-| `swap-rows/10000` | 0.40 | 1.50 | 0.11 | 177 | 26 | 10,000 |
-| `clear/10000` | 20.7 | 21.5 | 0.13 | 2 | 1 | 0 |
-| `create/50000` | 429 | 431 | 0.43 | 177 | 26 | 50,000 |
-| `update-every-10th/50000` | 15.1 | 16.2 | 0.14 | 177 | 26 | 50,000 |
-| `swap-rows/50000` | 1.10 | 2.20 | 0.12 | 177 | 26 | 50,000 |
-| `clear/50000` | 107 | 108 | 0.13 | 2 | 1 | 0 |
-| `fast-scroll/50000` | 75.0 | 83.3 | 3.71 | 177 | 26 | 50,000 |
+| `create/1000` | 12.0 | 14.0 | 0.48 | 177 | 26 | 1,000 |
+| `update-every-10th/1000` | 0.60 | 1.80 | 0.16 | 177 | 26 | 1,000 |
+| `swap-rows/1000` | 0.40 | 1.40 | 0.14 | 177 | 26 | 1,000 |
+| `clear/1000` | 2.40 | 3.50 | 0.15 | 2 | 1 | 0 |
+| `create/10000` | **92.1** | **94.3** | 0.45 | 177 | 26 | 10,000 |
+| `update-every-10th/10000` | 3.70 | 4.80 | 0.13 | 177 | 26 | 10,000 |
+| `swap-rows/10000` | 0.50 | 1.70 | 0.13 | 177 | 26 | 10,000 |
+| `clear/10000` | 21.1 | 22.0 | 0.13 | 2 | 1 | 0 |
+| `create/50000` | 450 | 452 | 0.47 | 177 | 26 | 50,000 |
+| `update-every-10th/50000` | 16.0 | 17.2 | 0.14 | 177 | 26 | 50,000 |
+| `swap-rows/50000` | 1.20 | 2.50 | 0.13 | 177 | 26 | 50,000 |
+| `clear/50000` | 122 | 123 | 0.15 | 2 | 1 | 0 |
+| `fast-scroll/50000` | 71.2 | 79.9 | 4.27 | 177 | 26 | 50,000 |
 
 ### Behavioural scenarios
 
 | op | script ms | paint ms | counters |
 | --- | ---: | ---: | --- |
-| `subscriptions/update-one/precision` | 0.10 | 0.20 | notified **0** / 100 watchers |
-| `subscriptions/update-one/fanout` | 2.90 | 4.60 | notified **100** / 100 watchers |
-| `async-waterfall/remount/20` | — | 751 | maxInFlight **1** of 20, **SERIALIZED** |
+| `subscriptions/update-one/precision` | 0.00 | 0.30 | notified **0** / 100 watchers |
+| `subscriptions/update-one/fanout` | 3.00 | 5.00 | notified **100** / 100 watchers |
+| `async-waterfall/remount/20` | — | 748 | maxInFlight **1** of 20, **SERIALIZED** |
 
 `async-waterfall` reports no `scriptMs`; the scenario measures wall time and a
 concurrency census, not a synchronous flush.
@@ -398,33 +403,34 @@ browser is a different instrument; `bench:history` prints both per column and
 warns when they disagree.
 
 0.6.0 and 0.7.0 were measured retroactively on 2026-09-30, each by its own tag's
-harness and compiler in a temporary checkout. 0.8.0 is the release baseline,
-re-measured on 2026-10-01 after the stress observer left the timed window.
-Median script ms / paint ms, full-DOM `keyed-list` unless noted:
+harness and compiler in a temporary checkout. 0.8.0 was re-measured on
+2026-10-01 after the stress observer left the timed window. 0.9.0 is the release
+baseline, measured on 2026-10-22. Median script ms / paint ms, full-DOM
+`keyed-list` unless noted:
 
-| op | 0.6.0 | 0.7.0 | 0.8.0 |
-| --- | ---: | ---: | ---: |
-| `create/1000` | 21.2 / 51.3 | 23.6 / 57.9 | 25.6 / 61.2 |
-| `update-every-10th/1000` | 5.70 / 9.60 | 6.60 / 15.0 | **3.00** / 11.6 |
-| `swap-rows/1000` | 10.0 / 38.0 | 11.6 / 44.9 | **5.40** / 38.9 |
-| `clear/1000` | 6.10 / 6.90 | 6.80 / 7.70 | 7.40 / 8.30 |
-| `create/10000` | 175 / 447 | 198 / 484 | 216 / 516 |
-| `update-every-10th/10000` | 52.8 / 98.5 | 69.6 / 116 | **23.7** / 59.3 |
-| `swap-rows/10000` | 53.3 / 127 | 68.3 / 139 | **16.0** / 91.1 |
-| `clear/10000` | 49.7 / 50.7 | 61.2 / 62.1 | 67.1 / 68.1 |
-| stress: `create/50000` | 859 / 2248 | 980 / 2402 | 1023 / 2485 |
-| stress: `clear/50000` | 264 / 265 | 329 / 330 | 333 / 334 |
-| stress: windowed `create/50000` | 373 / 375 | 430 / 433 | 429 / 431 |
-| `async-waterfall` census | 1 of 20 in flight, 751ms | 1 of 20, 749ms | 1 of 20, 751ms |
-| stress-lab bundle | 218.7 KB | 229.5 KB | 238.6 KB |
+| op | 0.6.0 | 0.7.0 | 0.8.0 | 0.9.0 |
+| --- | ---: | ---: | ---: | ---: |
+| `create/1000` | 21.2 / 51.3 | 23.6 / 57.9 | 25.6 / 61.2 | 24.5 / 60.1 |
+| `update-every-10th/1000` | 5.70 / 9.60 | 6.60 / 15.0 | **3.00** / 11.6 | 2.80 / 11.5 |
+| `swap-rows/1000` | 10.0 / 38.0 | 11.6 / 44.9 | **5.40** / 38.9 | 5.40 / 38.2 |
+| `clear/1000` | 6.10 / 6.90 | 6.80 / 7.70 | 7.40 / 8.30 | 7.40 / 8.40 |
+| `create/10000` | 175 / 447 | 198 / 484 | 216 / 516 | 209 / 502 |
+| `update-every-10th/10000` | 52.8 / 98.5 | 69.6 / 116 | **23.7** / 59.3 | 23.6 / 59.4 |
+| `swap-rows/10000` | 53.3 / 127 | 68.3 / 139 | **16.0** / 91.1 | 15.5 / 87.4 |
+| `clear/10000` | 49.7 / 50.7 | 61.2 / 62.1 | 67.1 / 68.1 | 63.8 / 64.8 |
+| stress: `create/50000` | 859 / 2248 | 980 / 2402 | 1023 / 2485 | 1015 / 2483 |
+| stress: `clear/50000` | 264 / 265 | 329 / 330 | 333 / 334 | 376 / 377 |
+| stress: windowed `create/50000` | 373 / 375 | 430 / 433 | 429 / 431 | 450 / 452 |
+| `async-waterfall` census | 1 of 20 in flight, 751ms | 1 of 20, 749ms | 1 of 20, 751ms | 1 of 20, 748ms |
+| stress-lab bundle | 218.7 KB | 229.5 KB | 238.6 KB | 241.6 KB |
 
 Ops per version: 0.6.0 and 0.7.0 run the same 80-op matrix, and each snapshot
 holds 79 of them. `route-churn/navigate-burst/100` is missing from both because
 the tag's own scenario declares `rcAncestorMutations: 500` while the tag measures
 700; the expect was stale at both tags (0.8.0 declares 700), and the runner
 records no timings for a mismatched op. 0.8.0 adds the three D170 gate ops
-(`keyed-list/update-one`, `update-all`, `reorder`) for 83. Every counter the two
-old runs did record matches its tag's own `baseline.json`.
+(`keyed-list/update-one`, `update-all`, `reorder`) for 83. 0.9.0 runs the same 83.
+Every counter the two old runs did record matches its tag's own `baseline.json`.
 
 **At each release,** on the clean release tree: `npm run bench:update`, then
 `npm run bench:snapshot`. The snapshot refuses a baseline measured over
@@ -494,22 +500,22 @@ The `listener-churn` churn arm moves the other way (855ms to 544ms at 10,000),
 because its `@click={ selectRow(row) }` is now cached on the row.
 
 **Windowing removes the DOM cost, not the data cost.** At 10,000 records
-`create` is 216ms full-DOM against 85.5ms windowed, and the windowed list still
-pays those 85.5ms because seeding 10,000 records is shared by both strategies.
+`create` is 209ms full-DOM against 92.1ms windowed, and the windowed list still
+pays those 92.1ms because seeding 10,000 records is shared by both strategies.
 The difference is what 70,000 elements and 10,001 view instances cost. Layout
-makes it stark: 144ms full-DOM against **0.43ms** windowed, flat from 1k to 50k.
+makes it stark: 139ms full-DOM against **0.45ms** windowed, flat from 1k to 50k.
 
 **Paint dominates at scale, and it is the browser's cost, not the
-framework's.** `keyed-list/create/10000` is 216ms of script inside 516ms to the
+framework's.** `keyed-list/create/10000` is 209ms of script inside 502ms to the
 painted frame. A single number would hide that more than half of the wait is
 the engine, and no reconciler tuning would recover it.
 
 **Ops touching only rendered rows are effectively free when windowed.**
-`swap-rows` at 10,000: 16.0ms full-DOM, 0.40ms windowed (at the measurement
-floor). `update-every-10th`: 23.7ms against 3.70ms.
+`swap-rows` at 10,000: 15.5ms full-DOM, 0.50ms windowed (at the measurement
+floor). `update-every-10th`: 23.6ms against 3.70ms.
 
-**`clear` is pure teardown and scales with what is being torn down**: 67.1ms at
-10,000 full-DOM against 20.7ms windowed, with layout at ~0.13ms in both. That is
+**`clear` is pure teardown and scales with what is being torn down**: 63.8ms at
+10,000 full-DOM against 21.1ms windowed, with layout at ~0.13ms in both. That is
 destructor and store work, not rendering.
 
 **Subscription precision holds in production.** One write outside the watched
@@ -518,7 +524,7 @@ precision timing is at the measurement floor, not a real value.
 
 **The async `data()` serialization is real in production, in every release
 measured.** 20 independent async `data()` evaluations, nothing shared, nothing
-queried: `maxInFlight` is 1 in 0.6.0, 0.7.0 and 0.8.0.
+queried: `maxInFlight` is 1 in 0.6.0, 0.7.0, 0.8.0 and 0.9.0.
 `Store.withTracking`'s single store-wide `_asyncTrackingChain` defers each
 known-async evaluation behind the one in flight. This is a census result, not a
 timing inference.
@@ -563,8 +569,9 @@ unaffected; the inline closure simply ignores the extra id argument.
 
 ### Running it
 
-`--filter handlers-` runs only this comparison: 20 entries appended to the end of
-`OPS`, with ids `handlers-inline/*` and `handlers-stable/*`. The existing
+`--filter handlers-` runs only this comparison: 20 entries placed after
+`async-waterfall` in `OPS`, with ids `handlers-inline/*` and
+`handlers-stable/*`. The existing
 `keyed-list/*` and `virtual-list/*` ids and params are untouched, and the
 `inline` arm deliberately does **not** pass `handlers=inline`. It is the
 default, so that arm's URL, render path and counters are identical to the plain
@@ -601,7 +608,7 @@ Their milliseconds mean nothing. **Both arms pass, in 0.7.0 and in 0.8.0.**
 
 Production build, 15 recorded iterations, medians, same machine and Chromium
 151 for both releases: 0.7.0 from its retroactive run (`history/0.7.0.json`),
-0.8.0 from the committed baseline. Median in-page `script ms`:
+0.8.0 from its release baseline (`history/0.8.0.json`). Median in-page `script ms`:
 
 | op | n | 0.7.0 `inline` | 0.7.0 `stable` | 0.8.0 `inline` | 0.8.0 `stable` |
 | --- | ---: | ---: | ---: | ---: | ---: |
@@ -712,16 +719,16 @@ Production has no detector, so the burst arms are both safe and honest here.
 
 | op | script ms | paint ms | task | other | live nodes | views |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `navigate-burst/100` | — | **27.6** | 30.3 | 24.5 | 20 | 7 |
-| `params-burst/100` | — | **16.3** | 20.0 | 16.7 | 20 | 7 |
+| `navigate-burst/100` | — | **25.1** | 27.3 | 22.0 | 20 | 7 |
+| `params-burst/100` | — | **14.2** | 17.6 | 14.7 | 20 | 7 |
 
 Both report no `scriptMs`: a navigation is not a synchronous flush, so the
 scenario measures wall time around the whole loop, exactly as `async-waterfall`
 does. 0.7.0 on the same machine and browser measured `params-burst` at 18.0ms;
 its `navigate-burst` has no timing (see [Across releases](#across-releases)).
 
-That is 0.28ms per leaf-divergence navigation against 0.16ms for the params-only
-control. The ancestors here render one span and a `<Slot/>`, so the time says
+That is 0.25ms per leaf-divergence navigation against 0.14ms for the params-only
+control. The ancestors here render one span and an `<Outlet/>`, so the time says
 little on its own; the counters are the finding, and a real app's layouts
 multiply them by whatever they do per render.
 
@@ -761,8 +768,8 @@ and Chromium 151 for both releases:
 | ---: | --- | ---: | ---: | ---: | ---: |
 | 1,000 | 0.7.0 | 72.5 | 50.4 | 43.5 | **22.1ms (30.5%)** |
 | 10,000 | 0.7.0 | 855 | 542 | 505 | **313ms (36.6%)** |
-| 1,000 | 0.8.0 | 51.8 | 51.2 | 51.0 | 0.6ms, noise |
-| 10,000 | 0.8.0 | 570 | 564 | 583 | 6ms, noise |
+| 1,000 | 0.8.0 | 48.5 | 48.7 | 47.3 | −0.2ms, noise |
+| 10,000 | 0.8.0 | 544 | 547 | 544 | −3ms, noise |
 
 Structural counts over 20 renders of 10,000 rows:
 
@@ -774,8 +781,7 @@ Structural counts over 20 renders of 10,000 rows:
 
 The committed baseline gates on the zeros. Since D170 the `churn` arm's
 `@click={ selectRow(row) }` is cached on the row scope, so all three arms
-rebind nothing and time the same; `none` reading a little slower than the other
-two at 10,000 is inside the run-to-run band.
+rebind nothing and time the same, within the run-to-run band.
 
 **The canonical Puzzle handler spelling rebinds nothing**, and it never did:
 `@click={ onSelect }` compiles to a per-instance cached arrow and never fails
@@ -875,7 +881,7 @@ whether it can tell itself apart from the framework.
 
 For 0.8.0 this was two full suites on the same framework source (the first on
 the release branch head, the second after a harness-only commit that adds
-`history/`). Both predate the observer change; the committed baseline is a
+`history/`). Both predate the observer change; the 0.8.0 baseline is a
 third run after it. 83 ops each, 157 comparable medians.
 
 | sample group | median abs. delta | p90 | max |
@@ -899,7 +905,7 @@ single op's delta under ~18% is not a finding. A delta with the same sign and
 size across sizes and runs, like the 0.6.0-to-0.7.0 create and clear step
 under [What the numbers say](#what-the-numbers-say), is.
 
-Both 0.8.0 suite runs, and the committed baseline run after them: 83/83 ops
+Both 0.8.0 suite runs, and the 0.8.0 baseline run after them: 83/83 ops
 `ok`, zero validate failures, zero structural mismatches, zero clamp
 rejections, exit 0. Wall time ~13 minutes per suite.
 
@@ -931,8 +937,9 @@ rejections, exit 0. Wall time ~13 minutes per suite.
   `params-100`, `back-forward-100`, `supersede-50`) are deliberately absent —
   their durations are inputs and the clamp guard would reject them — so their
   counters come from `probe.mjs` runs instead, and `listener-churn/rerender` is
-  the only listener arm timed at both sizes. The two unimplemented scenarios
-  in `examples/stress/README.md` obviously are not covered either. Add entries
+  the only listener arm timed at both sizes. The one unbuilt scenario in
+  `examples/stress/README.md` (`morph-flip`) obviously is not covered either.
+  Add entries
   to `scenarios.mjs` — nothing else needs to change.
 - **History is per-harness.** Each snapshot in `history/` was measured by its
   own release's harness and stress example, so a column is that release as its

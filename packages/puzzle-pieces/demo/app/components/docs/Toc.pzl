@@ -26,7 +26,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 //
 //   <Toc class="hidden xl:block" items={ toc }/>
 export default class Toc extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     return {
       items: props.items || [],
       rootClass: props.class || '',

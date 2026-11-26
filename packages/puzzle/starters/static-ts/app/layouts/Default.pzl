@@ -1,0 +1,34 @@
+<puzzle-view class="min-h-screen flex flex-col bg-gray-950 text-gray-100 antialiased">
+  <header class="border-b border-gray-800">
+    <div class="max-w-7xl mx-auto px-6 py-5 flex items-center justify-between gap-6">
+      <a href="/" class="text-lg font-semibold tracking-tight">Puzzle</a>
+      <nav class="flex gap-6 text-sm text-gray-400">
+        <a href="/" aria-current={ path === '/' && 'page' } class="hover:text-gray-100 aria-[current=page]:text-gray-100">Home</a>
+        <a href="/about" aria-current={ path === '/about' && 'page' } class="hover:text-gray-100 aria-[current=page]:text-gray-100">About</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="flex-1">
+    <div class="max-w-7xl mx-auto px-6 py-12">
+      <Outlet/>
+    </div>
+  </main>
+
+  <footer class="border-t border-gray-800">
+    <div class="max-w-7xl mx-auto px-6 py-6 text-sm text-gray-400">
+      Built with the Puzzle framework.
+    </div>
+  </footer>
+</puzzle-view>
+
+<script lang="ts">
+import { PuzzleView } from '@magic-spells/puzzle';
+
+export default class DefaultLayout extends PuzzleView {
+  // The page's own path, so the header can mark its link as the current page.
+  data(): { path?: string } {
+    return { path: this.route?.pathname };
+  }
+}
+</script>

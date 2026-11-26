@@ -263,3 +263,19 @@ func itoa(n int) string {
 	}
 	return string(digits)
 }
+
+// A production SPA build strips the D81 module stamp; every other build keeps
+// the app-relative path.
+func TestStripStamps(t *testing.T) {
+	root := writeApp(t, cacheFixture())
+	path := filepath.Join(root, "app", "views", "Home.pzl")
+	src := []byte(cacheFixture()["app/views/Home.pzl"])
+	pl := New(root)
+	if js := pl.transformPZL(path, src).js; !strings.Contains(js, ".__pzlModule = 'app/views/Home.pzl';") {
+		t.Errorf("default build lost the module stamp:\n%s", js)
+	}
+	pl.SetStripStamps(true)
+	if js := pl.transformPZL(path, src).js; strings.Contains(js, "__pzlModule") {
+		t.Errorf("stripped build still stamps:\n%s", js)
+	}
+}

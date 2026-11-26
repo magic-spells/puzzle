@@ -173,8 +173,7 @@ const codeControlled = `<Hamburger
 // in the view
 events = {
   setNavOpen: (next) => {
-    this.setData({ navOpen: next });
-    this.refresh();
+    this.setState({ navOpen: next });
   },
 };`;
 
@@ -191,10 +190,10 @@ const codeColor = `<!-- the bars paint in currentColor, inherited from the paren
 
 export default class HamburgerDoc extends PuzzleView {
   created() {
-    this.setData({ navOpen: false });
+    this.setState({ navOpen: false });
   }
 
-  data(params, props) {
+  data() {
     const state = this.getData();
     return {
       ...state,
@@ -224,8 +223,7 @@ export default class HamburgerDoc extends PuzzleView {
 
   events = {
     setNavOpen: (next) => {
-      this.setData({ navOpen: next });
-      this.refresh();
+      this.setState({ navOpen: next });
     },
   };
 }

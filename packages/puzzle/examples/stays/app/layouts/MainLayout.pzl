@@ -1,6 +1,6 @@
 <puzzle-view class="min-h-screen flex flex-col bg-bg text-fg">
   <!-- Sticky top header. Stays mounted across Home/Search/Listing/Account
-       navigations because they all reuse this layout — only <Slot/> swaps. -->
+       navigations because they all reuse this layout — only <Outlet/> swaps. -->
   <header class="sticky top-0 z-20 bg-bg border-b border-line">
     <div class="max-w-6xl mx-auto px-5 sm:px-8 h-16 flex items-center justify-between gap-4">
       <!-- Brand -->
@@ -33,7 +33,7 @@
        so long listing pages behave like a normal document. -->
   <main class="flex-1">
     <div class="max-w-6xl mx-auto px-5 sm:px-8 py-8">
-      <Slot/>
+      <Outlet/>
     </div>
   </main>
 
@@ -84,7 +84,7 @@ export default class MainLayout extends PuzzleView {
   // active-nav highlight recomputes from this.route (v1.15, D47) — the per-nav
   // route snapshot, correct inside the pre-commit gate. The section is the ROOT
   // route name (chain[0]): 'home' | 'search' | 'listing' | 'account'.
-  data(params, props) {
+  data() {
     const section = this.route.chain[0].name;
 
     // Finer-grained flags for the account links: `section === 'account'` alone
@@ -100,7 +100,7 @@ export default class MainLayout extends PuzzleView {
   }
 
   // Plays on entering/leaving this layout. Since the whole app shares MainLayout,
-  // view-only swaps animate their own <Slot/> content, not this shell
+  // view-only swaps animate their own <Outlet/> content, not this shell
   // (constellation/doc/DOC-SPEC.md §12).
   animations = {
     in:  { from: { opacity: 0, transform: 'scale(0.98)' }, to: { opacity: 1, transform: 'scale(1)' },    duration: 280, easing: 'ease-out' },

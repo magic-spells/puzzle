@@ -49,7 +49,7 @@ async function flush() {
 async function setup(render, initial, errorView = null) {
 	class Host extends PuzzleView {
 		created() {
-			this.setData(initial);
+			this.setState(initial);
 		}
 		render() {
 			return render(this, this.getData());
@@ -79,7 +79,7 @@ const liText = (ul) => [...ul.querySelectorAll('li')].map((li) => li.textContent
 /** Reorder through every ORDERS permutation, checking the rows each time. */
 async function reorder(host, ul, expected = (ids) => ids) {
 	for (const ids of ORDERS) {
-		host.setData(items(...ids));
+		host.setState(items(...ids));
 		await flush();
 		expect(liText(ul())).toEqual(expected(ids));
 	}
@@ -88,7 +88,7 @@ async function reorder(host, ul, expected = (ids) => ids) {
 /** Reorder through every ORDERS permutation without checking (rows pending). */
 async function shuffle(host) {
 	for (const ids of ORDERS) {
-		host.setData(items(...ids));
+		host.setState(items(...ids));
 		await flush();
 	}
 }
@@ -101,7 +101,7 @@ const rowList = (Row) => (view, d) =>
 function gatedRow({ skeleton = false } = {}) {
 	const gates = [];
 	class Row extends PuzzleView {
-		async data(params, props) {
+		async data({ props }) {
 			await new Promise((resolve) => gates.push(resolve));
 			return { id: props.item.id };
 		}
@@ -139,9 +139,9 @@ describe('keyed move guard: every paired row carries a node', () => {
 	it('a pending component row removed and re-added before its data() resolves', async () => {
 		const { Row, open } = gatedRow();
 		const { host, ul, errors } = await setup(rowList(Row), items('a', 'b', 'c'));
-		host.setData(items('a', 'c'));
+		host.setState(items('a', 'c'));
 		await flush();
-		host.setData(items('a', 'b', 'c'));
+		host.setState(items('a', 'b', 'c'));
 		await flush();
 		open();
 		await flush();
@@ -152,7 +152,7 @@ describe('keyed move guard: every paired row carries a node', () => {
 	it('component rows whose mount failed (placeholder left, no errorView)', async () => {
 		vi.spyOn(console, 'error').mockImplementation(() => {});
 		class Row extends PuzzleView {
-			data(params, props) {
+			data({ props }) {
 				if (props.item.id === 'b') throw new Error('row boom');
 				return { id: props.item.id };
 			}
@@ -174,7 +174,7 @@ describe('keyed move guard: every paired row carries a node', () => {
 			}
 		}
 		class Row extends PuzzleView {
-			data(params, props) {
+			data({ props }) {
 				if (props.item.id === 'b') throw new Error('b');
 				return { id: props.item.id };
 			}
@@ -191,7 +191,7 @@ describe('keyed move guard: every paired row carries a node', () => {
 	it('a component row destroyed out of band', async () => {
 		const rows = {};
 		class Row extends PuzzleView {
-			data(params, props) {
+			data({ props }) {
 				rows[props.item.id] = this;
 				return { id: props.item.id };
 			}
@@ -212,7 +212,7 @@ describe('keyed move guard: every paired row carries a node', () => {
 		vi.spyOn(console, 'error').mockImplementation(() => {});
 		// Row.pzl is `<Inner item={ item }/>` as its root; Inner fails for `b`.
 		class Inner extends PuzzleView {
-			data(params, props) {
+			data({ props }) {
 				if (props.item.id === 'b') throw new Error('inner boom');
 				return { id: props.item.id };
 			}
@@ -249,7 +249,7 @@ describe('keyed move guard: every paired row carries a node', () => {
 			{ ...items('a', 'b', 'c'), html: '<i>h</i>', flag: false }
 		);
 		for (const [i, ids] of ORDERS.entries()) {
-			host.setData({ ...items(...ids), html: `<i>h${i}</i>`, flag: i % 2 === 0 });
+			host.setState({ ...items(...ids), html: `<i>h${i}</i>`, flag: i % 2 === 0 });
 			await flush();
 			expect(liText(ul())).toEqual(ids);
 			expect(ul().querySelector('i').textContent).toBe(`h${i}`);

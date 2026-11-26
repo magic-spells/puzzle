@@ -1,6 +1,6 @@
 ---
 name: SplitText wrapper over split-text
-status: built
+status: verified
 framework: puzzle
 props:
   - name: split
@@ -32,13 +32,13 @@ props:
 connections:
   - DECISION-WRAP-WEB-COMPONENTS
   - DOC-REGISTRY
+verified_at: '2026-11-24T18:13:21.786Z'
+verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
 ---
 
-
-Single-file wrapper over `@magic-spells/split-text` 0.2.0 (0.8.0,
-feat/piece-split-text). A text reveal: the element splits its own text into words,
-graphemes or detected lines, masks each unit and animates it in on a CSS stagger.
-Nothing is ported — the splitter, the eight effect keyframes, the
+Single-file wrapper over `@magic-spells/split-text` 0.2.0. A text reveal: the element
+splits its own text into words, graphemes or detected lines, masks each unit and animates
+it in on a CSS stagger. Nothing is ported — the splitter, the eight effect keyframes, the
 IntersectionObserver trigger and the reduced-motion short-circuit are all upstream's.
 
 ## Replay is a token prop, not a method
@@ -57,9 +57,12 @@ It is also the ONLY way a changed attribute reaches the screen: the element decl
 
 ## Gotchas
 
+
 - **Content must be static.** At connect the element REPLACES its own text nodes with
   nested spans, so Puzzle's patcher no longer owns that subtree. Literal markup only;
-  changing the text means changing it AND bumping `play` in the same render. Inline tags
+  to show different text, remount the piece (branch it in an `{#if}` or key it in a
+  `{#for}`). Bumping `play` does NOT pick up new text: the patcher writes into the
+  detached text node and `split()` restores the old snapshot. Inline tags
   (`<em>`, `<a>`, `<br>`) survive the split. An `island` would express this, but the
   compiler forbids a composition marker inside one, so the rule is documentation.
 - **`style` is not a prop.** The element writes `--split-text-delay` / `-stagger` /
@@ -80,8 +83,7 @@ It is also the ONLY way a changed attribute reaches the screen: the element decl
 
 ## Verified
 
-`test/split-text-wrapper.test.js` guards the manifest, the registry.json mirror, the
-byte-identical demo copy, the dynamic import inside `mounted()`, the absent `style` /
-`aria-label` bindings and the edge-triggered `play`. Browser-smoked on the docs page:
-word / chars / lines splitting, replay, the eight effects behind one token, the
-scroll-triggered reveal and a reduced-motion context (revealed, 0 units).
+`test/split-text-wrapper.test.js` guards the manifest, the dynamic import inside
+`mounted()`, the absent `style` / `aria-label` bindings, the edge-triggered `play`, and the
+demo's `layer(components)` import of the stylesheet (the `@import` line `puzzle add piece`
+prints).

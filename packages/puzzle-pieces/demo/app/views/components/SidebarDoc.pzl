@@ -240,7 +240,8 @@ const codeHero = `const items = [
 <Sidebar items={ items } activePath="/reports/overview" label="Main">
   <div slot="header">…brand…</div>
   <div slot="footer">…user card…</div>
-</Sidebar>`;
+</Sidebar>
+// expose it to the template: data() { return { items }; }`;
 
 const codeCollapsed = `// collapsed is OPTIONAL-CONTROLLED: pass it and the parent owns it.
 // @collapse(next) fires from the rail's built-in edge toggle too —
@@ -248,7 +249,7 @@ const codeCollapsed = `// collapsed is OPTIONAL-CONTROLLED: pass it and the pare
 <Sidebar items={ items } activePath={ path }
          collapsed={ collapsed } @collapse={ setCollapsed } />
 
-events = { setCollapsed: (next) => this.setData('collapsed', next) };
+events = { setCollapsed: (next) => this.setState('collapsed', next) };
 
 // Collapsed = an icon-only w-[3.75rem] rail. Icons never move: rows keep px-3
 // in both states and the rail is exactly 2× the icon's center offset. Labels
@@ -270,7 +271,8 @@ const items = [
   },
 ];
 
-<Sidebar items={ items } activePath="/reports/traffic" />`;
+<Sidebar items={ items } activePath="/reports/traffic" />
+// expose it to the template: data() { return { items }; }`;
 
 const codeSlots = `// header pins to the top, footer to the bottom (mt-auto).
 // Both collapse cleanly when nothing is slotted.
@@ -281,10 +283,10 @@ const codeSlots = `// header pins to the top, footer to the bottom (mt-auto).
 
 export default class SidebarDoc extends PuzzleView {
   created() {
-    this.setData({ collapsed: false });
+    this.setState({ collapsed: false });
   }
 
-  data(params, props) {
+  data() {
     return {
       ...this.getData(),
       installCmd,
@@ -308,8 +310,8 @@ export default class SidebarDoc extends PuzzleView {
   }
 
   events = {
-    setCollapsed: (next) => this.setData('collapsed', next),
-    toggleCollapsed: () => this.setData('collapsed', !this.getData().collapsed),
+    setCollapsed: (next) => this.setState('collapsed', next),
+    toggleCollapsed: () => this.setState('collapsed', !this.getData().collapsed),
   };
 }
 </script>

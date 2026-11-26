@@ -8,8 +8,8 @@ connections:
   - FILE-BUILD
   - FLOW-BUILD
   - DECISION-D98-FIXTURES-MODULE-FLAG
-verified_at: '2026-08-24T21:11:50.859Z'
-verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
+verified_at: '2026-11-24T18:13:21.008Z'
+verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
 ---
 
 # D153 — All transient build directories live in a self-ignoring .puzzle/
@@ -40,6 +40,11 @@ writes into subdirectories don't move the root's mtime. Symlinked entries are
 skipped; a symlinked `.puzzle` disables the sweep, and `ensureWorkTmp` /
 `check.Generate` reject it with a diagnostic. The sweep also removes the legacy
 app-root names (`.dist-staging-*`, `dist.old-*`).
+
+`ensureWorkTmp` returns the symlink-resolved path. esbuild resolves symlinks in
+its working dir but not in its outdir, so an app reached through a symlinked
+path gets page URLs that point into `.puzzle/tmp` unless every outdir under it
+uses the resolved spelling.
 
 `dist/` itself is left alone: templates gitignore it, and excluding it
 otherwise would change Tailwind's sources unasked.

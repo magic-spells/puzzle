@@ -4,7 +4,6 @@
     trigger={ triggerMode }
     arrow={ arrowMode }
     open={ openState }
-    effect={ effect }
     @show={ onShow() }
     @hide={ onHide() }><Children/></DropdownPanel>
 </puzzle-view>
@@ -46,22 +45,20 @@ import DropdownPanel from '../DropdownPanel/index.js';
 //
 // Props
 //   trigger  'hover' | 'click' | 'both' (default), forwarded
-//   arrow    'flip' | 'static' | 'none' (default here — bar labels carry no
-//            glyph; pass 'flip' if you add an arrow hook to the Trigger)
+//   arrow    'flip' (default) | 'static' | 'none' — drawn only into the hook
+//            a variant="item" Trigger renders; bar labels carry no glyph
 //   open     optional-controlled and edge-triggered, forwarded
-//   effect   'fade' | 'slide' | 'scale' | 'blur' | 'swing' (effects sheet only)
 //   class    merged onto <dropdown-component>, after the load-bearing `block`
 //   @show / @hide  fired when THIS menu opens or closes; a nested submenu's
 //            events are filtered out by the base — see DropdownPanel.pzl.
 
 export default class Menu extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     return {
       rootClass: ['block', props.class].filter(Boolean).join(' '),
       triggerMode: props.trigger || 'both',
-      arrowMode: props.arrow || 'none',
+      arrowMode: props.arrow,
       openState: props.open,
-      effect: props.effect,
     };
   }
 

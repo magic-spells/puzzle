@@ -35,8 +35,8 @@ build it once with `npm run build:compiler` (repo root delegates into `packages/
 
 ## Invariants that are easy to break
 
-- **The protocol is the only interface.** `constellation/doc/DOC-SPEC.md` §55 in the
-  framework repo is the authority; `protocol/constants.js` transcribes it and
+- **The protocol is the only interface.** `../puzzle/constellation/doc/DOC-SPEC-BUILD.md`
+  §55 is the authority; `protocol/constants.js` transcribes it and
   `tests/protocol.test.js` pins the names literally. Never reach into framework
   internals from this repo, and never assume a version — `hello` negotiates.
 - **The message set grows ADDITIVELY; do not bump `PROTOCOL_VERSION` to add one.**
@@ -82,10 +82,10 @@ build it once with `npm run build:compiler` (repo root delegates into `packages/
   because the unimported `app/styles/pieces.css` predates the registry theme — ignore
   both here.
 - **Pieces `class` props lose to Tailwind's layer ordering.** Compaction needs `!`
-  (`py-8!`, `text-[9px]!`). Not author-order — stylesheet order.
+  (`py-8!`, `text-9!`). Not author-order — stylesheet order.
 - **Flex key/value rows: the value cell needs `flex-1 min-w-0`.** Flexbox's
   `min-width: auto` default makes truncation impossible, and an unbounded key starves the
-  value down to its ellipsis. The key is capped (`max-w-[40%] truncate`); full values live
+  value down to its ellipsis. The key is capped (`max-w-2/5 truncate`); full values live
   in `title`.
 - **The view tree is a FLAT keyed list.** Depth is `padding-left`; indent guides are a
   clipped repeating gradient, not DOM. Collapse and re-snapshot patch individual rows —

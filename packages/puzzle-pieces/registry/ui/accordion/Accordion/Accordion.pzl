@@ -62,9 +62,6 @@ import { PuzzleView } from '@magic-spells/puzzle';
 // STYLESHEET. Same one-line merge as Collapsible; add it once to your style entry:
 //   @import "@magic-spells/collapsible-content/css" layer(components);
 //
-// TODO: switch to ^1.2.0 once published — this repo's demo pins the package by
-// file: path while 1.2.0 is unreleased. Consumers install ^1.2.0.
-//
 // Props
 //   type          'single' (default) — one open at a time | 'multiple'. The SHAPE
 //                 OF `value` WINS where they disagree: an array value behaves as
@@ -172,7 +169,7 @@ export default class Accordion extends PuzzleView {
     });
   };
 
-  data(params, props) {
+  data({ props }) {
     return {
       rootClass: [ROOT, props.class].filter(Boolean).join(' '),
       // `false` is the compiler's omit sentinel — multiple mode renders no

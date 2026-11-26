@@ -5,10 +5,13 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
+	"github.com/magic-spells/puzzle/compiler/internal/build"
 	"github.com/magic-spells/puzzle/compiler/internal/config"
+	"github.com/magic-spells/puzzle/compiler/internal/version"
 )
 
 func doctorRequireNode(t *testing.T) {
@@ -47,6 +50,25 @@ func TestDoctorHealthy(t *testing.T) {
 	}
 	if !strings.Contains(buf.String(), "all checks passed") {
 		t.Errorf("expected a success summary, got:\n%s", buf.String())
+	}
+}
+
+// The node line holds the Node 24 floor (D200): an older Node fails naming its
+// version, 24 and later pass.
+func TestDoctorNodeFloor(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell-script node stub")
+	}
+	for ver, want := range map[string]doctorCheck{
+		"v22.11.0": {"node", doctorFail, "v22.11.0 — Puzzle needs Node 24 or later"},
+		"v24.0.0":  {"node", doctorPass, "v24.0.0"},
+	} {
+		bin := t.TempDir()
+		mustWriteExecutable(t, filepath.Join(bin, "node"), "#!/bin/sh\necho "+ver+"\n")
+		t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+		if got := doctorChecks(t.TempDir())[0]; got != want {
+			t.Errorf("node %s: got %+v, want %+v", ver, got, want)
+		}
 	}
 }
 
@@ -107,5 +129,51 @@ func TestDoctorCommandExitsNonZero(t *testing.T) {
 	err := doctorCmd.RunE(doctorCmd, []string{dir})
 	if err == nil {
 		t.Fatal("expected doctor to return an error when checks fail")
+	}
+}
+
+// fakeRuntime installs a stand-in runtime package at version v under dir and
+// returns its client-runtime/index.js, pinning this CLI to 0.10.0 for the test.
+func fakeRuntime(t *testing.T, dir, v string) string {
+	t.Helper()
+	previous := version.Version
+	version.Version = "0.10.0"
+	t.Cleanup(func() { version.Version = previous })
+	pkg := filepath.Join(dir, "node_modules", "@magic-spells", "puzzle")
+	mustWrite(t, filepath.Join(pkg, "package.json"), `{"name":"@magic-spells/puzzle","version":"`+v+`"}`)
+	mustWrite(t, filepath.Join(pkg, "client-runtime", "index.js"), "export {}\n")
+	return filepath.Join(pkg, "client-runtime", "index.js")
+}
+
+// The runtime row names the installed version, and a pair across a breaking
+// release fails with the message build and dev stop on. As in the build,
+// PUZZLE_RUNTIME wins over the working tree, and the working tree over an
+// install under an example.
+func TestDoctorRuntimeVersion(t *testing.T) {
+	for installed, status := range map[string]string{"0.10.1": doctorPass, "0.9.0": doctorFail} {
+		dir := healthyProject(t)
+		want := doctorCheck{"runtime package", status, "@magic-spells/puzzle " + installed + " installed"}
+		if _, err := build.PairInstalled(fakeRuntime(t, dir, installed)); err != nil {
+			want.Detail = err.Error()
+		}
+		checks := doctorChecks(dir)
+		if got := checks[len(checks)-1]; got != want {
+			t.Errorf("installed %s: got %+v, want %+v", installed, got, want)
+		}
+	}
+
+	repo := t.TempDir()
+	mustWrite(t, filepath.Join(repo, "package.json"), `{"name":"@magic-spells/puzzle"}`)
+	mustWrite(t, filepath.Join(repo, "client-runtime", "index.js"), "export {}\n")
+	example := filepath.Join(repo, "examples", "app")
+	fakeRuntime(t, example, "0.9.0")
+	checks := doctorChecks(example)
+	if got, want := checks[len(checks)-1], (doctorCheck{"runtime package", doctorPass, "@magic-spells/puzzle (in-repo runtime)"}); got != want {
+		t.Errorf("in-repo app: got %+v, want %+v", got, want)
+	}
+	t.Setenv(build.RuntimeEnvVar, "/checkout/client-runtime/index.js")
+	checks = doctorChecks(example)
+	if got, want := checks[len(checks)-1], (doctorCheck{"runtime package", doctorPass, build.RuntimeEnvVar + "=/checkout/client-runtime/index.js"}); got != want {
+		t.Errorf("PUZZLE_RUNTIME set: got %+v, want %+v", got, want)
 	}
 }

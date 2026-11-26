@@ -32,7 +32,7 @@ import Collapsible from '../Collapsible/index.js';
 const TRIGGER = 'px-4 py-3';
 
 export default class Trigger extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     return {
       isDisabled: props.disabled ? true : false,
       triggerClass: [TRIGGER, props.class].filter(Boolean).join(' '),

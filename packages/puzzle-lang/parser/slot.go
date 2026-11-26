@@ -10,19 +10,23 @@ import (
 // v1.21/D53; capitalized grammar v1.64/D134; fallback bodies D141). See
 // [[DOC-SPEC]] §24 and [[DECISION-D141-MARKER-FALLBACK-BODIES]].
 //
-// Two reserved tags have three roles:
+// Three reserved tags, one role each (D199):
 //
 //   <Children item={ item }>…fallback…</Children> — the DEFAULT marker
 //   (call-site content), optionally handing named values to a Snippet.
 //
-//   <Slot>…fallback…</Slot> — the same unnamed marker used as the ROUTER OUTLET
-//   (D30).
+//   <Outlet>…fallback…</Outlet> — the ROUTER OUTLET (D30): where a layout or
+//   a parent view hosts the routed child. It fills the same default bucket as
+//   <Children/> and compiles to the same code; the spelling says that the
+//   router, not a call site, fills it. It takes no attributes.
 //
 //   <Slot name="x" item={ item }>…fallback…</Slot> — a NAMED slot. `name` is
 //   static, non-empty, and unique per render path; "default" and "children" are
 //   reserved and steer to <Children/>. Other valued attrs hand data to a scoped
 //   Snippet. Local shape checks run in slotMarkerFromAttrs; the per-render-path
-//   uniqueness check runs in validateSlots.
+//   uniqueness check runs in validateSlots, which also rejects a <Slot> with no
+//   name: before 0.10 that spelling was the router outlet, and it now steers to
+//   <Outlet/> (or <Children/> in a component).
 //
 //   Call site (<Card><h2 slot="header">…</h2></Card>): the parser's job is
 //   VALIDATION ONLY — a static `slot` attribute rides through codegen unchanged
@@ -52,6 +56,24 @@ func childrenMarkerAttrs(attrs []Attr, file string) ([]Attr, *ParseError) {
 	return args, nil
 }
 
+// outletMarkerAttrs validates an <Outlet>'s attributes: it takes none (D199).
+// The router fills the outlet with the current page, so a name has nothing to
+// select and handed values have no snippet to reach. `ref` and `name` get
+// messages of their own, because both are easy guesses.
+func outletMarkerAttrs(attrs []Attr, file string) *ParseError {
+	for _, a := range attrs {
+		switch attrNameOf(a) {
+		case "ref":
+			return errAt(file, attrPos(a), "ref cannot be placed on an <Outlet> — an outlet is a render target, not a real element")
+		case "name":
+			return errAt(file, attrPos(a), `<Outlet> takes no name — a layout has one outlet for the routed page; a named position the parent fills is <Slot name="…"/>`)
+		default:
+			return errAt(file, attrPos(a), "<Outlet> takes no attributes — the router fills it with the current page")
+		}
+	}
+	return nil
+}
+
 // portalMarkerAttrs validates a <Portal>'s attributes: v1 takes NONE. `to`/
 // `name` are reserved with a specific message so user-placed named outlets can
 // land later without breaking apps written against this grammar; `ref` gets the
@@ -70,9 +92,11 @@ func portalMarkerAttrs(attrs []Attr, pos Position, file string) *ParseError {
 	return nil
 }
 
-// slotMarkerFromAttrs resolves <Slot/>'s role by attributes. No attrs means the
-// unnamed router outlet/default marker; one static name declares a named slot.
-// Every other shape is a positioned compile error.
+// slotMarkerFromAttrs resolves a <Slot>'s attributes. One static name declares
+// a named slot; a <Slot> with no name comes back with an empty name, and
+// validateSlots rejects it (D199) so a host that runs its own slot rules can
+// still decide for itself. Every other bad shape is a positioned compile error
+// here.
 func slotMarkerFromAttrs(attrs []Attr, pos Position, file string) (name string, args []Attr, perr *ParseError) {
 	hasName := false
 	for _, a := range attrs {
@@ -191,7 +215,7 @@ func validateSlots(root *Element, file string) *ParseError {
 // walkSlots descends the node list collecting named-slot declarations (rejecting
 // duplicates via seen) and validating each component's direct-child slot usage.
 // inCallSite is true while walking a component invocation's subtree (call-site
-// content): only the default marker (<Children/>/<Slot/>) may forward through a
+// content): only the default marker (<Children/>/<Outlet/>) may forward through a
 // component (v1.38, D71) — a NAMED slot there has no defined fill source (the
 // router fills the default slot only, and named forwarding semantics are
 // deliberately unspecified), so it is a positioned compile error instead of a
@@ -200,16 +224,23 @@ func walkSlots(nodes []Node, file string, seen map[string]Position, inCallSite b
 	for _, n := range nodes {
 		switch node := n.(type) {
 		case *Slot:
+			if node.Name == "" && node.Marker == "Slot" {
+				// before 0.10 a bare <Slot/> was the router outlet; it is
+				// <Outlet/> now, so a <Slot> always has a name (D199).
+				pe := errAt(file, node.Pos, "<Slot> needs a name since 0.10 (D199) — the router outlet is <Outlet/>, call-site content is <Children/>, and a named position is <Slot name=\"…\"/>")
+				pe.Note = bareSlotNote
+				return pe
+			}
 			if node.Name != "" {
 				if inCallSite {
-					return errAt(file, node.Pos, "<Slot name=%q> inside a component invocation is not supported — only the bare default <Children/> or <Slot/> forwards through a component", node.Name)
+					return errAt(file, node.Pos, "<Slot name=%q> inside a component invocation is not supported — only the default <Children/> or <Outlet/> forwards through a component", node.Name)
 				}
 				if prev, dup := seen[node.Name]; dup {
 					return errAt(file, node.Pos, "duplicate slot name %q — already declared at %d:%d", node.Name, prev.Line, prev.Col)
 				}
 				seen[node.Name] = node.Pos
 			} else {
-				// The default marker (<Children/> or <Slot/>, D134) is unique per
+				// The default marker (<Children/> or <Outlet/>, D134/D199) is unique per
 				// render path too (D173 V13 — exclusive {#if}/{#case} branches are
 				// separate paths, see walkBranches): distinct AST declarations on one
 				// path share one reconciliation namespace even when they hand args to
@@ -219,7 +250,7 @@ func walkSlots(nodes []Node, file string, seen map[string]Position, inCallSite b
 				// and key under "default" (a reserved, unreachable name —
 				// slotMarkerFromAttrs rejects it).
 				if prev, dup := seen["default"]; dup {
-					return errAt(file, node.Pos, "duplicate default marker (<Children/>/<Slot/>) — already declared at %d:%d", prev.Line, prev.Col)
+					return errAt(file, node.Pos, "duplicate default marker (<Children/>/<Outlet/>) — already declared at %d:%d", prev.Line, prev.Col)
 				}
 				seen["default"] = node.Pos
 			}
@@ -584,6 +615,17 @@ const slotInControlFlowNote = `slot routing reads only the component's DIRECT ch
         {:else}
           <Card/>
         {/if}`
+
+// bareSlotNote spells out the 0.10 split of the old unnamed <Slot/> (D199):
+// which tag replaces it depends on who filled the position, and the codemod
+// makes the same choice by the kind of file it rewrites.
+const bareSlotNote = `which tag replaces <Slot/> depends on who fills the position:
+
+    a layout or a view that hosts a child route   →  <Outlet/>
+    a component filled by what its caller writes  →  <Children/>
+
+npx puzzle check --fix makes this change for you: <Outlet/> in app/layouts and
+app/views, <Children/> in app/components.`
 
 // controlFlowBranches returns the child-node lists of a control-flow node's
 // branches ({#if}/{#unless} then+else, {#for} body, {#case} clauses+else).

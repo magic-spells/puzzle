@@ -36,7 +36,7 @@ import Avatar from './Avatar.pzl';
 import FollowButton from './FollowButton.pzl';
 
 export default class WhoToFollow extends PuzzleView {
-  data(params, props) {
+  data() {
     // Suggest accounts I'm not following (and not me), most-followed first,
     // capped at three. Filtering/sorting live here (SPEC §8), not the template.
     const users = this.ctx.store

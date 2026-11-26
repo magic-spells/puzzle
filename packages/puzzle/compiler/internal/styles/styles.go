@@ -1,9 +1,9 @@
 // Package styles owns the CSS side of a build: running the Tailwind pipeline
-// (D12/D26) and composing the final dist/styles.css.
+// (D12/D26) and composing the final stylesheet.
 //
 // Composition (SPEC §3): the final stylesheet is the Tailwind output (when the
 // pipeline is enabled) followed by the collected <style> blocks. index.html
-// links a single /styles.css, so both layers must land in one file with the
+// links a single stylesheet, so both layers must land in one file with the
 // Tailwind utilities first and hand-written global CSS appended after.
 //
 // The Tailwind invocation is behind the Runner interface so builds can be
@@ -12,13 +12,14 @@
 //
 // # What Tailwind v4 scans, and how the compiler stays out of its way
 //
-// Verified against @tailwindcss/cli 4.3.3. When the input CSS does not pin its
-// own sources — no `@import "tailwindcss" source(…)`, no `@source` directives —
-// the CLI registers ONE source root of `**/*` based at `--cwd`, which defaults
-// to process.cwd(). Both runners set the child's working directory to the app
-// root, so Tailwind walks the whole app root. The walk honors .gitignore, and
-// there is no CLI flag for excluding a path: negative sources exist only as
-// `@source not "…"` INSIDE the CSS, which is the user's file.
+// Verified against @tailwindcss/cli 4.3.3. Unless the input CSS moves or turns
+// off its root with `@import "tailwindcss" source(…)`, the CLI registers ONE
+// source root of `**/*` based at `--cwd`, which defaults to process.cwd(). An
+// `@source` directive adds to that root; it does not replace it. Both runners
+// set the child's working directory to the app root, so Tailwind walks the
+// whole app root. The walk honors .gitignore, and there is no CLI flag for
+// excluding a path: negative sources exist only as `@source not "…"` INSIDE
+// the CSS, which is the user's file.
 //
 // So the only lever the compiler has over that scan is what is gitignored, and
 // the only tree it may take is its own. That is why every transient build
@@ -44,6 +45,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/evanw/esbuild/pkg/api"
 )
 
 // Runner produces the Tailwind CSS layer for an app. The real implementation
@@ -69,7 +72,7 @@ type RunOptions struct {
 	CLIs []ResolvedCLI
 }
 
-// Compose builds the final dist/styles.css contents: the Tailwind layer first,
+// Compose builds the final stylesheet's contents: the Tailwind layer first,
 // then the collected <style> blocks. Either part may be empty. A single
 // trailing newline is guaranteed when there is any content.
 func Compose(tailwindCSS, collected string) string {
@@ -90,6 +93,21 @@ func Compose(tailwindCSS, collected string) string {
 		b.WriteString("\n")
 	}
 	return b.String()
+}
+
+// Minify minifies the collected <style> blocks for a production build. esbuild
+// is given no browser targets, so it keeps vendor-prefixed duplicates such as
+// -webkit-backdrop-filter that a targetless lightningcss pass would drop.
+func Minify(css string) (string, error) {
+	result := api.Transform(css, api.TransformOptions{
+		Loader:           api.LoaderCSS,
+		MinifyWhitespace: true,
+		MinifySyntax:     true,
+	})
+	if len(result.Errors) > 0 {
+		return "", fmt.Errorf("minifying component <style> blocks: %s", result.Errors[0].Text)
+	}
+	return string(result.Code), nil
 }
 
 // NpxRunner runs the Tailwind CLI once per build. It resolves the CLI directly

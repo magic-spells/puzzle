@@ -10,7 +10,7 @@
 // and the runtime dispatch agree.
 //
 // Three write arms, chosen at write time from the target: null → local state
-// (setData + refresh), a duck-typed record (update + string _type) →
+// (setState + refresh), a duck-typed record (update + string _type) →
 // PuzzleModel.update(), anything else → direct property mutation + refresh.
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { mountView, measureRenders, settled, type } from '../client-runtime/testing/index.js';
@@ -81,7 +81,7 @@ describe('implicit binding — local-state arm', () => {
 		await settled();
 
 		expect(view.instance.getData().draft).toBe('al');
-		// data() re-ran: only 'alpha' contains 'al'. A bare setData would have left
+		// data() re-ran: only 'alpha' contains 'al'. A bare setState would have left
 		// this at 4 — the search-box case the refresh() exists for.
 		expect(view.find('p.matches').textContent).toBe('1');
 	});
@@ -96,7 +96,7 @@ describe('implicit binding — local-state arm', () => {
 			await settled();
 		});
 
-		// setData arms a frame, the synchronous refresh() renders and disarms it.
+		// setState arms a frame, the synchronous refresh() renders and disarms it.
 		expect(report.renders).toBe(1);
 		expect(view.instance.getData().draft).toBe('be');
 	});
@@ -330,7 +330,7 @@ describe('implicit binding — a primitive bind root', () => {
 describe('implicit binding — record arm', () => {
 	it('writes through update(), re-renders a subscribed sibling, and persists', async () => {
 		const storage = makeStorage();
-		const store = todoStore({ storage, storageKey: 'binding-test' });
+		const store = todoStore({ storage });
 		const view = await mount(RecordForm, { store });
 		const sibling = await mount(TodoTitles, { store });
 		expect(sibling.find('.titles').textContent).toBe('wash|fold');
@@ -557,7 +557,7 @@ describe('implicit binding — rebuilt member-target diagnostic', () => {
 });
 
 describe('implicit binding — the layer-clobber diagnostic', () => {
-	// Hazard #4: a bare bind writes the LOCAL layer, but #recompose composes
+	// Hazard #4: a bare bind writes the STATE layer, but #recompose composes
 	// { ...local, ...model } with the model LAST — so a key data() also derives
 	// from a record is silently reverted on the next commit. Dev-only.
 	const clobberWarnings = (spy) =>
@@ -597,7 +597,7 @@ describe('implicit binding — the layer-clobber diagnostic', () => {
 	});
 
 	it('never warns for the echo idiom, where data() returns its own bound local back', async () => {
-		// `note` IS present in the model layer — a naive `key in model` check would
+		// `note` IS present in the derived layer — a naive `key in model` check would
 		// false-positive here. The composed value equals what the bind wrote, so
 		// nothing was reverted and nothing is reported.
 		const store = todoStore();

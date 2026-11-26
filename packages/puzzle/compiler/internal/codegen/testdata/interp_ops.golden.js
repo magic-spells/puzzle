@@ -27,4 +27,3 @@ InterpOps.prototype.render = function () {
     ]),
   ]);
 };
-InterpOps.__pzlModule = 'interp_ops.pzl';

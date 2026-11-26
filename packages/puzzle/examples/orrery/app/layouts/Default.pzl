@@ -19,7 +19,7 @@
 
   <main class="relative flex-1 pb-16">
     <div class="max-w-6xl mx-auto px-6">
-      <Slot/>
+      <Outlet/>
     </div>
   </main>
 
@@ -36,7 +36,7 @@
 import { PuzzleView } from '@magic-spells/puzzle';
 
 export default class DefaultLayout extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     return {
       title: props.title || 'Puzzle Orrery'
     };

@@ -7,7 +7,9 @@ running dev build.
 Puzzle ships a **dev-only runtime bridge**; this extension ships the page hook that
 bridge registers into. There are no production bytes on either side: a production build
 compiles the bridge away entirely, and a page with no bridge simply reports
-"No Puzzle app detected".
+"No Puzzle app detected". Pages built with `output: 'static'` never load the
+bridge, so they report no app even under `puzzle dev`; SPA and
+`output: 'hybrid'` apps are inspectable.
 
 **Requires Puzzle 0.7.0+** running a **development** build (`puzzle dev`) — devtools
 releases in lockstep with the framework from the `magic-spells/puzzle` monorepo
@@ -19,7 +21,7 @@ is compiled out of production bundles, so a production page correctly reports no
 | Panel | What it shows |
 | ----- | ------------- |
 | **Connection** | Handshake state, framework/protocol versions, the last route commit, and a live ring of recent protocol messages. |
-| **Views** | Elements-style master/detail over the live component tree. Expand/collapse per node, hover to highlight the view on the page, per-row `log:view` (binds `$p`), and a re-render pulse on rows a `flush` notified. Selecting a row inspects it: params, props, the view's store subscriptions, and **the two state layers side by side** — the `data()` model layer and the `setData()` local layer, which is the split the panel exists for. |
+| **Views** | Elements-style master/detail over the live component tree. Expand/collapse per node, hover to highlight the view on the page, per-row `log:view` (binds `$p`), and a re-render pulse on rows a `flush` notified. Selecting a row inspects it: params, props, what its ancestors `share()`, the view's store subscriptions, and **the two data layers side by side** — the `data()` derived layer and the `setState()` state layer, which is the split the panel exists for. |
 | **Store** | Record types with counts, a compact table of the active type (pk first, `_synced` as a badge), and a detail card that edits primitive fields through `edit:record` — applied by the runtime with the app's real `record.update()`, so §20 validation failures come back and render inline. An open card also keeps a per-flush change history (`field: old → new`). |
 | **Subscriptions** | The store's reverse index as a panel: subscription keys grouped into collections (`todo`) and records (`todo t2`), and for the selected key, **every view that re-renders when it changes** — the blast radius of a write. Click a subscriber to land on it in Views. Subscriptions a **prepared, uncommitted** `data()` run added are marked `pending` rather than counted as ordinary listeners — during an open navigation a reused ancestor really is subscribed to both routes' keys, and the mark is what keeps that from reading as a leak. This is the panel other frameworks structurally cannot build: it is a lookup, not an inference. |
 | **Router** | The live route card — pathname, route pattern, params, the frozen query snapshot — over the matched chain root→leaf, and a navigation history feed rebuilt from the event ring. |
@@ -87,7 +89,7 @@ window.__PUZZLE_DEVTOOLS_HOOK__ = {
   hookVersion: 1,        // shape of THIS object
   protocolVersion: 1,    // wire protocol it expects
   emit(message),         // runtime → extension; buffered until the panel attaches
-  onRequest(handler),    // handler(message) => payload; returns an unsubscribe fn
+  onRequest(handler),    // handler(message) => payload; a later call replaces it
 };
 ```
 
@@ -104,7 +106,7 @@ Every message, both directions, is:
 ```
 
 Protocol **v1**. The authority is the framework spec —
-[`constellation/doc/DOC-SPEC.md` §55, "The DevTools bridge and wire protocol"](https://github.com/magic-spells/puzzle)
+[`packages/puzzle/constellation/doc/DOC-SPEC-BUILD.md` §55, "The DevTools bridge and wire protocol"](../puzzle/constellation/doc/DOC-SPEC-BUILD.md)
 — and `protocol/constants.js` transcribes it. `tests/protocol.test.js` asserts the name
 lists literally, so a rename upstream breaks this repo's suite instead of silently
 breaking the panel.
@@ -208,7 +210,7 @@ What it does on load:
 Expected panel behavior: the Connection view flips from "No Puzzle app detected" to
 "Puzzle app connected", the message list fills, and **Probe snapshot:views** answers
 "1 root(s), 6 view(s)". The **Views** panel shows the tree with FixtureRow #3's
-`completed` differing between the two state layers; the **Store** panel lists `todo` and
+`completed` differing between the derived and state layers; the **Store** panel lists `todo` and
 `user`, and typing an empty `text` into a todo and pressing Apply renders the validation
 message inline.
 

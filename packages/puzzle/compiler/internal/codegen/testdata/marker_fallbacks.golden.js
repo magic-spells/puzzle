@@ -53,4 +53,3 @@ MarkerFallbacks.prototype.render = function () {
     new ViewNode(SLOT_TAG, { name: 'empty' }),
   ]);
 };
-MarkerFallbacks.__pzlModule = 'marker_fallbacks.pzl';

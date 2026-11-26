@@ -5,7 +5,7 @@
 // and its SPA twin tests/fixtures/locale-prefix-spa with the compiler. Each test
 // loads the HTML file a host would serve for a URL into jsdom, runs the page's
 // inline first-visit redirect script the way the browser would (in the head,
-// before the app), then imports the built dist/app.js — which mounts itself —
+// before the app), then imports the built dist/app[-<hash>].js — which mounts itself —
 // with fetch reading the built locale files.
 //
 // How the two redirects coexist: the prerendered default-locale pages carry the
@@ -71,7 +71,10 @@ async function open(dist, file, url, { referrer = '', languages, stored } = {}) 
 	loc = spyLocation();
 	const inline = INLINE_RE.exec(html);
 	if (inline) new Function('window', inline[1])({ location, document, localStorage, navigator });
-	const { default: app } = await import(pathToFileURL(path.join(dist, 'app.js')).href + '?run=' + ++runs);
+	// Production entry names carry a content hash by default (build.hashNames),
+	// so the entry is the one this page's own module tag loads.
+	const entry = /<script type="module"[^>]*\bsrc="\/?([^"?#]+)/.exec(html)[1];
+	const { default: app } = await import(pathToFileURL(path.join(dist, entry)).href + '?run=' + ++runs);
 	apps.push(app);
 	return app;
 }

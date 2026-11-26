@@ -26,7 +26,7 @@ func TestLibrarySignaturesMatchCodegen(t *testing.T) {
 	if got, want := strings.Join(names, ","), strings.Join(codegen.LibraryFunctionNames, ","); got != want {
 		t.Fatalf("signature table\n  %s\nlibrary\n  %s", got, want)
 	}
-	shim := shimSource(TypeScriptVersion{Major: 5, Minor: 2})
+	shim := shimSource()
 	if strings.Contains(shim, "__LIBRARY_SIGNATURES__") {
 		t.Fatal("the shim placeholder was not filled")
 	}
@@ -99,61 +99,43 @@ func TestLibrarySignaturesMatchPublicTypes(t *testing.T) {
 }
 
 // The method table's lib files are referenced whatever the app's target, and
-// es2023.array from TypeScript 5.0, the first to ship it: on 5.0 and 5.1 it
-// types findLast (toSorted and toReversed join it in 5.2, and no reference
-// can add them earlier).
+// they lead the shim.
 func TestShimReferencesLanguageLibs(t *testing.T) {
-	for _, tc := range []struct {
-		ts     TypeScriptVersion
-		es2023 bool
-	}{
-		{TypeScriptVersion{4, 9}, false},
-		{TypeScriptVersion{5, 0}, true},
-		{TypeScriptVersion{5, 1}, true},
-		{TypeScriptVersion{5, 2}, true},
-		{TypeScriptVersion{5, 9}, true},
-		{TypeScriptVersion{7, 0}, true},
-	} {
-		shim := shimSource(tc.ts)
-		for _, lib := range []string{"es2022.array", "es2022.string", "es2021.string", "es2019.array"} {
-			if !strings.Contains(shim, `/// <reference lib="`+lib+`" />`) {
-				t.Errorf("TypeScript %+v: shim is missing lib %s", tc.ts, lib)
-			}
+	shim := shimSource()
+	for _, lib := range []string{"es2023.array", "es2022.array", "es2022.string", "es2021.string", "es2019.array"} {
+		if !strings.Contains(shim, `/// <reference lib="`+lib+`" />`) {
+			t.Errorf("shim is missing lib %s", lib)
 		}
-		if got := strings.Contains(shim, `/// <reference lib="es2023.array" />`); got != tc.es2023 {
-			t.Errorf("TypeScript %+v: es2023.array referenced = %v, want %v", tc.ts, got, tc.es2023)
-		}
-		if !strings.HasPrefix(shim, "/// <reference types=\"@magic-spells/puzzle/puzzle-env\" />\n/// <reference lib=") {
-			t.Errorf("TypeScript %+v: the lib references must lead the file:\n%s", tc.ts, shim[:200])
-		}
+	}
+	if !strings.HasPrefix(shim, "/// <reference types=\"@magic-spells/puzzle/puzzle-env\" />\n/// <reference lib=") {
+		t.Errorf("the lib references must lead the file:\n%s", shim[:200])
 	}
 }
 
-func TestParseTypeScriptVersion(t *testing.T) {
+// TypeScript 7 is the floor: an older compiler is refused with the version it
+// reported and the install that fixes it.
+func TestCheckTypeScriptVersion(t *testing.T) {
 	for _, tc := range []struct {
 		output string
-		want   TypeScriptVersion
-		ok     bool
+		want   string // "" accepts
 	}{
-		{"Version 5.7.3\n", TypeScriptVersion{5, 7}, true},
-		{"Version 5.2.2", TypeScriptVersion{5, 2}, true},
-		{"Version 5.1.6", TypeScriptVersion{5, 1}, true},
-		{"Version 4.9.5", TypeScriptVersion{4, 9}, true},
-		{"Version 7.0.2", TypeScriptVersion{7, 0}, true},
-		{"Version 5.3.0-beta", TypeScriptVersion{5, 3}, true},
-		{"Version 5.10.1", TypeScriptVersion{5, 10}, true},
-		{"Version 5", TypeScriptVersion{}, false},
-		{"tsc: command not found", TypeScriptVersion{}, false},
-		{"", TypeScriptVersion{}, false},
+		{"Version 7.0.2\n", ""},
+		{"Version 7.1.0-beta", ""},
+		{"Version 8.0.0", ""},
+		{"Version 6.0.3", "puzzle check needs TypeScript 7 or later, found 6.0.3: npm install -D typescript@latest"},
+		{"Version 5.9.2\n", "puzzle check needs TypeScript 7 or later, found 5.9.2: npm install -D typescript@latest"},
+		{"Version 7", `read TypeScript version: unexpected output "Version 7"`},
+		{"tsc: command not found", `read TypeScript version: unexpected output "tsc: command not found"`},
+		{"", `read TypeScript version: unexpected output ""`},
 	} {
-		got, err := parseTypeScriptVersion(tc.output)
-		if (err == nil) != tc.ok || got != tc.want {
-			t.Errorf("parseTypeScriptVersion(%q) = %+v, %v; want %+v, ok %v", tc.output, got, err, tc.want, tc.ok)
+		err := checkTypeScriptVersion(tc.output)
+		got := ""
+		if err != nil {
+			got = err.Error()
 		}
-	}
-	if !(TypeScriptVersion{5, 10}).AtLeast(TypeScriptVersion{5, 2}) || (TypeScriptVersion{5, 1}).AtLeast(TypeScriptVersion{5, 2}) ||
-		!(TypeScriptVersion{6, 0}).AtLeast(TypeScriptVersion{5, 2}) {
-		t.Error("AtLeast compares major, then minor")
+		if got != tc.want {
+			t.Errorf("checkTypeScriptVersion(%q) = %q, want %q", tc.output, got, tc.want)
+		}
 	}
 }
 
@@ -229,7 +211,7 @@ export default class Home extends PuzzleView {}
 		"void (Math.round(__d.n));",
 		"void (__puzzle_check_list(__d.items).filter((t) => !t.done).length);",
 		"void (__d.tags?.at(0) ?? 'none');",
-		"void (Object.keys(__d.counts).length);",
+		"void (Object.keys(__puzzle_check_list(__d.counts)).length);",
 		`void (__puzzle_app_fn("myFormat")(__d.name));`,
 		"= (event) => this.events.save(__puzzle_fn.t('saved'), event.target.value);",
 	} {
@@ -244,8 +226,8 @@ func TestExpressionLanguageTypeChecksWithLiveTSC(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, "tsconfig.json"), []byte(`{"compilerOptions":{"strict":true}}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	// Untyped data() values are any, so an arrow over one must not be an
-	// implicit-any error; a typed field keeps its own checking.
+	// Template data is any, so an arrow over it must not be an implicit-any
+	// error; a typed value (a library result, Object.keys) keeps its own checking.
 	writeLiveView(t, root, `<puzzle-view>
   <p>{ name.trim().toUpperCase() } { currency(price, '$', 2) } { truncate(title, 20) }</p>
   <p>{ list.filter(x => x.on).map((x, i) => i + x.n).join(', ') } { list.reduce((s, x) => s + x.n, 0) }</p>
@@ -276,9 +258,9 @@ export default class Home extends PuzzleView {
 		name, template, at, message string
 	}{
 		// A method from the table that the receiver's type does not have.
-		{"method on the wrong type", "{ n.trim() }", "trim", "Property 'trim' does not exist on type 'number'."},
+		{"method on the wrong type", "{ round(n).trim() }", "trim", "Property 'trim' does not exist on type 'number'."},
 		// An arrow over a typed list is typed: its parameter is a string.
-		{"typed arrow parameter", "{ tags.filter(t => t.done) }", "done", "Property 'done' does not exist on type 'string'."},
+		{"typed arrow parameter", "{ Object.keys(counts).filter(k => k.done) }", "done", "Property 'done' does not exist on type 'string'."},
 		// A standard function's signature.
 		{"library signature", "{ currency(price, 2) }", "2", "Argument of type 'number' is not assignable to parameter of type 'string'."},
 	} {
@@ -286,7 +268,7 @@ export default class Home extends PuzzleView {
 			source := `<puzzle-view><p>` + tc.template + `</p></puzzle-view>
 <script lang="ts">
 import { PuzzleView } from '@magic-spells/puzzle';
-export default class Home extends PuzzleView { n = 1; price = 3; tags: string[] = []; }
+export default class Home extends PuzzleView { n = 1; price = 3; counts = {}; }
 </script>
 `
 			writeLiveView(t, root, source)

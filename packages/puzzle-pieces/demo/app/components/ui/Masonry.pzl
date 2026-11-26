@@ -1,6 +1,6 @@
 <puzzle-view>
   <div class={ rootClass }>
-    <Slot/>
+    <Children/>
   </div>
 </puzzle-view>
 
@@ -141,7 +141,7 @@ function gapKey(gap) {
 }
 
 export default class Masonry extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     const cols = props.columns != null ? props.columns : DEFAULT_COLUMNS;
     const g = gapKey(props.gap);
     return {

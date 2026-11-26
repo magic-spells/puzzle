@@ -11,7 +11,7 @@ A complete todo application built with the Puzzle framework, demonstrating all c
 - ✅ Real-time todo statistics
 - ✅ Responsive design with beautiful UI
 - ✅ Fixture data for development (`puzzle dev --fixtures`, from `app/fixtures.js`)
-- 🔜 Keyboard shortcuts (Ctrl+N to focus input) — **planned, not in v1** (app-level global events are deferred, see [SPEC.md](../../constellation/doc/DOC-SPEC.md))
+- Keyboard shortcuts (Ctrl+N to focus input) are not built. App-level global `events` are rejected ([SPEC.md](../../constellation/doc/DOC-SPEC.md), Deferred features); a shortcut is a view-scoped `keydown` listener added in `mounted()` and removed in `destroyed()`.
 
 ## Architecture Highlights
 
@@ -32,7 +32,7 @@ A complete todo application built with the Puzzle framework, demonstrating all c
 
 ### 1. Reactive Data Loading
 ```javascript
-data(params, props) {
+data() {
   const todos = this.ctx.store.findMany('todo'); // auto-subscribes
   return {
     todos,
@@ -51,7 +51,7 @@ events = {
     const text = this.getData().newTodoText.trim();
     if (text) {
       this.ctx.store.createRecord('todo', { text });
-      this.setData('newTodoText', '');
+      this.setState('newTodoText', '');
     }
   }
 };
@@ -79,12 +79,12 @@ bind — the handler owns the write instead.
 
 ### 4. Display Functions
 `datetime(todo.createdAt, 'short')` above is a standard display function, called
-by name. Your own register through the `formatters` config in app.js and are
+by name. Your own register through the `functions` config in app.js and are
 called the same way:
 ```javascript
 // A function of your own in app.js (this example registers none),
 // called in a template as { todoDate(todo.createdAt) }
-formatters: {
+functions: {
   todoDate: (date) => formatRelativeDate(date)
 }
 ```

@@ -19,7 +19,7 @@
             disabled={ item.disabled }
             @focus={ focusItem(item.value) }
             @keydown={ handleKey(item.value, event) }
-            @click={ activate(item.value, event) }>
+            @click={ activate(item.value) }>
             {#if item.icon}
               <svg class={ iconClass } viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <path d={ item.icon }/>
@@ -129,17 +129,17 @@ const ITEM_BASE =
   'inline-flex items-center justify-center gap-2 whitespace-nowrap select-none ' +
   'h-8 min-w-8 px-2 rounded-md text-sm font-medium cursor-pointer transition-colors ' +
   'focus-visible:outline-2 focus-visible:outline-offset-2 outline-ring focus-visible:outline-ring ' +
-  'disabled:opacity-50 disabled:pointer-events-none';
+  'disabled:opacity-50 disabled:cursor-not-allowed';
 
 // Pressed toggles read as depressed (bg-faint text-ink, matching Toggle/ToggleGroup);
 // buttons and un-pressed toggles share the ghost treatment.
-const OFF = 'bg-transparent text-body hover:bg-surface-sunken hover:text-ink';
-const ON = 'bg-faint text-ink hover:bg-faint';
+const OFF = 'bg-transparent text-body not-disabled:hover:bg-surface-sunken not-disabled:hover:text-ink';
+const ON = 'bg-faint text-ink not-disabled:hover:bg-faint';
 
 const ICON_CLASS = 'size-4 shrink-0';
 
 export default class Toolbar extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     const source = Array.isArray(props.items) ? props.items : [];
     const groupDisabled = !!props.disabled;
     const orientation = props.orientation === 'vertical' ? 'vertical' : 'horizontal';
@@ -197,8 +197,7 @@ export default class Toolbar extends PuzzleView {
 
     // Roving tabindex lands on the remembered position if it is still an enabled
     // interactive value, else the first enabled control keeps the Tab stop.
-    const prev = (this.getData && this.getData()) || {};
-    let rovingValue = prev.rovingValue;
+    let rovingValue = this.getData().rovingValue;
     if (enabled.indexOf(rovingValue) === -1) rovingValue = enabled[0];
 
     items.forEach((item) => {
@@ -209,6 +208,7 @@ export default class Toolbar extends PuzzleView {
 
     return {
       items,
+      enabled,
       orientation,
       rovingValue,
       iconClass: ICON_CLASS,
@@ -219,13 +219,6 @@ export default class Toolbar extends PuzzleView {
   }
 
   // ---- roving-focus helpers -------------------------------------------------
-
-  // Ordered list of enabled interactive values (the roving nav subset).
-  _enabledValues() {
-    return this.getData()
-      .items.filter((i) => i.type !== 'separator' && !i.disabled)
-      .map((i) => i.value);
-  }
 
   // Move DOM focus to the interactive button carrying `value`.
   focusValue(value) {
@@ -240,15 +233,15 @@ export default class Toolbar extends PuzzleView {
   }
 
   // Make `value` the roving item and focus it. Sets state BEFORE focusing so the
-  // resulting @focus sees an already-matching rovingValue and short-circuits.
+  // resulting @focus sees an already-matching rovingValue (read from the state
+  // layer, which updates at once) and short-circuits.
   moveTo(value) {
-    this.setData('rovingValue', value);
-    this.refresh();
+    this.setState('rovingValue', value);
     this.focusValue(value);
   }
 
   events = {
-    activate: (value, event) => {
+    activate: (value) => {
       const item = this.getData().items.find(
         (i) => i.type !== 'separator' && i.value === value
       );
@@ -259,20 +252,18 @@ export default class Toolbar extends PuzzleView {
         if (typeof toggle === 'function') toggle({ value, pressed: !item.pressed });
       } else {
         const { press } = this.props;
-        if (typeof press === 'function') press(value, event);
+        if (typeof press === 'function') press(value);
       }
     },
 
     // Remember the last-focused control so a Tab-out/Tab-in returns to it.
     focusItem: (value) => {
-      if (this.getData().rovingValue === value) return;
-      this.setData('rovingValue', value);
-      this.refresh();
+      if (this.getState().rovingValue === value) return;
+      this.setState('rovingValue', value);
     },
 
     handleKey: (value, event) => {
-      const { orientation } = this.getData();
-      const enabled = this._enabledValues();
+      const { orientation, enabled } = this.getData();
       const n = enabled.length;
       if (n === 0) return;
       const idx = enabled.indexOf(value);
@@ -285,7 +276,7 @@ export default class Toolbar extends PuzzleView {
       const nextKey = vertical ? 'ArrowDown' : 'ArrowRight';
       const prevKey = vertical ? 'ArrowUp' : 'ArrowLeft';
 
-      let target = null;
+      let target;
       switch (event.key) {
         case nextKey:
           target = (idx + 1) % n;
@@ -304,7 +295,6 @@ export default class Toolbar extends PuzzleView {
       }
 
       event.preventDefault();
-      if (target === null) return;
       this.moveTo(enabled[target]);
     },
   };

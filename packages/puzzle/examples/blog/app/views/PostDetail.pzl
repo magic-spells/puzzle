@@ -34,19 +34,26 @@
         <p class="text-muted">Be the first to comment.</p>
       {/if}
 
-      <form class="flex flex-col gap-3 bg-surface border border-border rounded-xl p-5" @submit={ addComment(event) }>
+      <!-- the comment form runs on the forms module (D192). the inputs bind
+           straight to form.values; one @focusout marks whichever field was
+           left, so its error shows only after the reader moves on. -->
+      <form class="flex flex-col gap-3 bg-surface border border-border rounded-xl p-5" @submit={ addComment(event) } @focusout={ touch(event) } novalidate>
         <input
           class="w-full border border-border-soft rounded-lg py-2.5 px-3 text-ink focus:outline-none focus:border-brand focus:shadow-[0_0_0_3px_rgba(76,110,245,0.15)]"
           type="text"
+          name="author"
           placeholder="Your name"
-          value={ authorName }
-          @input={ updateAuthorName(event) } />
+          value={ form.values.author } />
         <textarea
-          class="w-full border border-border-soft rounded-lg py-2.5 px-3 text-ink min-h-24 resize-y focus:outline-none focus:border-brand focus:shadow-[0_0_0_3px_rgba(76,110,245,0.15)]"
+          class="w-full border rounded-lg py-2.5 px-3 text-ink min-h-24 resize-y focus:outline-none focus:border-brand focus:shadow-[0_0_0_3px_rgba(76,110,245,0.15)] { form.errors.text ? 'border-danger' : 'border-border-soft' }"
+          name="text"
           placeholder="Write a comment…"
-          value={ commentText }
-          @input={ updateCommentText(event) }></textarea>
-        <button class="inline-block self-start px-5 py-2.5 rounded-lg text-[0.95rem] font-semibold cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed bg-brand text-white hover:bg-brand-dark" type="submit" disabled={ !canComment }>
+          aria-invalid={ form.errors.text ? 'true' : false }
+          value={ form.values.text }></textarea>
+        {#if form.errors.text}
+          <p class="text-sm text-danger -mt-1">{ form.errors.text }</p>
+        {/if}
+        <button class="inline-block self-start px-5 py-2.5 rounded-lg text-[0.95rem] font-semibold cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed bg-brand text-white hover:bg-brand-dark" type="submit" disabled={ form.submitting }>
           Add comment
         </button>
       </form>
@@ -64,26 +71,29 @@
 
 <script>
 import { PuzzleView } from '@magic-spells/puzzle';
+import { createForm } from '@magic-spells/puzzle/forms';
 import CommentItem from '../components/CommentItem.pzl';
+import Comment from '../models/comment.js';
+
+// what an empty comment form holds. author starts blank (not the model's
+// 'Anonymous' default) so the placeholder shows.
+const EMPTY = { author: '', text: '' };
 
 export default class PostDetailView extends PuzzleView {
   created() {
-    // Local form state — seeded here so data() can read it back on first run.
-    this.setData({
-      commentText: '',
-      authorName: ''
-    });
+    // the form's draft, touched fields and errors live in view state under
+    // `form`; the Comment schema supplies the rules.
+    this.form = createForm(this, Comment, { from: EMPTY, fields: ['author', 'text'] });
   }
 
-  // A deep link to /posts/3 arrives with an empty store. This data() still reads
+  // A deep link to /posts/p3 arrives with an empty store. This data() still reads
   // like plain synchronous code: the settle loop re-runs it behind the fetches
   // its tracked finds queue and commits the first pass whose reads all hit
   // (D161). Round 1 misses the post and queues its loadOne; round 2 has the post
   // and queues the author; round 3 has both and commits. Dependent reads settle
   // on their own — nothing here declares an order.
-  data(params, props) {
+  data({ params }) {
     const store = this.ctx.store;
-    const local = this.getData();
 
     const post = store.findOne('post', params.id);
 
@@ -100,43 +110,25 @@ export default class PostDetailView extends PuzzleView {
       ? [...post.comments].sort((a, b) => a.createdAt - b.createdAt)
       : [];
 
-    return {
-      post,
-      author,
-      comments,
-      commentText: local.commentText,
-      // Computed here so the template stays a plain read; the template
-      // could also write disabled={ !commentText.trim() } itself.
-      canComment: (local.commentText ?? '').trim() !== '',
-      authorName: local.authorName
-    };
+    return { post, author, comments };
   }
 
   events = {
-    updateAuthorName: (event) => {
-      this.setData('authorName', event.target.value);
-    },
+    // leaving a field shows its error from then on
+    touch: (event) => this.form.touch(event),
 
-    updateCommentText: (event) => {
-      this.setData('commentText', event.target.value);
-      // canComment is derived in data(); setData() alone does not re-run
-      // data(), so refresh() recomputes it from the just-updated text.
-      this.refresh();
-    },
-
-    addComment: (event) => {
-      event.preventDefault();
-      const { commentText, authorName } = this.getData();
-      const text = commentText.trim();
-      if (!text) return;
-
-      this.ctx.store.createRecord('comment', {
-        postId: this.params.id,
-        author: authorName.trim() || 'Anonymous',
-        text
+    addComment: async (event) => {
+      // submit() validates against the Comment schema first; an empty comment
+      // never reaches the callback, and its error shows under the textarea
+      const saved = await this.form.submit(event, (values) => {
+        this.ctx.store.createRecord('comment', {
+          postId: this.params.id,
+          author: values.author.trim() || 'Anonymous',
+          text: values.text.trim()
+        });
       });
-
-      this.setData({ commentText: '', authorName: '' });
+      // start the next comment from a blank form
+      if (saved) this.form.reset(EMPTY);
     },
 
     removeComment: (comment) => {

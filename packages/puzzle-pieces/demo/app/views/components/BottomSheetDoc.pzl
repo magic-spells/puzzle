@@ -262,15 +262,8 @@
               component's deliberate trade, not a piece limitation.
             </p>
             <p>
-              A <strong class="font-medium text-ink">keyboard</strong> activation of a
-              data-action-hide-dialog button closes the sheet but reports result: null. A
-              pointerless click carries coordinates of 0,0, which dialog-panel reads as a tap
-              outside the dialog before the delegated handler runs. A mouse click reports the
-              data-result correctly. Fix pending upstream in dialog-panel.
-            </p>
-            <p>
-              On the currently published pair — bottom-sheet 2.0.2 with dialog-panel 2.0.1 — two
-              overlays paint at once, so the scrim reads darker than the 50% the piece sets:
+              On the currently published pair — bottom-sheet 2.0.2 with dialog-panel 2.0.3 — two
+              overlays paint at once, so the scrim reads darker than the token the piece sets:
               2.0.2 still paints its scrim on the dialog's native ::backdrop and tries to hide
               dialog-panel's own backdrop element with a rule that loses on specificity. It is
               cosmetic, backdropClass has nothing visible to style until it is settled, and the
@@ -427,7 +420,7 @@ const codeResult = `<Button variant="outline" @press={ openConfirm }>Delete proj
 
 // events = {
 //   finishConfirm: ({ result }) => {
-//     this.setData({ confirmOpen: false, lastResult: result ?? 'dismissed' });
+//     this.setState({ confirmOpen: false, lastResult: result ?? 'dismissed' });
 //     if (result === 'delete') this.deleteProject();
 //   },
 // };
@@ -437,7 +430,7 @@ const codeResult = `<Button variant="outline" @press={ openConfirm }>Delete proj
 // tell which answer was given. Escape, a backdrop tap and a flick all report
 // null. A bottom sheet has no dismiss policy — those three are always open,
 // so a question that must be answered belongs in a Dialog, not here.
-// The footer slot takes a single direct child, so two buttons share a
+// bottom-sheet-footer is a plain block, so the two buttons share a flex
 // wrapper div that carries slot="footer".`;
 
 const codeHeader = `<BottomSheet
@@ -469,7 +462,7 @@ const codeHeader = `<BottomSheet
 
 export default class BottomSheetDoc extends PuzzleView {
   created() {
-    this.setData({
+    this.setState({
       heroOpen: false,
       binaryOpen: false,
       insetOpen: false,
@@ -481,7 +474,7 @@ export default class BottomSheetDoc extends PuzzleView {
     });
   }
 
-  data(params, props) {
+  data() {
     return {
       ...this.getData(),
       installCmd,
@@ -520,7 +513,7 @@ export default class BottomSheetDoc extends PuzzleView {
       ],
       slotRows: [
         { name: 'header', desc: 'Fills bottom-sheet-header, replacing the title heading entirely; a filled header brings its own heading and points labelledby at it. The grabber is a pseudo-element and survives it. Always a drag surface.' },
-        { name: 'footer', desc: 'Fills bottom-sheet-footer, pinned below the content at every snap and hidden while empty. Also a drag surface. Takes one direct child, so wrap multiple buttons in a div that carries the slot attribute.' },
+        { name: 'footer', desc: 'Fills bottom-sheet-footer, pinned below the content at every snap and hidden while empty. Also a drag surface. Every direct child that carries slot="footer" lands there, in order; bottom-sheet-footer is display: block, so wrap several buttons in a flex div to lay them out as a row.' },
         { name: 'default', desc: 'Untagged children become bottom-sheet-content, the scrollable region.' },
       ],
       cssRows: [
@@ -546,22 +539,22 @@ export default class BottomSheetDoc extends PuzzleView {
   }
 
   events = {
-    openHero: () => this.setData('heroOpen', true),
-    closeHero: () => this.setData('heroOpen', false),
-    setSnap: (value) => this.setData('snap', value),
-    openBinary: () => this.setData('binaryOpen', true),
-    closeBinary: () => this.setData('binaryOpen', false),
-    openInset: () => this.setData('insetOpen', true),
-    closeInset: () => this.setData('insetOpen', false),
-    openConfirm: () => this.setData('confirmOpen', true),
+    openHero: () => this.setState('heroOpen', true),
+    closeHero: () => this.setState('heroOpen', false),
+    setSnap: (value) => this.setState('snap', value),
+    openBinary: () => this.setState('binaryOpen', true),
+    closeBinary: () => this.setState('binaryOpen', false),
+    openInset: () => this.setState('insetOpen', true),
+    closeInset: () => this.setState('insetOpen', false),
+    openConfirm: () => this.setState('confirmOpen', true),
     // The one handler that reads the @hide detail: data-result tells a deliberate
     // answer apart from a dismissal, which reports null.
     closeConfirm: (detail) =>
-      this.setData({ confirmOpen: false, lastResult: detail?.result ?? 'dismissed' }),
-    openHeader: () => this.setData('headerOpen', true),
-    closeHeader: () => this.setData('headerOpen', false),
+      this.setState({ confirmOpen: false, lastResult: detail?.result ?? 'dismissed' }),
+    openHeader: () => this.setState('headerOpen', true),
+    closeHeader: () => this.setState('headerOpen', false),
     toggleHeaderGrabber: (event) =>
-      this.setData('headerGrabber', !!event.target.checked),
+      this.setState('headerGrabber', !!event.target.checked),
   };
 }
 </script>

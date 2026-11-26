@@ -410,7 +410,7 @@ describe('D161 settle loop — skeletons and prepared refreshes', () => {
 		});
 		const store = makeStore();
 		class View extends PuzzleView {
-			data(params) {
+			data({ params }) {
 				return { post: this.ctx.store.findOne('post', params.id ?? 'p1') };
 			}
 			render() {

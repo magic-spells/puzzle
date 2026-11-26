@@ -4,17 +4,17 @@ import models from './models/index.js';
 import { seed } from './lib/seed.js';
 
 // The v1 config surface is intentionally small: target, routes, models,
-// formatters — see constellation/doc/DOC-SPEC.md §2. There is no server, so no
+// functions — see constellation/doc/DOC-SPEC.md §2. There is no server, so no
 // apiURL: the store is seeded in-memory after mount (below).
 const app = new PuzzleApp({
   target: '#app',
   routes,
   models,
 
-  // Display-only formatters (logic belongs in data(), per SPEC §8). `timeago`
+  // Display-only functions (logic belongs in data(), per SPEC §8). `timeago`
   // is built in and dresses the sidebar rows; `clock` is this app's one custom
-  // formatter, turning a message's Date into a "3:47 PM" wall-clock stamp.
-  formatters: {
+  // function, turning a message's Date into a "3:47 PM" wall-clock stamp.
+  functions: {
     clock: (d) => {
       const date = d instanceof Date ? d : new Date(d);
       if (Number.isNaN(date.getTime())) return '';

@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/magic-spells/puzzle/compiler/internal/build"
 	"github.com/magic-spells/puzzle/compiler/internal/config"
 	"github.com/magic-spells/puzzle/compiler/internal/generate"
 	"github.com/magic-spells/puzzle/compiler/internal/pieces"
@@ -40,25 +41,17 @@ const tailwindConfigSnippet = `export default {
 	},
 };`
 
-// tailwindStylesCSS is the Tailwind v4 entry stylesheet, matching the todos
-// example's @import + @source detection block.
+// tailwindStylesCSS is the Tailwind v4 entry stylesheet. Tailwind already scans the app
+// root, minus what .gitignore lists (internal/styles), so the import is all it needs.
 const tailwindStylesCSS = `@import "tailwindcss";
-
-/*
- * Tailwind v4 content detection: scan the app's .pzl components/views/layouts
- * and JS so the utility classes they use are generated. Paths are relative to
- * this stylesheet (app/styles/), so "../" is the app root.
- */
-@source "../**/*.pzl";
-@source "../**/*.js";
-@source "../public/**/*.html";
 `
 
 var addCmd = &cobra.Command{
-	Use:   "add <integration|piece|theme|skills> [name…]",
-	Short: "Add an integration, UI pieces, a theme, or the Puzzle agent skill",
-	Long: `Wire an official integration into the current app, copy UI pieces or a
-palette in, or install the Puzzle agent skill for supported coding tools.
+	Use:   "add <integration|piece|theme|deploy|skills> [name…]",
+	Short: "Add an integration, UI pieces, a theme, a deploy config, or the Puzzle agent skill",
+	Long: `Wire an official integration into the current app, copy UI pieces, a
+palette or a host's deploy config in, or install the Puzzle agent skill for
+supported coding tools.
 
 Integrations (v1: tailwind):
   puzzle add tailwind          declares the Tailwind pipeline in puzzle.config.js
@@ -71,11 +64,12 @@ Pieces (copy-in components):
                                lib dependencies) from a registry into the app,
                                verbatim, and records hashes in pieces.lock. It never
                                runs npm and never edits styles.css — required npm
-                               packages, the theme merge, the palettes a piece
+                               packages, the theme merge, the stylesheets of the
+                               web components a piece wraps, the palettes it
                                needs, and a hint when app/styles/pieces.css is
                                older than the registry's are printed as next
                                steps (D3). Refuses to overwrite existing files
-                               unless --overwrite is given.
+                               unless --force (-f) is given.
 
 Themes (palettes):
   puzzle add theme             lists the registry's palettes with this app's
@@ -91,8 +85,22 @@ Themes (palettes):
                                and the data-scheme switch are printed (D3). An
                                unmodified copy of an older registry version (it
                                still matches its pieces.lock hash) is refreshed; a
-                               locally modified copy is refused unless --overwrite
+                               locally modified copy is refused unless --force
                                is given.
+
+Deploy configs:
+  puzzle add deploy            lists the hosts and the file each one gets.
+  puzzle add deploy <host>     copies the host's config template into the app:
+                               vercel (vercel.json), netlify (netlify.toml),
+                               cloudflare (app/public/_headers), nginx
+                               (nginx.conf, a server block to paste), or apache
+                               (app/public/.htaccess). Each one sends client
+                               routes to the shell (spa and hybrid) or serves
+                               clean URLs with real 404s (static), and caches
+                               content-hashed files for a year. The template
+                               follows the config's output key; --static or
+                               --hybrid picks one instead. Refuses to overwrite
+                               an existing file unless --force (-f) is given.
 
 Agent skill:
   puzzle add skills            installs the CLI's embedded Puzzle skill into every
@@ -103,9 +111,11 @@ Agent skill:
                                as up to date; an older one asks before being replaced
                                (declining still installs the targets that have none).
                                On a non-TTY an older install is refused, not asked, and
-                               still requires --overwrite. A symlinked destination is a
-                               dev checkout link: reported and skipped unless
-                               --overwrite is given. "skill" is accepted as an alias.
+                               still requires --force; --yes (-y) instead accepts the
+                               prompts' defaults (every detected target, replace older
+                               installs) without asking, TTY or not. A symlinked
+                               destination is a dev checkout link: reported and skipped
+                               unless --force is given. "skill" is accepted as an alias.
                                --skill-root <dir> (repeatable) pins the config dirs
                                instead of detecting them, and skips the target prompt.
                                See also: puzzle upgrade skills, which refreshes only
@@ -121,34 +131,57 @@ directory, or an http(s) URL; --pieces-version pins the npm release exactly.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		registry, _ := cmd.Flags().GetString("registry")
 		piecesVersion, _ := cmd.Flags().GetString("pieces-version")
-		overwrite, _ := cmd.Flags().GetBool("overwrite")
+		overwrite, _ := cmd.Flags().GetBool("force")
+		yes, _ := cmd.Flags().GetBool("yes")
 		dir, _ := cmd.Flags().GetString("dir")
-		if dir == "" {
-			dir = "."
-		}
 		skillRoots, _ := cmd.Flags().GetStringArray("skill-root")
+		static, _ := cmd.Flags().GetBool("static")
+		hybrid, _ := cmd.Flags().GetBool("hybrid")
+		deployOutput, err := outputFlag(static, hybrid)
+		if err != nil {
+			return err
+		}
 		out := ui.New(os.Stdout)
 		return runAddWithEnvironment(os.Stdout, out, dir, args, registry, piecesVersion, overwrite, addEnvironment{
-			homeDir:     os.UserHomeDir,
-			input:       os.Stdin,
-			interactive: ui.IsTerminal(os.Stdin),
-			skillRoots:  skillRoots,
+			homeDir:      os.UserHomeDir,
+			input:        os.Stdin,
+			interactive:  ui.IsTerminal(os.Stdin) && !yes,
+			yes:          yes,
+			skillRoots:   skillRoots,
+			deployOutput: deployOutput,
 		})
 	},
 }
 
+// addForce backs both --force and its hidden --overwrite alias.
+var addForce bool
+
 func init() {
 	addCmd.Flags().String("registry", "", "Piece registry source: npm:<package>[@version], a local directory, or an http(s) URL (default: $PUZZLE_PIECES_REGISTRY or the @magic-spells/puzzle-pieces npm package)")
 	addCmd.Flags().String("pieces-version", "", "Exact @magic-spells/puzzle-pieces release to fetch (default: the newest release matching this CLI's major.minor)")
-	addCmd.Flags().Bool("overwrite", false, "Overwrite existing destination files when adding pieces, themes, or skills")
+	// --force / -f is the overwrite spelling every other CLI uses (and `puzzle
+	// generate` already did). --overwrite stays accepted as a hidden alias bound
+	// to the same variable, for compatibility. Hidden, not deprecated, through
+	// 0.10.x: a 0.9 `puzzle upgrade` re-execs the new binary with
+	// `add skills --overwrite`, and a deprecation notice would land in that
+	// upgrade's output. Deprecate it in a later release.
+	addCmd.Flags().BoolVarP(&addForce, "force", "f", false, "Overwrite existing destination files when adding pieces, themes, or skills")
+	addCmd.Flags().BoolVar(&addForce, "overwrite", false, "Compatibility alias for --force")
+	_ = addCmd.Flags().MarkHidden("overwrite")
+	addCmd.Flags().BoolP("yes", "y", false, "Accept the defaults without prompting: install the skill to every detected target and replace older installs")
 	addCmd.Flags().String("dir", "", "App root to add pieces into (default: walk up from the current directory for package.json/puzzle.config.js)")
+	// --static / --hybrid mirror `puzzle build`: they pick the deploy template
+	// when the config's output key is not the mode the app ships with.
+	addCmd.Flags().Bool("static", false, "Deploy template for output: 'static' (clean URLs, real 404s), whatever the config says")
+	addCmd.Flags().Bool("hybrid", false, "Deploy template for output: 'hybrid' (prerendered pages, then the shell), whatever the config says")
 	addCmd.Flags().StringArray("skill-root", nil, "Config dir to install the skill into (repeatable); skips detection and the target prompt")
 	rootCmd.AddCommand(addCmd)
 }
 
 // runAdd dispatches on the requested integration/selector. args[0] selects:
 // "tailwind"/"tailwindcss" wire the Tailwind pipeline (unchanged); "piece"
-// copies the remaining args as piece names from the registry; "skills"/"skill"
+// copies the remaining args as piece names from the registry; "deploy" copies
+// a host's config template (D198); "skills"/"skill"
 // installs the embedded Puzzle agent skill into detected tool config dirs.
 // runAdd is runAddWithEnvironment under the default environment: real home
 // directory, real stdin, no pinned skill roots, and no --pieces-version pin.
@@ -168,10 +201,12 @@ func runAddWithEnvironment(w io.Writer, out *ui.Printer, dir string, args []stri
 		return addPieces(w, out, dir, registry, piecesVersion, overwrite, args[1:])
 	case "theme", "themes":
 		return addThemes(w, out, dir, registry, piecesVersion, overwrite, args[1:])
+	case "deploy":
+		return addDeploy(w, out, dir, env.deployOutput, overwrite, args[1:])
 	case "skills", "skill":
 		return addSkills(w, out, overwrite, env)
 	default:
-		return fmt.Errorf("unknown integration %q (supported: tailwind, piece, theme, skills)", args[0])
+		return fmt.Errorf("unknown integration %q (supported: tailwind, piece, theme, deploy, skills)", args[0])
 	}
 }
 
@@ -185,14 +220,14 @@ func addPieces(w io.Writer, out *ui.Printer, dir, registry, piecesVersion string
 	if len(names) == 0 {
 		return fmt.Errorf("usage: puzzle add piece <name…>")
 	}
-	start, err := filepath.Abs(dir)
+	// Reuse generate's project-root convention: walk up for package.json /
+	// puzzle.config.js so `add piece` works from anywhere inside the app.
+	root, err := generate.FindProjectRoot(dir)
 	if err != nil {
 		return err
 	}
-	// Reuse generate's project-root convention: walk up for package.json /
-	// puzzle.config.js so `add piece` works from anywhere inside the app.
-	root, err := generate.FindProjectRoot(start)
-	if err != nil {
+	// a piece is written for this CLI's release, so it must pair with the install
+	if _, err := build.PairRuntime(root); err != nil {
 		return err
 	}
 
@@ -224,11 +259,7 @@ func addPieces(w io.Writer, out *ui.Printer, dir, registry, piecesVersion string
 // with all resolve/copy/lock logic in internal/pieces. With no names it lists the
 // registry's palettes instead of copying one.
 func addThemes(w io.Writer, out *ui.Printer, dir, registry, piecesVersion string, overwrite bool, names []string) error {
-	start, err := filepath.Abs(dir)
-	if err != nil {
-		return err
-	}
-	root, err := generate.FindProjectRoot(start)
+	root, err := generate.FindProjectRoot(dir)
 	if err != nil {
 		return err
 	}

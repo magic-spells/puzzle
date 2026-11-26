@@ -4,7 +4,7 @@
        <puzzle-skeleton> below renders instantly in place while the fetch is in
        flight, then the real feed patches over it once data() commits — the
        navigation no longer gates on the load. Everything else is a normal feed:
-       a "For you" / "Following" tab switch (local state via setData+refresh, the
+       a "For you" / "Following" tab switch (local state via setState, the
        stays Home chip pattern), the composer, and the chirp list. -->
 
   <!-- Tab bar. Sticky so it stays pinned as the feed scrolls under it. -->
@@ -83,17 +83,17 @@ const byNewest = (a, b) => String(b.createdAt || '').localeCompare(String(a.crea
 export default class HomeView extends PuzzleView {
   // The tab is local UI state; seed it before the first data() run.
   created() {
-    this.setData({ activeTab: 'for-you' });
+    this.setState({ activeTab: 'for-you' });
   }
 
-  async data(params, props) {
+  async data() {
+    const activeTab = this.getData().activeTab || 'for-you';
     // Skeleton view: kick (or join) the memoized seed, then read synchronously.
     // Because seedStore() is memoized this is safe to await on every data() run —
     // it never re-initiates a load (the D21 gotcha the seed contract guards).
     await seedStore(this.ctx.store);
 
     const store = this.ctx.store;
-    const activeTab = this.getData().activeTab || 'for-you';
 
     const users = store.findMany('user');
     const topLevel = store.findMany('post').filter((p) => !p.isReply).sort(byNewest);
@@ -112,12 +112,9 @@ export default class HomeView extends PuzzleView {
   }
 
   events = {
-    // Flip the tab, then refresh() so data() recomputes `feed` from it
-    // (setData alone won't re-run data() — SPEC §4).
-    setTab: (tab) => {
-      this.setData('activeTab', tab);
-      this.refresh();
-    },
+    // Flip the tab; data() reads activeTab before its await, so the write
+    // re-runs it and `feed` recomputes (SPEC §4).
+    setTab: (tab) => this.setState('activeTab', tab),
   };
 
   animations = {

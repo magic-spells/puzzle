@@ -1,19 +1,19 @@
 <puzzle-view>
   <!-- /u/:handle parent view (nested routes v1.3, D30). The banner + identity
        header stay mounted while the Chirps / Replies / Likes pane swaps through
-       the <Slot/> below. On a tab swap this shell is a REUSED ancestor: its
+       the <Outlet/> below. On a tab swap this shell is a REUSED ancestor: its
        data() re-runs with the full merged params (so the active tab tracks the
        URL) but the shell itself holds still — only the leaf pane animates. The
        {#unless} showcase (v1.7, D36) lives here: hide the FollowButton when the
        profile is my own, showing an "Edit profile" affordance instead. -->
-  <!-- <Slot/> is rendered UNCONDITIONALLY at the bottom: the router mounts the
+  <!-- <Outlet/> is rendered UNCONDITIONALLY at the bottom: the router mounts the
        matched child pane there on first commit, so we never gate its existence on
        the async user lookup. For an unknown handle the header shows a not-found
        banner and the panes below simply render their own empty lists (the
        contract's "guard children too" rule). -->
   <div>
     <!-- STABLE STRUCTURE: the root keeps exactly two children — the header
-         container below and the <Slot/> wrapper at the bottom — across every
+         container below and the <Outlet/> wrapper at the bottom — across every
          data() re-run. The {#if user} swap happens INSIDE this container, so the
          seed landing (user: null → record) never changes the root's child list.
          Reconciliation pairs unkeyed siblings by tag order (index alignment), so
@@ -85,7 +85,7 @@
     </div>
 
     <!-- Matched child pane renders here (v1.3 nested-view slot) — always present. -->
-    <div><Slot/></div>
+    <div><Outlet/></div>
   </div>
 </puzzle-view>
 
@@ -95,7 +95,7 @@ import Avatar from '@/components/Avatar.pzl';
 import FollowButton from '@/components/FollowButton.pzl';
 
 export default class ProfileShell extends PuzzleView {
-  data(params, props) {
+  data({ params }) {
     const store = this.ctx.store;
 
     // Resolve the profile owner by handle (params merge down the nested chain, so
@@ -104,7 +104,7 @@ export default class ProfileShell extends PuzzleView {
     const me = store.findOne('user', 'me');
     const isMe = !!(user && me && user.id === me.id);
 
-    // "Joined July 2024" derived here (no date formatter needed for month+year).
+    // "Joined July 2024" derived here (no date function needed for month+year).
     let joined = '';
     if (user && user.joined) {
       const d = new Date(user.joined + 'T00:00:00');

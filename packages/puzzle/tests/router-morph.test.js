@@ -40,7 +40,7 @@ const container = () => {
 
 const ctx = () => ({ store: null, router: null, formatters: null });
 
-// A parent view hosting its routed child at <Slot/>, logging lifecycle into a
+// A parent view hosting its routed child at <Outlet/>, logging lifecycle into a
 // shared timeline so hook/destroy/mount ordering reads as one flat array.
 function makeHost(name, log) {
 	return class extends PuzzleView {

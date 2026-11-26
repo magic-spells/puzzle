@@ -68,23 +68,23 @@ const codeHero = `<SearchField value={ query } placeholder="Filter results…" @
 
 // parent
 events = {
-  setQuery: (v) => this.setData('query', v),
+  setQuery: (v) => this.setState('query', v),
 };`;
 
 const codeSubmit = `<SearchField value={ term } @change={ setTerm } @submit={ runSearch } />
 
 // parent
 events = {
-  setTerm: (v) => this.setData('term', v),
+  setTerm: (v) => this.setState('term', v),
   runSearch: (v) => toast({ message: 'Searching for: ' + v }),
 };`;
 
 export default class SearchFieldDoc extends PuzzleView {
   created() {
-    this.setData({ query: '', term: '' });
+    this.setState({ query: '', term: '' });
   }
 
-  data(params, props) {
+  data() {
     return {
       ...this.getData(),
       installCmd,
@@ -101,8 +101,8 @@ export default class SearchFieldDoc extends PuzzleView {
   }
 
   events = {
-    setQuery: (v) => this.setData('query', v),
-    setTerm: (v) => this.setData('term', v),
+    setQuery: (v) => this.setState('query', v),
+    setTerm: (v) => this.setState('term', v),
     runSearch: (v) => toast({ message: 'Searching for: ' + (v || 'nothing'), variant: 'success' }),
   };
 }

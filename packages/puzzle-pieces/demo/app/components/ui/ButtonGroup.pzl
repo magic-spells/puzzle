@@ -7,7 +7,7 @@
         class={ item.class }
         title={ item.title }
         disabled={ item.disabled }
-        @click={ press(item.value, event) }>
+        @click={ press(item.value) }>
         {#if item.icon}
           <svg class={ iconClass } viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d={ item.icon }/>
@@ -25,7 +25,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 // ButtonGroup — a joined row of ACTION buttons (a segmented toolbar cluster:
 // text-format bar, alignment actions, paging controls). This is NOT ToggleGroup:
 // there is no pressed/selected state and no value memory — every button just
-// FIRES an action through @press(value, event). Config-first: the whole strip
+// FIRES an action through @press(value). Config-first: the whole strip
 // renders from one `items` array.
 //
 // ICON STORY: unlike ToggleGroup (which can't render per-item icons), a `d`
@@ -60,7 +60,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 //   disabled disables every button in the group.
 //   class    appended to the wrapper.
 // Callback:
-//   @press(value, event)  value-first, typeof-guarded. Disabled buttons no-op.
+//   @press(value)  value-first, typeof-guarded. Disabled buttons no-op.
 //
 // JOINED-ROW TREATMENT (copied from ToggleGroup's intent, different mechanism):
 // buttons overlap by -ml-px so adjacent borders collapse into one hairline; only
@@ -77,12 +77,12 @@ const ITEM_BASE =
   'font-medium cursor-pointer transition-colors ' +
   'focus-visible:z-10 ' +
   'focus-visible:outline-2 focus-visible:outline-offset-2 outline-ring focus-visible:outline-ring ' +
-  'disabled:opacity-50 disabled:pointer-events-none';
+  'disabled:opacity-50 disabled:cursor-not-allowed';
 
 // Variant recipes lifted verbatim from Button.pzl.
 const VARIANT = {
-  outline: 'border border-border bg-surface text-ink hover:border-border-strong hover:bg-surface-sunken',
-  secondary: 'bg-surface-sunken text-ink hover:bg-border',
+  outline: 'border border-border-strong text-ink not-disabled:hover:bg-ink/6',
+  secondary: 'bg-ink/6 text-ink not-disabled:hover:bg-ink/10',
 };
 
 // Size scale lifted verbatim from Button.pzl.
@@ -95,7 +95,7 @@ const SIZE = {
 const ICON_SIZE = { sm: 'size-4', md: 'size-4', lg: 'size-5' };
 
 export default class ButtonGroup extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     const variant = VARIANT[props.variant] ? props.variant : 'outline';
     const size = SIZE[props.size] ? props.size : 'md';
     const groupDisabled = !!props.disabled;
@@ -104,7 +104,8 @@ export default class ButtonGroup extends PuzzleView {
 
     const items = source.map((it, i) => {
       const iconOnly = !!it.iconOnly;
-      // Rounding: only the ends round; -ml-px collapses shared borders.
+      // Rounding: only the ends round; -ml-px collapses outline's shared borders
+      // (secondary has none, and the overlap would tint a seam).
       const rounding =
         i === 0
           ? source.length === 1
@@ -113,7 +114,7 @@ export default class ButtonGroup extends PuzzleView {
           : i === last
             ? 'rounded-r-md'
             : 'rounded-none';
-      const overlap = i === 0 ? '' : '-ml-px';
+      const overlap = i === 0 || variant !== 'outline' ? '' : '-ml-px';
       return {
         value: it.value,
         label: it.label,
@@ -138,11 +139,11 @@ export default class ButtonGroup extends PuzzleView {
   }
 
   events = {
-    press: (value, event) => {
+    press: (value) => {
       const item = this.getData().items.find((i) => i.value === value);
       if (!item || item.disabled) return;
       const { press } = this.props;
-      if (typeof press === 'function') press(value, event);
+      if (typeof press === 'function') press(value);
     },
   };
 }

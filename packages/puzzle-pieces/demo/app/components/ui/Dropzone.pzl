@@ -79,7 +79,7 @@ import ChatAttachment from './ChatAttachment.pzl';
 //
 // CONTROLLED, value-first. The PARENT owns the `files` array (File objects or
 // { name, size, type } descriptors); props in, callbacks out. Dropzone never
-// stores the file list itself — the only local setData state is `dragging`
+// stores the file list itself — the only local setState state is `dragging`
 // (the highlight) and `rejections` (transient validation messages). On a pick or
 // drop it validates against `accept` + `maxSize`, then emits @change with the NEW
 // array (merged for `multiple`, replaced otherwise) and @reject with any failures.
@@ -100,8 +100,8 @@ import ChatAttachment from './ChatAttachment.pzl';
 //              internal validation messages)
 //   class      appended to the root last, so callers win
 // Callbacks:
-//   @change(files, event)      the new accepted array (value-first)
-//   @reject(rejections, event) [{ file, reason, message }] for failed files
+//   @change(files)             the new accepted array (value-first)
+//   @reject(rejections)        [{ file, reason, message }] for failed files
 //
 // A11y: the real <input type="file"> stays sr-only but reachable, so keyboard /
 // AT users tab to it (labeled, describedby, aria-invalid) and open the native
@@ -145,7 +145,7 @@ function acceptsFile(file, accept) {
 }
 
 export default class Dropzone extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     const inputId = props.id || (this._fallbackId ??= `pp-dropzone-${++uid}`);
     const error = props.error || '';
     const hint = props.hint || '';
@@ -210,8 +210,9 @@ export default class Dropzone extends PuzzleView {
 
   // Validate an incoming FileList, emit @change with the merged/replaced array
   // and @reject with any failures, and stash rejection messages for the live
-  // region. Does NOT refresh — callers do, once.
-  processFiles(fileList, event) {
+  // region. The rejections write re-runs data() with the next render, since
+  // data() reads that key.
+  processFiles(fileList) {
     const list = Array.from(fileList || []);
     if (!list.length) return;
 
@@ -243,11 +244,11 @@ export default class Dropzone extends PuzzleView {
       next = accepted.slice(0, 1);
     }
 
-    this.setData({ rejections: rejected });
+    this.setState({ rejections: rejected });
 
     const { change, reject } = props;
-    if (accepted.length && typeof change === 'function') change(next, event);
-    if (rejected.length && typeof reject === 'function') reject(rejected, event);
+    if (accepted.length && typeof change === 'function') change(next);
+    if (rejected.length && typeof reject === 'function') reject(rejected);
   }
 
   events = {
@@ -263,10 +264,9 @@ export default class Dropzone extends PuzzleView {
 
     onInputChange: (event) => {
       const input = event.target;
-      this.processFiles(input.files, event);
+      this.processFiles(input.files);
       // Reset so re-selecting the same file fires `change` again.
       input.value = '';
-      this.refresh();
     },
 
     onDragOver: (event) => {
@@ -276,8 +276,7 @@ export default class Dropzone extends PuzzleView {
       event.stopPropagation();
       if (this.props.disabled) return;
       if (!this.getData().dragging) {
-        this.setData({ dragging: true });
-        this.refresh();
+        this.setState({ dragging: true });
       }
     },
 
@@ -286,8 +285,7 @@ export default class Dropzone extends PuzzleView {
       // Ignore leaves into descendant elements (flicker guard).
       if (zone && event.relatedTarget && zone.contains && zone.contains(event.relatedTarget)) return;
       if (this.getData().dragging) {
-        this.setData({ dragging: false });
-        this.refresh();
+        this.setState({ dragging: false });
       }
     },
 
@@ -295,9 +293,8 @@ export default class Dropzone extends PuzzleView {
       event.preventDefault();
       event.stopPropagation();
       if (this.props.disabled) return;
-      this.setData({ dragging: false });
-      this.processFiles(event.dataTransfer && event.dataTransfer.files, event);
-      this.refresh();
+      this.setState({ dragging: false });
+      this.processFiles(event.dataTransfer && event.dataTransfer.files);
     },
 
     // removal is by ROW INDEX: two files can share a name (and a size), so filtering

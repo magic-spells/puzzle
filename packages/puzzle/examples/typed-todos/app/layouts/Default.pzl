@@ -9,7 +9,7 @@
 
   <main class="flex-1 pb-16">
     <div class="max-w-lg mx-auto px-6">
-      <Slot/>
+      <Outlet/>
     </div>
   </main>
 

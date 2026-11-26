@@ -10,8 +10,10 @@ connections:
   - COMPONENT-TESTING
   - DOC-TESTING
   - FILE-DEVPERF
-verified_at: '2026-08-24T21:11:50.859Z'
-verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
+verified_at: '2026-11-24T18:13:21.008Z'
+verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
 ---
 
-Extends the D94 testing surface with the immutable render report defined by [[DECISION-D121-DEV-PERFORMANCE-PROFILING]]. It reuses `settled()` and imports no test framework.
+# testing/render-profile.js
+
+`measureRenders(callback)` or `measureRenders(handle, callback)`: the runner-neutral render report from [[DECISION-D121-DEV-PERFORMANCE-PROFILING]], exported through `./testing` ([[DECISION-D94-TESTING-EXPORT]]). It installs the global devperf sink, runs the callback, drains with `settled()`, and returns an immutable report. The handle is never inspected — the sink is global — it only documents the call site. Imports no test framework.

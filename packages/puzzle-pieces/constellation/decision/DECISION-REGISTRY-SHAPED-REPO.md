@@ -1,10 +1,12 @@
 ---
 name: Registry-shaped repo from day one
-status: built
+status: verified
 connections:
   - DOC-REGISTRY
   - FEATURE-ADD-CLI
   - DECISION-COPY-IN-DISTRIBUTION
+verified_at: '2026-11-24T18:13:21.786Z'
+verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
 ---
 
 # Registry-shaped repo from day one
@@ -24,5 +26,5 @@ Structure the repo as a **registry from the first commit**, with deliberately **
 
 ## Consequences
 
-- `registry.json` is **generated** by aggregating the `piece.json` manifests — it must be regenerated when pieces are added/renamed (see [[DOC-REGISTRY]]).
+- `registry.json` aggregates the `piece.json` manifests and is kept by hand: mirror every manifest edit in its row; `test/registry-deps.test.js` fails when they drift (see [[DOC-REGISTRY]]).
 - The CLI's whole job is reduced to the resolver-copier spec in [[FEATURE-ADD-CLI]].

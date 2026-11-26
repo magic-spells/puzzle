@@ -5,8 +5,8 @@ hand-seeded developer-culture chirps, like and rechirp them, follow the cast,
 open a thread down to its root, search trending hashtags, and watch a live
 unread badge drain as you read your notifications. Where `examples/stays` is a
 light marketplace leaning on nested routes and `examples/music` shows off layout
-swaps, **Chirp exists to exercise the framework surface no other example
-touches**: skeleton loaders, `{#case}` / `{#unless}`, and event modifiers.
+swaps, **Chirp exercises skeleton loaders, `{#case}` / `{#unless}`, and event
+modifiers** in one app.
 
 Dark theme on purpose: true-black chrome, one chirp-blue accent (`#1d9bf0`), and
 a like-pink / rechirp-green pair for the toggle actions. No image assets
@@ -18,7 +18,7 @@ anywhere — every avatar and banner is a generated CSS gradient with an emoji.
 puzzle dev examples/chirp        # from packages/puzzle: go run ./compiler/cmd/puzzle dev examples/chirp
 ```
 
-## What this example demonstrates that the others don't
+## What this example demonstrates
 
 - **`<puzzle-skeleton>` loading templates (v1.8, D39 — SPEC §16)** — the FIRST
   example to use them. `Home.pzl` and `PostDetail.pzl` declare a skeleton
@@ -35,7 +35,7 @@ puzzle dev examples/chirp        # from packages/puzzle: go run ./compiler/cmd/p
   query, so "Mark all read" on the Notifications page drains the sidebar badge
   instantly, with no event plumbing between views.
 
-Plus the established Puzzle goodies: nested profile routes with `<Slot/>`,
+Plus the established Puzzle goodies: nested profile routes with `<Outlet/>`,
 `{#for … , i}` staggered card entrances, display functions, and localStorage
 persistence of your likes / rechirps / follows / composed chirps.
 
@@ -48,7 +48,7 @@ persistence of your likes / rechirps / follows / composed chirps.
   seeding via the memoized `seedStore`, and localStorage restore/persist for
   all local-only state.
 - **routes.js** — flat routes plus the nested `/u/:handle` profile branch
-  (`ProfileShell` renders `Chirps` / `Replies` / `Likes` at its `<Slot/>`).
+  (`ProfileShell` renders `Chirps` / `Replies` / `Likes` at its `<Outlet/>`).
 - **seed.js** — the memoized `seedStore(store)` that skeleton views await from
   `data()` without re-triggering the load (the D21 gotcha).
 - **storage.js** — the snapshot save/load pair behind the persistence.
@@ -74,7 +74,7 @@ persistence of your likes / rechirps / follows / composed chirps.
 ### Layout (`app/layouts/`)
 - **MainLayout.pzl** — the X-style frame: left nav sidebar (active state from
   `pathname`, live unread badge), a 600px bordered center column hosting
-  `<Slot/>`, a static "About this demo" right rail, and a mobile bottom tab bar.
+  `<Outlet/>`, a static "About this demo" right rail, and a mobile bottom tab bar.
 
 ### Views (`app/views/`)
 - **Home.pzl** — skeleton loader, "For you" / "Following" tabs, the compose box,
@@ -98,7 +98,7 @@ persistence of your likes / rechirps / follows / composed chirps.
 
 `<puzzle-skeleton>` first-load templates, `{#case}` / `{:when}` multi-branch,
 `{#unless}` inverted conditionals, event modifiers (`:prevent`, `:escape`,
-`:enter`), nested routes + `<Slot/>` chains, route params and the catch-all,
+`:enter`), nested routes + `<Outlet/>` chains, route params and the catch-all,
 `{#for}` loop counters (D29), per-instance `get animations()` staggered
 entrances, view in/out transitions, store filters as live cross-page
 subscriptions, display functions with arguments, and schema defaults / getters /

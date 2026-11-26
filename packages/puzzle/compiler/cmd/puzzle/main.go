@@ -23,32 +23,49 @@ var rootCmd = &cobra.Command{
 	// print the error once (SilenceErrors avoids cobra's duplicate print).
 	SilenceUsage:  true,
 	SilenceErrors: true,
+	// --no-color is the same switch as NO_COLOR (https://no-color.org): setting
+	// the variable here, before any command prints, means every ui.Printer the
+	// command creates sees it, and so do the node / Tailwind child processes it
+	// spawns. No subcommand defines its own PersistentPreRunE, so this always
+	// runs.
+	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+		if noColor, _ := cmd.Flags().GetBool("no-color"); noColor {
+			return os.Setenv("NO_COLOR", "1")
+		}
+		return nil
+	},
 }
 
 var buildCmd = &cobra.Command{
 	Use:   "build [dir]",
 	Short: "Compile the app and produce a bundle in dist/",
-	Long: `Compile .pzl components and package the app into dist/ (by default app.js,
-styles.css, and the copied public/ assets).
+	Long: `Compile .pzl components and package the app into dist/: the app bundle,
+the stylesheet, and the copied public/ assets.
 
-With build.splitting enabled, production builds emit app-<hash>.js,
-styles-<hash>.css and lazy chunks under dist/chunks/. The shell references are
-rewritten and its static-import chunks get modulepreload links. build.hashNames
-defaults to build.splitting. Set build.hashNames: false to keep fixed names, or
-true to enable hashing without splitting. JavaScript-imported CSS is hashed too.
-Development builds keep fixed names and add no preloads; public/ assets are never
-renamed.
+Production builds content-hash their names (app-<hash>.js, styles-<hash>.css,
+and app-<hash>.css for JavaScript-imported CSS) and rewrite the shell's
+references to match. Set build.hashNames: false to keep the fixed app.js and
+styles.css. With build.hashNames unset, a file public/index.html does not
+reference (both, when the shell is missing), or that another public/ HTML page
+names, keeps its fixed name with a warning. An explicit hashNames: true fails
+when the shell does not load app.js, rewrites the other public/ HTML pages,
+and hashes the stylesheet even when nothing links it. With build.splitting enabled, lazy chunks land under
+dist/chunks/ and the shell gets modulepreload links for its static-import
+chunks. Development builds keep fixed names and add no preloads; public/
+assets are never renamed.
 
-With --static, additionally emit true static pages: each static route becomes
-its own dist/<path>/index.html plus a small per-page module bundle under
-dist/_puzzle/ — no router, no SPA takeover. Production pages preload their
-shared chunks; with build.hashNames on, page modules are <slug>-<hash>.js.
+With --static, emit true static pages instead of the SPA bundle: each static
+route becomes its own dist/<path>/index.html plus a small per-page module
+bundle under dist/_puzzle/ — no router, no app.js. Production pages preload
+their shared chunks, and page modules are <slug>-<hash>.js unless
+build.hashNames is false.
 With --hybrid, prerender each static route to dist/<path>/index.html that the
-full SPA runtime takes over on load (the mode formerly spelled --static).
-Either flag has a puzzle.config.js
-equivalent (output: 'static' | 'hybrid'); passing a flag that disagrees with
-the config output value is an error. Dynamic (:id / *) routes are skipped with
-a warning.
+full SPA runtime takes over on load.
+Either flag has a puzzle.config.js equivalent (output: 'static' | 'hybrid');
+passing a flag that disagrees with the config output value is an error. A
+:param route is prerendered only when its staticPaths field lists its values;
+otherwise it is skipped with a warning. The top-level '*' route becomes
+dist/404.html.
 
 With --fixtures, wire app/fixtures.js (or .ts) through the fixtures/mock runtime
 module so the built app seeds and mocks itself. Without the flag nothing from
@@ -59,12 +76,10 @@ Setting PUZZLE_PROFILE_BUILD=1 does the same, and reaches the builds 'puzzle
 dev' runs for an output: 'static' project.`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		dir := "."
-		if len(args) == 1 {
-			dir = args[0]
-		}
+		dir := dirArg(args)
 
 		mode, _ := cmd.Flags().GetString("mode")
+		quiet, _ := cmd.Flags().GetBool("quiet")
 		switch mode {
 		case "production", "development":
 		default:
@@ -94,8 +109,15 @@ dev' runs for an output: 'static' project.`,
 			Fixtures:    fixtures,
 			Profile:     profile,
 			Metafile:    &metafile,
+			Quiet:       quiet,
 		}); err != nil {
 			return err
+		}
+		if quiet {
+			// --quiet drops the summary, the page report (build.Options.Quiet)
+			// and the update notice; warnings print and errors still
+			// return above and print from main().
+			return nil
 		}
 		out := ui.New(os.Stdout)
 		outdir := filepath.Join(dir, "dist")
@@ -122,19 +144,20 @@ module so the served app seeds and mocks itself.
 
 With --profile-build, print per-phase startup and rebuild timing tables to
 stderr. PUZZLE_PROFILE_BUILD=1 enables the same profiling.`,
-	Args: cobra.MaximumNArgs(1),
+	Args: serverArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		dir := "."
-		if len(args) == 1 {
-			dir = args[0]
-		}
+		host := serverHost(cmd)
+		dir := dirArg(args)
 		port, _ := cmd.Flags().GetInt("port")
 		strictPort, _ := cmd.Flags().GetBool("strict-port")
+		open, _ := cmd.Flags().GetBool("open")
 		fixtures, _ := cmd.Flags().GetBool("fixtures")
 		profile, _ := cmd.Flags().GetBool("profile-build")
 		return dev.Serve(dir, dev.Options{
 			Port:       port,
 			StrictPort: strictPort,
+			Host:       host,
+			Open:       open,
 			Fixtures:   fixtures,
 			Profile:    profile,
 			// OnReady runs after the ready banner, with the listener already
@@ -159,17 +182,16 @@ output: 'hybrid': the route's prerendered page when one exists, index.html
 otherwise. output: 'static': clean URLs (/about → /about/index.html) and a real
 404 — dist/404.html when the app's catch-all route wrote one — because that is
 what a static host does.`,
-	Args: cobra.MaximumNArgs(1),
+	Args: serverArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		dir := "."
-		if len(args) == 1 {
-			dir = args[0]
-		}
+		host := serverHost(cmd)
+		dir := dirArg(args)
 		port, _ := cmd.Flags().GetInt("port")
 		strictPort, _ := cmd.Flags().GetBool("strict-port")
 		return preview.Serve(dir, preview.Options{
 			Port:       port,
 			StrictPort: strictPort,
+			Host:       host,
 		})
 	},
 }
@@ -190,21 +212,34 @@ func outputFlag(static, hybrid bool) (string, error) {
 	}
 }
 
+// dirArg returns a command's optional [dir] positional, "." when it is omitted.
+func dirArg(args []string) string {
+	if len(args) == 1 {
+		return args[0]
+	}
+	return "."
+}
+
 func init() {
-	buildCmd.Flags().String("mode", "production", "Build mode: production (minified) or development (readable)")
+	rootCmd.PersistentFlags().Bool("no-color", false, "Disable colored output (same as setting NO_COLOR=1 or TERM=dumb)")
+	buildCmd.Flags().StringP("mode", "m", "production", "Build mode (production|development): minified, or readable")
+	buildCmd.Flags().BoolP("quiet", "q", false, "Skip the build summary, the page report and the update notice (errors and warnings still print)")
 	buildCmd.Flags().Bool("static", false, "Emit true static pages: per-route HTML + a per-page module bundle, no SPA takeover")
 	buildCmd.Flags().Bool("hybrid", false, "Prerender each static route to dist/<path>/index.html that the SPA runtime takes over")
 	buildCmd.Flags().Bool("fixtures", false, "Install app/fixtures.js (or .ts) via the fixtures/mock runtime module; not valid with --static/--hybrid")
-	buildCmd.Flags().Bool("profile-build", false, "Print a per-phase build timing table to stderr (also enabled by PUZZLE_PROFILE_BUILD=1, which reaches `puzzle dev` rebuilds)")
-	devCmd.Flags().Int("port", 3000, "Port for the dev server (scans upward if busy)")
+	buildCmd.Flags().Bool("profile-build", false, "Print a per-phase build timing table to stderr (also enabled by PUZZLE_PROFILE_BUILD=1, which reaches 'puzzle dev' rebuilds)")
+	devCmd.Flags().IntP("port", "p", 3000, "Port for the dev server (scans upward if busy)")
 	devCmd.Flags().Bool("strict-port", false, "Fail if --port is busy instead of scanning for a free one")
+	addHostFlag(devCmd)
+	devCmd.Flags().BoolP("open", "o", false, "Open the app in the default browser once the server is ready")
 	devCmd.Flags().Bool("fixtures", false, "Install app/fixtures.js (or .ts) via the fixtures/mock runtime module")
 	devCmd.Flags().Bool("profile-build", false, "Print per-phase startup and rebuild timing tables to stderr (also enabled by PUZZLE_PROFILE_BUILD=1)")
 	// Preview defaults to a different port than dev on purpose: previewing a
 	// build while a dev server runs is the common case, and the scan silently
 	// moving off 3000 would hide which server answered.
-	previewCmd.Flags().Int("port", 4000, "Port for the preview server (scans upward if busy)")
+	previewCmd.Flags().IntP("port", "p", 4000, "Port for the preview server (scans upward if busy)")
 	previewCmd.Flags().Bool("strict-port", false, "Fail if --port is busy instead of scanning for a free one")
+	addHostFlag(previewCmd)
 
 	rootCmd.AddCommand(buildCmd)
 	rootCmd.AddCommand(devCmd)
@@ -212,6 +247,13 @@ func init() {
 }
 
 func main() {
+	args := os.Args[1:]
+	// Before parsing, so even a usage error (`puzzle dev --no-color --bogus`)
+	// prints uncoloured; the persistent pre-run only sees successful parses.
+	if hasNoColorFlag(args) {
+		_ = os.Setenv("NO_COLOR", "1")
+	}
+	rootCmd.SetArgs(normalizeHostArgs(args))
 	if err := rootCmd.Execute(); err != nil {
 		errOut := ui.New(os.Stderr)
 		if errOut.Enabled() {
@@ -221,6 +263,20 @@ func main() {
 		}
 		os.Exit(1)
 	}
+}
+
+// hasNoColorFlag reports whether --no-color appears among the CLI arguments
+// before any "--" terminator (a later one is a positional, not the flag).
+func hasNoColorFlag(args []string) bool {
+	for _, a := range args {
+		if a == "--" {
+			return false
+		}
+		if a == "--no-color" || a == "--no-color=true" {
+			return true
+		}
+	}
+	return false
 }
 
 func formatMillis(d time.Duration) string {

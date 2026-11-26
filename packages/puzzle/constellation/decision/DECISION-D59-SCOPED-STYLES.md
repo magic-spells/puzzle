@@ -10,11 +10,12 @@ connections:
   - COMPONENT-ESBUILD-PLUGIN
   - DOC-PUZZLE-FILE
   - DOC-SPEC
-verified_at: '2026-08-24T19:03:23.810Z'
+  - DOC-SPEC-ANATOMY
+verified_at: '2026-11-24T18:13:21.008Z'
 code_refs:
   - compiler/internal/codegen/codegen.go
   - compiler/internal/plugin/plugin.go
-verified_sha: c809db6680eb9355961897756f54e97f1164b88f
+verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
 ---
 
 # D59 — Scoped styles: `<style scoped>` via native `@scope` wrapping

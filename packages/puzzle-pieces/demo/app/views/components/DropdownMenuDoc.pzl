@@ -18,8 +18,9 @@
           <a class="text-brand underline underline-offset-2" href="#/components/menubar">Menubar</a>'s
           disclosure stance. The difference is that the component now implements the model those
           roles promise: one tab stop, arrows with wrap, Home/End, typeahead, Enter and Space
-          activation, Tab to close, and Escape one level at a time. So the piece authors no roles
-          at all — it would only be overwriting them.
+          activation, Tab to close, and Escape one level at a time. So the piece authors no menu
+          roles — the only roles it writes are Group's role="group" and Separator's
+          role="separator", which the component never sets.
         </p>
         <div class="mt-4 rounded-lg border border-border bg-surface-sunken p-4">
           <p class="text-sm font-medium text-ink">Breaking change in 0.7.0</p>
@@ -48,7 +49,7 @@
               <DropdownMenu.Separator/>
               <DropdownMenu.Group label="Export">
                 <DropdownMenu.Sub>
-                  <DropdownMenu.Trigger variant="item">Export as</DropdownMenu.Trigger>
+                  <DropdownMenu.Trigger variant="item" label="Export as"/>
                   <DropdownMenu.Content opens="right">
                     <DropdownMenu.Item value="pdf" @press={ run }>PDF</DropdownMenu.Item>
                     <DropdownMenu.Item value="csv" @press={ run }>CSV</DropdownMenu.Item>
@@ -138,7 +139,9 @@
           <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Keyboard</h2>
           <p class="mb-3 text-sm text-body">
             All of it lives in the web component's menu mode; this family adds no key handling of
-            its own, and authors no role, tabindex or aria-* attribute.
+            its own and authors no tabindex and no menu role or state — the only ARIA it writes is
+            Group's role="group" and aria-label, Separator's role="separator", a disabled Link's
+            aria-disabled and the trigger arrow's aria-hidden.
           </p>
           <div class="text-sm">
             {#for row in keyRows}
@@ -198,12 +201,12 @@ const usageMarkup = `<DropdownMenu @select={ onSelect }>
   <DropdownMenu.Trigger>Options</DropdownMenu.Trigger>
   <DropdownMenu.Content align="end">
     <DropdownMenu.Label>Account</DropdownMenu.Label>
-    <DropdownMenu.Item value="profile" @press={ run }>
+    <DropdownMenu.Item value="profile">
       Profile<DropdownMenu.Shortcut>⌘P</DropdownMenu.Shortcut>
     </DropdownMenu.Item>
     <DropdownMenu.Link href="/docs">Documentation</DropdownMenu.Link>
     <DropdownMenu.Separator />
-    <DropdownMenu.Item value="delete" variant="danger" @press={ run }>
+    <DropdownMenu.Item value="delete" variant="danger">
       Delete account
     </DropdownMenu.Item>
   </DropdownMenu.Content>
@@ -222,7 +225,7 @@ const codeHero = `// One menu-button: a label, a disabled row, a group holding a
     <DropdownMenu.Separator />
     <DropdownMenu.Group label="Export">
       <DropdownMenu.Sub>
-        <DropdownMenu.Trigger variant="item">Export as</DropdownMenu.Trigger>
+        <DropdownMenu.Trigger variant="item" label="Export as"/>
         <DropdownMenu.Content opens="right">
           <DropdownMenu.Item value="pdf" @press={ run }>PDF</DropdownMenu.Item>
         </DropdownMenu.Content>
@@ -261,10 +264,9 @@ const reference = [
       { name: 'trigger', desc: "'click' (default) | 'hover' | 'both'. A dropdown menu is a menu-button, not a hover menu." },
       { name: 'arrow', desc: "'none' (default) | 'flip' | 'static' — for a trigger carrying the arrow hook. Effects stylesheet only." },
       { name: 'open', desc: 'Optional-controlled and edge-triggered, forwarded to the base.' },
-      { name: 'effect', desc: "'fade' | 'slide' | 'scale' | 'blur' | 'swing'. Needs the effects stylesheet." },
       { name: 'class', desc: 'Merged onto the host, after the load-bearing `inline-block relative`.' },
       { name: '@show / @hide', desc: "Fired when THIS menu opens or closes; a Sub's are filtered out." },
-      { name: '@select', desc: 'Value-first: select(value, event). Fires once per activation, submenus included. Return false to cancel the close.' },
+      { name: '@select', desc: 'Value-first: select(value). Fires once per activation, submenus included. Return false to cancel the close.' },
     ],
   },
   {
@@ -283,7 +285,7 @@ const reference = [
       { name: 'align', desc: "'start' (default) | 'end' for a menu near the right edge." },
       { name: 'opens', desc: "'down' (default) | 'right' for a Sub's panel." },
       { name: 'flip', desc: 'Opt in to opening upward when the panel would run past the bottom of the viewport.' },
-      { name: 'effect', desc: "'fade' | 'slide' | 'scale' | 'blur' | 'swing'. Needs the effects stylesheet." },
+      { name: 'effect', desc: "'fade' | 'slide' | 'scale' | 'blur' | 'bloom' | 'swing'. Needs the effects stylesheet." },
       { name: 'class', desc: 'Merged onto the panel, after the padding. Never overflow-hidden — it clips a Sub.' },
     ],
   },
@@ -314,8 +316,7 @@ const reference = [
     summary: 'A submenu: the nested host a Trigger + Content pair need. An Item is a <button> and cannot contain one.',
     rows: [
       { name: 'trigger', desc: "'both' (default) | 'hover' | 'click'. Hover or ArrowRight opens it." },
-      { name: 'effect', desc: "'fade' | 'slide' | 'scale' | 'blur' | 'swing'." },
-      { name: 'class', desc: 'Merged onto the host, after the load-bearing `block`.' },
+      { name: 'class', desc: 'Merged onto the host, after the load-bearing `block!`.' },
     ],
   },
   {
@@ -330,7 +331,7 @@ const reference = [
 
 export default class DropdownMenuDoc extends PuzzleView {
   created() {
-    this.setData({ selected: 'nothing yet' });
+    this.setState({ selected: 'nothing yet' });
   }
 
   data() {
@@ -357,12 +358,10 @@ export default class DropdownMenuDoc extends PuzzleView {
 
   events = {
     run: (value) => {
-      this.setData('selected', String(value));
-      this.refresh();
+      this.setState('selected', String(value));
     },
     onSelect: (value) => {
-      this.setData('selected', String(value));
-      this.refresh();
+      this.setState('selected', String(value));
     },
   };
 }

@@ -19,7 +19,7 @@
 import { PuzzleView } from '@magic-spells/puzzle';
 
 export default class FollowButton extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     const user = props.user || null;
     return {
       user,

@@ -14,7 +14,6 @@ PortalSkeleton.prototype.render = function () {
     ]),
   ]);
 };
-PortalSkeleton.__pzlModule = 'portal_skeleton.pzl';
 
 PortalSkeleton.prototype.renderSkeleton = function () {
   const __d = this.getData();

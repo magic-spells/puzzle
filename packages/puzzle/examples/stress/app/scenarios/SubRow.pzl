@@ -25,7 +25,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 const TYPE = 'sub';
 
 export default class SubRow extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     const store = this.ctx.store;
 
     // The probe is a plain object passed down by the parent — a shared counter,

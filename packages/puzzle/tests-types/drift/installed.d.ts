@@ -15,7 +15,16 @@ import type { AdapterInstall } from '../../client-runtime/capabilities.js';
 
 type AdapterInstalled = Pick<
 	AdapterStoreInstalled,
-	'adapter' | 'loadMany' | 'loadOne' | 'upsert' | 'saveRecord' | 'deleteRecord' | 'request' | '_network'
+	| 'adapter'
+	| 'loadMany'
+	| 'loadOne'
+	| 'upsert'
+	| 'saveRecord'
+	| 'deleteRecord'
+	| 'request'
+	| '_network'
+	| 'invalidate'
+	| 'syncStatus'
 >;
 
 declare module '../../client-runtime/datastore/store.js' {

@@ -44,7 +44,7 @@ export default [
     }
   },
   // Nested routes (v1.3, D30): the Settings shell renders its matched child
-  // pane at its <Slot/>. Child paths are RELATIVE; `path: ''` is the index
+  // pane at its <Outlet/>. Child paths are RELATIVE; `path: ''` is the index
   // child that fills the slot at the bare /settings URL.
   //
   // Settings is also this app's LAZY section (v1.77, D163): most readers never

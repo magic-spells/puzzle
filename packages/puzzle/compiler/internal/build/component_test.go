@@ -75,7 +75,7 @@ func TestBuildComponentSlotAcrossOutputModes(t *testing.T) {
 				t.Fatalf("component slot %q build: %v", mode, err)
 			}
 			if mode != "static" {
-				bundle := readFile(t, filepath.Join(root, "dist", "app.js"))
+				bundle := readFile(t, appBundle(t, filepath.Join(root, "dist")))
 				if !strings.Contains(bundle, "#component") || metafileBytesInOutput(t, meta, "client-runtime/views/componentSlot.js") == 0 {
 					t.Fatalf("used component range was removed from %q bundle", mode)
 				}
@@ -122,7 +122,7 @@ func TestBuildWithoutComponentSlotsDropsRangeAndHelpers(t *testing.T) {
 	if err := Build(root, Options{Development: false, Metafile: &meta}); err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(readFile(t, filepath.Join(root, "dist", "app.js")), "#component") {
+	if strings.Contains(readFile(t, appBundle(t, filepath.Join(root, "dist"))), "#component") {
 		t.Fatal("an app without Component retains the range tag")
 	}
 	if bytes := metafileBytesInOutput(t, meta, "client-runtime/views/componentSlot.js"); bytes != 0 {
@@ -141,7 +141,7 @@ func TestBuildConditionalSlotKeepsOutletParkingOnlyWhenUsed(t *testing.T) {
 			t.Fatal(err)
 		}
 		// parkRetained is the only runtime caller of createDocumentFragment.
-		if got := strings.Contains(readFile(t, filepath.Join(root, "dist", "app.js")), "createDocumentFragment"); got != conditional {
+		if got := strings.Contains(readFile(t, appBundle(t, filepath.Join(root, "dist"))), "createDocumentFragment"); got != conditional {
 			t.Fatalf("conditional slot %v: outlet parking in bundle = %v", conditional, got)
 		}
 	}

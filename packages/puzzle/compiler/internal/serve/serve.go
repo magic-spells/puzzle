@@ -1,6 +1,7 @@
 // Package serve holds the two pieces of HTTP plumbing `puzzle dev` and `puzzle
-// preview` must agree on: the loopback port scan (D90) and the mode-aware
-// mapping from a request path onto a built dist/ tree.
+// preview` must agree on: the port scan (D90; loopback unless --host says
+// otherwise) and the mode-aware mapping from a request path onto a built dist/
+// tree.
 //
 // The resolver exists because "what URL serves what file" is a property of the
 // OUTPUT MODE, not of the command: an SPA falls back to index.html for anything
@@ -18,7 +19,10 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strconv"
 	"strings"
+
+	"github.com/magic-spells/puzzle/compiler/internal/fsutil"
 )
 
 // The resolved output modes. They are the values `puzzle.config.js` `output`
@@ -65,7 +69,7 @@ func Resolve(dist, mode, urlPath string) Result {
 	clean := path.Clean(urlPath)
 	if clean == "/" || clean == "." {
 		if mode == ModeStatic {
-			if isFile(index) {
+			if fsutil.FileExists(index) {
 				return Result{File: index, HTML: true, Status: 200}
 			}
 			return missing(dist, clean)
@@ -74,11 +78,11 @@ func Resolve(dist, mode, urlPath string) Result {
 	}
 
 	candidate := filepath.Join(dist, filepath.FromSlash(strings.TrimPrefix(clean, "/")))
-	// withinDir is lexical; withinDirResolved backstops it for a symlink under
+	// WithinDir is lexical; withinDirResolved backstops it for a symlink under
 	// dist pointing outside. A path that escapes is treated as a miss, never
 	// served.
-	if withinDir(dist, candidate) {
-		if isFile(candidate) && withinDirResolved(dist, candidate) {
+	if WithinDir(dist, candidate) {
+		if fsutil.FileExists(candidate) && withinDirResolved(dist, candidate) {
 			if candidate == index && mode != ModeStatic {
 				// "/index.html" is the root document, same as "/".
 				return Result{File: index, Shell: true, HTML: true, Status: 200}
@@ -91,7 +95,7 @@ func Resolve(dist, mode, urlPath string) Result {
 		// falling straight through to the shell.
 		if mode != ModeSPA {
 			pageIndex := filepath.Join(candidate, "index.html")
-			if isFile(pageIndex) && withinDirResolved(dist, pageIndex) {
+			if fsutil.FileExists(pageIndex) && withinDirResolved(dist, pageIndex) {
 				return Result{File: pageIndex, HTML: true, Status: 200}
 			}
 		}
@@ -118,12 +122,12 @@ func missing(dist, clean string) Result {
 	seg, _, _ := strings.Cut(strings.TrimPrefix(clean, "/"), "/")
 	if seg != "" && seg != "." && seg != ".." {
 		page := filepath.Join(dist, seg, "404.html")
-		if withinDir(dist, page) && isFile(page) && hasEntryNamed(dist, seg) && withinDirResolved(dist, page) {
+		if WithinDir(dist, page) && fsutil.FileExists(page) && hasEntryNamed(dist, seg) && withinDirResolved(dist, page) {
 			return Result{File: page, HTML: true, Status: 404}
 		}
 	}
 	page := filepath.Join(dist, "404.html")
-	if isFile(page) {
+	if fsutil.FileExists(page) {
 		return Result{File: page, HTML: true, Status: 404}
 	}
 	return Result{Status: 404}
@@ -144,19 +148,14 @@ func hasEntryNamed(dir, name string) bool {
 	return false
 }
 
-func isFile(path string) bool {
-	info, err := os.Stat(path)
-	return err == nil && !info.IsDir()
-}
-
 func isHTMLName(path string) bool {
 	ext := strings.ToLower(filepath.Ext(path))
 	return ext == ".html" || ext == ".htm"
 }
 
-// withinDir reports whether target resolves inside dir (path-traversal guard).
+// WithinDir reports whether target resolves inside dir (path-traversal guard).
 // It is purely lexical — see withinDirResolved for the symlink-aware backstop.
-func withinDir(dir, target string) bool {
+func WithinDir(dir, target string) bool {
 	rel, err := filepath.Rel(dir, target)
 	if err != nil {
 		return false
@@ -176,21 +175,23 @@ func withinDirResolved(dir, target string) bool {
 	if err != nil {
 		return false
 	}
-	return withinDir(realDir, realTarget)
+	return WithinDir(realDir, realTarget)
 }
 
-// PortScanLimit is how many consecutive ports Listen tries before giving up.
+// PortScanLimit is how many consecutive ports ListenHost tries before giving up.
 // A busy default port is a papercut, not a failure (the same posture as Vite,
 // Next, and Astro), but the scan is bounded so a wedged machine reports a real
 // error instead of walking the port space.
 const PortScanLimit = 10
 
-// Listen binds the first free loopback port at or above `port`, returning the
-// listener. With strict set, only `port` itself is tried (D90).
+// ListenHost binds the first free port at or above `port` on host, returning
+// the listener. With strict set, only `port` itself is tried (D90).
 //
-// Loopback only: the dev and preview servers are a local convenience, not a LAN
-// service. The banner prints localhost, so the bind must match. No host config
-// option in v1.
+// Loopback by default: host "" or "localhost" binds 127.0.0.1, because the dev
+// and preview servers are a local convenience and the banner prints localhost.
+// `--host` opts into anything else — "0.0.0.0" (or "::") for every interface,
+// the way Vite's --host exposes a dev server to the LAN, or one specific
+// address. BindHost does the mapping; Banner reports the matching URLs.
 //
 // Any bind failure advances the scan, and the FIRST error is what surfaces once
 // the range is exhausted — it belongs to the port the user actually asked for.
@@ -201,16 +202,17 @@ const PortScanLimit = 10
 //
 // Port 0 is passed through untouched — the kernel picks a free port and the one
 // attempt always succeeds, so there is nothing to scan.
-func Listen(port int, strict bool) (net.Listener, error) {
+func ListenHost(host string, port int, strict bool) (net.Listener, error) {
 	const maxPort = 65535
 
 	if port < 0 || port > maxPort {
 		return nil, fmt.Errorf("invalid port %d: must be between 0 and %d", port, maxPort)
 	}
+	bind := BindHost(host)
 
 	var firstErr error
 	for candidate := port; candidate <= maxPort; candidate++ {
-		ln, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", candidate))
+		ln, err := net.Listen("tcp", net.JoinHostPort(bind, strconv.Itoa(candidate)))
 		if err == nil {
 			return ln, nil
 		}
@@ -222,6 +224,67 @@ func Listen(port int, strict bool) (net.Listener, error) {
 		}
 	}
 	return nil, firstErr
+}
+
+// DefaultHost is the --host value that keeps the servers on loopback.
+const DefaultHost = "localhost"
+
+// AllInterfacesHost is what a bare --host (no value) means: every interface.
+const AllInterfacesHost = "0.0.0.0"
+
+// BindHost maps a --host value onto the address to bind. The default ("" or
+// "localhost") is the IPv4 loopback the servers have always used, so the
+// banner's localhost URL and the bind never disagree over IPv6 resolution.
+func BindHost(host string) string {
+	if host == "" || strings.EqualFold(host, DefaultHost) {
+		return "127.0.0.1"
+	}
+	return host
+}
+
+// Banner returns the URLs the ready banner prints for a server bound with host
+// on port: local is the URL to open on this machine, network the URLs other
+// devices can reach. The default loopback bind prints http://localhost:<port>/
+// alone; an all-interfaces bind ("0.0.0.0" or "::") adds one network URL per
+// non-loopback IPv4 interface address; any other address is printed as itself,
+// since "localhost" might resolve somewhere it is not listening.
+func Banner(host string, port int) (local string, network []string) {
+	bind := BindHost(host)
+	if bind == "127.0.0.1" {
+		return hostURL("localhost", port), nil
+	}
+	if ip := net.ParseIP(bind); ip != nil && ip.IsUnspecified() {
+		return hostURL("localhost", port), lanURLs(port)
+	}
+	return hostURL(bind, port), nil
+}
+
+func hostURL(host string, port int) string {
+	return "http://" + net.JoinHostPort(host, strconv.Itoa(port)) + "/"
+}
+
+// lanURLs lists one URL per non-loopback IPv4 address on an up interface —
+// what a phone on the same network would type. IPv6 and link-local addresses
+// are left out: they are rarely what anyone wants to type, and Vite omits them
+// too.
+func lanURLs(port int) []string {
+	addrs, err := net.InterfaceAddrs()
+	if err != nil {
+		return nil
+	}
+	var urls []string
+	for _, addr := range addrs {
+		ipnet, ok := addr.(*net.IPNet)
+		if !ok {
+			continue
+		}
+		ip4 := ipnet.IP.To4()
+		if ip4 == nil || ip4.IsLoopback() || ip4.IsLinkLocalUnicast() {
+			continue
+		}
+		urls = append(urls, hostURL(ip4.String(), port))
+	}
+	return urls
 }
 
 // BoundPort reports the port a listener actually bound, falling back to fallback

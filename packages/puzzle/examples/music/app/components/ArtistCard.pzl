@@ -1,5 +1,5 @@
 <puzzle-view>
-  <a href="{ link('/artist/' + artist.id) }" class="group block text-center hover:no-underline">
+  <a href="{ link({ name: 'artist', params: { id: artist.id } }) }" class="group block text-center hover:no-underline">
     <div
       data-puzzle-morph-trigger="artist-{ artist.id }"
       class="aspect-square rounded-full mb-3 flex items-center justify-center shadow-lg shadow-black/40 ring-1 ring-white/10 transition-transform duration-200 group-hover:scale-[1.04]"
@@ -15,10 +15,6 @@
 import { PuzzleView } from '@magic-spells/puzzle';
 
 export default class ArtistCard extends PuzzleView {
-  data(params, props) {
-    return { artist: props.artist };
-  }
-
   // The avatar is a morph TRIGGER (D69): the router pairs it with the Artist
   // header's matching data-puzzle-morph-target on the sibling view swap — forward
   // only, no click handler needed. Both ends are rounded-full, so the blob stays a

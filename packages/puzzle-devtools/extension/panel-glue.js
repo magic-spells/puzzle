@@ -9,13 +9,11 @@
  * Bridge API (`window.__PUZZLE_DEVTOOLS_PANEL__`):
  *
  *   onMessage(cb)            cb(protocolEnvelope, seq) for every runtime event.
- *                            Returns an unsubscribe function.
  *   onStatus(cb)             cb('connected' | 'disconnected') for the port.
  *   onNavigated(cb)          cb(url) when the inspected page navigates/reloads.
  *   request(type, payload)   Promise of the runtime's result payload. Rejects on
  *                            a hook/bridge error and after REQUEST_TIMEOUT_MS.
  *   sendListening()          tell the page hook to replay its buffer and stream.
- *   tabId, themeName         inspected tab id and DevTools theme.
  *
  * `createBridge` is also exported on `window.__PUZZLE_DEVTOOLS_CREATE_BRIDGE__`
  * so tests can build one against a stub runtime.
@@ -38,13 +36,11 @@
 	 * @param {object} options
 	 * @param {object} options.runtime      chrome.runtime (or a stub with connect())
 	 * @param {number} options.tabId        inspected tab id
-	 * @param {string} [options.themeName]  'dark' | 'default'
 	 * @param {number} [options.timeoutMs]  request timeout override
 	 */
 	function createBridge(options) {
 		var runtime = options && options.runtime;
 		var tabId = options && options.tabId;
-		var themeName = (options && options.themeName) || 'default';
 		var timeoutMs = (options && options.timeoutMs) || REQUEST_TIMEOUT_MS;
 
 		var port = null;
@@ -185,23 +181,14 @@
 
 		function onMessage(cb) {
 			messageListeners.add(cb);
-			return function off() {
-				messageListeners.delete(cb);
-			};
 		}
 
 		function onStatus(cb) {
 			statusListeners.add(cb);
-			return function off() {
-				statusListeners.delete(cb);
-			};
 		}
 
 		function onNavigated(cb) {
 			navigationListeners.add(cb);
-			return function off() {
-				navigationListeners.delete(cb);
-			};
 		}
 
 		function notifyNavigated(url) {
@@ -215,9 +202,6 @@
 		}
 
 		return {
-			tabId: tabId,
-			themeName: themeName,
-			protocolVersion: PROTOCOL_VERSION,
 			connect: ensurePort,
 			onMessage: onMessage,
 			onStatus: onStatus,
@@ -249,7 +233,6 @@
 		var bridge = createBridge({
 			runtime: chrome.runtime,
 			tabId: chrome.devtools.inspectedWindow.tabId,
-			themeName: themeName,
 		});
 		bridge.connect();
 

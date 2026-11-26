@@ -8,27 +8,37 @@ connections:
   - COMPONENT-ESBUILD-PLUGIN
   - FLOW-BUILD
   - DECISION-D160-SPA-CODE-SPLITTING
-verified_at: '2026-08-24T21:11:50.859Z'
-verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
+  - DECISION-D181-HASHED-OUTPUT-NAMES-AND-MODULEPRELOAD
+  - DECISION-D153-PUZZLE-SCRATCH-DIR
+verified_at: '2026-11-24T18:02:16.140Z'
+verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
+notes:
+  - kind: state
+    text: >-
+      `cfg.Env` ([[DECISION-D190-CONFIG-ENV]]) rides `passContext.env` into both prerender passes
+      and static pages, and `bundleFlags.Env` into the SPA pass, the same way `i18n` is threaded;
+      every pass reaches `bundleDefines`.
 ---
 
 # build.go
 
 One-shot builds: stages browser output, assets, styles and public files into a
-`staging-*` directory under `<root>/.puzzle/tmp` ([[DECISION-D153-PUZZLE-SCRATCH-DIR]])
-and swaps it into `dist/` only when every step succeeds, so a failed build keeps
-the last good output ([[FLOW-BUILD]]).
+staging dir under `<root>/.puzzle/tmp` ([[DECISION-D153-PUZZLE-SCRATCH-DIR]]) and
+swaps it into `dist/` only when every step succeeds, so a failed build keeps the
+last good output ([[FLOW-BUILD]]).
 
-Trap: `cfg.Splitting() && mode != "static"` is resolved **before**
-`ValidatePublic` ([[DECISION-D160-SPA-CODE-SPLITTING]]) — static mode deletes this
-pass's `app.js` before the swap, so splitting it would strand chunks nothing
-imports. `ValidatePublic` takes that boolean and reserves the root-level
-`chunks/` entry only while splitting is on; an app that never opts in keeps its
-`public/chunks/` assets, which is why the name is not in `reservedOutputNames`.
-
-Production resolves `hash := !dev && cfg.HashNames()`, keeps static mode's discarded
-SPA entry fixed, and captures the browser metafile for the shell rewrite. The composed
-stylesheet is content-hashed even when unlinked. After copying public assets,
-[[FILE-BUILD-SHELL]] rewrites compiler references and inserts the splitting pass's
-static-import preloads before either prerender mode reads the shell. Errors preserve
-the last good output. Public files retain their names; development skips the rewrite.
+- **Splitting is resolved before `ValidatePublic`**
+  (`cfg.Splitting() && mode != "static"`, [[DECISION-D160-SPA-CODE-SPLITTING]]):
+  static mode deletes this pass's `app.js` before the swap, so splitting it would
+  strand chunks nothing imports. `ValidatePublic` reserves the root-level `chunks/`
+  name only while splitting is on — an app that never opts in keeps its
+  `public/chunks/`, which is why `chunks` is not in `reservedOutputNames`.
+- **Hashing** ([[DECISION-D181-HASHED-OUTPUT-NAMES-AND-MODULEPRELOAD]]):
+  `hash := !opts.Development && cfg.HashNames()`; static mode's discarded SPA entry stays fixed.
+  When `cfg.Build.HashNames` is nil (default-on, not explicit), the
+  [[FILE-BUILD-SHELL]] pre-check runs before bundling and clears `hashEntry` /
+  `hashStyles` for a file the public HTML cannot follow, with one warning each. An
+  explicit `true` skips the check: the stylesheet is hashed even when unlinked and
+  a missing entry reference fails the build.
+- After public assets are copied, the shell rewrite (and, with splitting, its
+  static-import preloads) runs before either prerender mode reads the shell.

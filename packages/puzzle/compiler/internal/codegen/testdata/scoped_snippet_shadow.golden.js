@@ -29,5 +29,4 @@ ScopedSnippetShadow.prototype.render = function () {
     , __L0)
   );
 };
-ScopedSnippetShadow.__pzlModule = 'scoped_snippet_shadow.pzl';
 ScopedSnippetShadow.__roots = ['title'];

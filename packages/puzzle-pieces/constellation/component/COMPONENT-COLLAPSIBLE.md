@@ -1,7 +1,7 @@
 ---
 name: Collapsible + Accordion families
 kind: piece
-status: built
+status: verified
 framework: puzzle
 props:
   - name: open
@@ -27,19 +27,12 @@ connections:
 notes:
   - kind: gotcha
     text: >-
-      Astra F12 (recreated Accordion panels painted fully open; fixed in 0.6.x with a `_seeded`
-      WeakSet that re-seeded a panel's resting height on first sight) is SUPERSEDED and the WeakSet
-      is deleted. The height seeding is upstream's `connectedCallback` now: it reads the `open`
-      attribute and writes `height: auto | 0` with no animation, on every connect. There is nothing
-      left in this repo to regress.
-  - kind: gotcha
-    text: >-
       Padding must NOT sit on `<collapsible-content>` itself. The element animates its HEIGHT, and
       height is the content box — a closed panel at `height: 0` still renders its own padding, so
-      `pb-4` on the host left 16px of dead space under every closed row (caught in the browser
-      smoke, not by any test). `Collapsible.Content` therefore renders a single inner `<div>` that
-      carries the padding, the typography and the merged `class`; the host carries nothing but the
-      optional `--collapsible-easing` style. This is upstream's own documented shape. A static test
+      `pb-4` on the host leaves 16px of dead space under every closed row. `Collapsible.Content`
+      therefore renders a single inner `<div>` that carries the padding, the typography and the
+      merged `class`; the host carries no class of ours, only the optional `--collapsible-easing`
+      style and the component's attributes. This is upstream's own documented shape. A static test
       guards the structure.
   - kind: gotcha
     text: >-
@@ -55,11 +48,13 @@ notes:
       cascade, and `#last` is NEVER assigned from the reported value (it tracks `props.value` only),
       which is what makes a rejected toggle stay rejected instead of being reverted by a later
       unrelated render.
+verified_at: '2026-11-24T18:13:21.786Z'
+verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
 ---
 
 Two families over one web component, `@magic-spells/collapsible-content` 1.2.0:
 `Collapsible` · `.Trigger` · `.Content`, and `Accordion` · `.Item` · `.Trigger` ·
-`.Content`. Rewritten from single-file ports in 0.7.0.
+`.Content`.
 
 ## Why a wrapper, and why two families
 
@@ -70,9 +65,8 @@ tokens only.
 
 Two content channels (the trigger row and the panel body) are what forced the
 family shape: a piece gets exactly one, and a named slot cannot compile inside a
-component invocation. The old `label` prop and Accordion's `items` config array
-are gone; the array's plain-text-only `content` limitation went with it, which was
-the real cost of the config shape.
+component invocation. A config shape (a `label` prop, an `items` array) would limit
+the trigger row and panel body to plain text, which is its real cost.
 
 ## The non-exclusive group root
 

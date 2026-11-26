@@ -116,12 +116,13 @@ func fetchRegistry(f Fetcher) (*Registry, error) {
 	regData, err := f.Fetch("registry.json")
 	if err != nil {
 		// A dead default source is almost always "no pieces release matches this
-		// CLI's major.minor yet / npm is unreachable" — name the three overrides,
+		// CLI's major.minor yet / npm is unreachable" — name the two overrides,
 		// or the user is stuck staring at a bare error about a source they never
-		// chose.
+		// chose. Not --pieces-version or an npm:pkg@version source: an older pin
+		// installs the release the version lock just refused.
 		if f.Source() == defaultRegistry {
 			return nil, fmt.Errorf(
-				"%w\n  (the default npm registry didn't yield a matching pieces release — pin one with --pieces-version, or point at a registry with --registry <path|url|npm:pkg[@version]> or the PUZZLE_PIECES_REGISTRY env var)", err)
+				"%w\n  (the default npm registry didn't yield a matching pieces release — point at a registry with --registry <path|url> or the PUZZLE_PIECES_REGISTRY env var)", err)
 		}
 		return nil, err
 	}
@@ -422,12 +423,10 @@ func AddThemes(opts ThemeOptions) (*ThemeResult, error) {
 			// The default palette's "is it needed at all?" question belongs to
 			// planTheme — the same code `add piece` runs — so the two commands agree
 			// on when pieces.css is wanted. Only the hand-merge marker and the package
-			// import stop here; every other state — (c), a live `@import
-			// './pieces.css'`, or a mere mention planTheme's substring test took for
-			// wiring — continues below, where it gets the SAME already-installed rules
-			// every other palette gets: `add theme default` must behave like `add
-			// theme dim`. `add piece` itself is unchanged and still never rewrites
-			// pieces.css.
+			// import stop here; (c) and a live `@import './pieces.css'` continue
+			// below, where they get the SAME already-installed rules every other
+			// palette gets: `add theme default` must behave like `add theme dim`.
+			// `add piece` itself still never rewrites pieces.css.
 			plan, defaultAdvisory, perr := planTheme(&Options{AppRoot: opts.AppRoot, Fetcher: opts.Fetcher}, reg)
 			if perr != nil {
 				return nil, perr
@@ -451,18 +450,12 @@ func AddThemes(opts ThemeOptions) (*ThemeResult, error) {
 				outcome.State = ThemeWired
 				result.Themes = append(result.Themes, outcome)
 				continue
-			case piecesCssImported(styles):
+			default:
 				// A live `@import './pieces.css'`: the app USES the file, so it is
 				// hashed, refreshed, refused or --overwritten like any other palette,
 				// and a deleted one is copied back behind its import. The import is
 				// already there, so no import line is printed.
 				advisory = ""
-			default:
-				// planTheme's (a) matched only a MENTION of pieces.css — a comment, an
-				// import commented out. That is not wiring: the palette is handled
-				// exactly as in an app that never mentions it — copied when absent,
-				// the import line printed either way.
-				advisory, adviseWhenUpToDate = themeImportAdvisory, true
 			}
 		} else if themeImportedFromPackage(styles, t.Name) {
 			// Provided by the package already — a copy could only drift from it.
@@ -483,7 +476,7 @@ func AddThemes(opts ThemeOptions) (*ThemeResult, error) {
 
 		// A symlinked destination is a deliberate link (a dev checkout, a shared
 		// palette): report and skip it rather than silently replacing what it
-		// points at. --overwrite is explicit intent and writes THROUGH the link
+		// points at. --force is explicit intent and writes THROUGH the link
 		// (abs is already the resolved target), never over it. The Lstat is on the
 		// UNRESOLVED path — containedWritePath has followed the link by now, so
 		// stat-ing abs would only ever see the target.
@@ -544,7 +537,7 @@ func AddThemes(opts ThemeOptions) (*ThemeResult, error) {
 	// Nothing has been written at this point.
 	if len(refusals) > 0 {
 		sort.Strings(refusals)
-		return nil, fmt.Errorf("refusing to overwrite modified file(s) (use --overwrite to replace):\n  %s",
+		return nil, fmt.Errorf("refusing to overwrite modified file(s) (use --force to replace):\n  %s",
 			strings.Join(refusals, "\n  "))
 	}
 

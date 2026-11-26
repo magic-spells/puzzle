@@ -17,7 +17,7 @@
  *
  * `beforeMount` is NOT called here: it is build-time only in static mode (the
  * Astro-frontmatter policy — its store seed already ran at build time and rode into
- * the data island). Only component interactivity (event handlers, local setData
+ * the data island). Only component interactivity (event handlers, local setState
  * state, store mutations) runs client-side.
  *
  * This module runs in the browser only (it touches `document`). It is bundled per
@@ -69,7 +69,7 @@ import manifestData from '@magic-spells/puzzle/i18n/manifest';
  *   generated (D179), with `path` and `params` taken from the page's
  *   `data-puzzle-static-route` island
  * @param {object} [options.models] the app models map
- * @param {object} [options.formatters] the app custom formatters map
+ * @param {object} [options.functions] the app's custom template functions map
  * @param {string} [options.apiURL] the store's base API URL
  * @param {Pick<Storage, 'getItem' | 'setItem'>} [options.storage] Storage-like persistence object
  * @param {import('../capabilities.js').AdapterCapability} [options.adapter] opaque adapter capability
@@ -86,7 +86,7 @@ export async function mountStatic({
 	layout = null,
 	route,
 	models,
-	formatters,
+	functions,
 	apiURL,
 	storage,
 	adapter,
@@ -119,7 +119,7 @@ export async function mountStatic({
 	const routeSnapshot = makeRouteSnapshot(entry);
 	const ctx = buildStaticContext({
 		models,
-		formatters,
+		functions,
 		apiURL,
 		storage,
 		adapter,
@@ -204,9 +204,9 @@ export async function mountStatic({
 		for (const instance of nested) instance.skipEnter();
 	}
 
-	// Initial paint must NOT animate — the content is already on screen (same posture
-	// as the SSG takeover: skipEnter every preloaded instance).
-	for (const instance of instances) instance.skipEnter();
+	// A takeover's chain is already on screen. An unmarked page is a first paint: as the
+	// router's initial nav, only the topmost view (instances[0]; layout last) plays in.
+	for (const instance of instances) if (isTakeover || instance !== instances[0]) instance.skipEnter();
 
 	// A locale switch (D175) rebuilds this page the way the SPA router's
 	// same-location rebuild does: preload a fresh chain — nested components too,
@@ -254,9 +254,11 @@ export async function mountStatic({
 		}
 	};
 
-	// An unmarked prerender:false page has no fallback DOM to preserve and keeps the
-	// original mount path byte-for-byte.
+	// An unmarked prerender:false page has no fallback DOM to preserve. Its HTML is
+	// the verbatim shell, so its route title is set here, as the SPA router's
+	// navigation zero does (a `{ t }` title was synced above; syncTitle skips it).
 	if (!isTakeover) {
+		syncTitle(resolveHeadField(chain, 'title'));
 		targetEl.replaceChildren();
 		mount(topVnode, targetEl, null, ctx);
 		armRemount(topVnode.instance);
@@ -314,17 +316,17 @@ function syncLocaleTitle(chain, i18n) {
 /**
  * Wire the build-time ctx exactly as ssg/index.js buildContext does — a Store over
  * the models + apiURL and a FormatterRegistry seeded with the built-ins then the
- * config formatters — EXCEPT `ctx.router` is a throwing stub (no Router import in
+ * config functions — EXCEPT `ctx.router` is a throwing stub (no Router import in
  * this module graph). `beforeMount` is NOT run (build-time only in static mode).
  *
- * @param {{ models?: object, formatters?: object, apiURL?: string,
+ * @param {{ models?: object, functions?: object, apiURL?: string,
  *   storage?: Pick<Storage, 'getItem' | 'setItem'>, adapter?: AdapterCapability,
  *   routerBase?: string, route: object }} options
  * @returns {StaticContext}
  */
 function buildStaticContext({
 	models = {},
-	formatters = {},
+	functions = {},
 	apiURL,
 	storage,
 	adapter,
@@ -332,10 +334,7 @@ function buildStaticContext({
 	route,
 }) {
 	installAdapterCapability(adapter, 'config.adapter');
-	/** @type {{ apiURL?: string, adapter?: AdapterCapability, storage?: Pick<Storage, 'getItem' | 'setItem'> }} */
-	const storeOptions = { apiURL, adapter };
-	if (storage !== undefined) storeOptions.storage = storage;
-	const store = new Store(models, storeOptions);
+	const store = new Store(models, { apiURL, adapter, storage });
 
 	// The stub encodes HISTORY-style, and the prerenderer's stub does the same
 	// (ssg/index.js buildContext) so the hrefs this re-render produces are
@@ -346,8 +345,14 @@ function buildStaticContext({
 	// all (D159), and the build warns when one is configured. `routerBase` still
 	// applies — a subpath deploy wants the prefix.
 	const router = makeRouterStub(route, { base: routerBase });
+	// Named links (D196): a static page ships no route table, so the page's names
+	// island stands in for it. Read on the first named link, so a page without
+	// one never looks for it.
+	/** @type {Map<string, string> | undefined} */
+	let names;
+	Object.defineProperty(router, 'names', { get: () => (names ??= readNamesIsland()) });
 	const registry = makeFormatterRegistry(
-		formatters,
+		functions,
 		// Read router.url per call: locale prefix routing (D177) swaps in its
 		// locale-aware url(path, options) after this registry is built.
 		typeof __PUZZLE_HAS_LOCALE_ROUTING__ === 'undefined' || __PUZZLE_HAS_LOCALE_ROUTING__
@@ -357,6 +362,24 @@ function buildStaticContext({
 
 	// ctx.idle (D189): no navigation or app to wait on, so a static page is always idle.
 	return { store, router, formatters: registry, idle: async () => true };
+}
+
+/**
+ * The route name table a static page's prerender wrote into its names island
+ * (D196). A page carries one only when its prerender rendered a named link (or
+ * it is a `prerender: false` page), so a named link the browser renders on any
+ * other page is a clear error rather than a dead href.
+ *
+ * @returns {Map<string, string>} the same Map shape the live router builds
+ */
+function readNamesIsland() {
+	const el = document.querySelector('script[data-puzzle-static-names]');
+	if (!el) {
+		throw new Error(
+			'[puzzle] this static page has no route names to resolve a named link — a static page carries them only when its prerender rendered one; link to this route by its path'
+		);
+	}
+	return new Map(Object.entries(JSON.parse(el.textContent)));
 }
 
 /**

@@ -140,7 +140,7 @@ export default class SchemePanel extends PuzzleView {
 		this._scheduled = false;
 	}
 
-	data(params, props) {
+	data({ params, props }) {
 		const requested = (params && params.scheme) || props.scheme || DEFAULT_SCHEME;
 		const known = SCHEME_VALUES.includes(requested);
 		const scheme = requested;
@@ -211,12 +211,11 @@ export default class SchemePanel extends PuzzleView {
 	};
 
 	mounted() {
-		this.setData({ mode: liveMode() });
+		this.setState({ mode: liveMode() });
 		// appearance.js notifies on every set() and, while following the OS, on
 		// every system light/dark flip — so one subscription covers both.
 		this._unsubscribe = subscribe(() => {
-			this.setData({ mode: liveMode() });
-			this.refresh();
+			this.setState({ mode: liveMode() });
 		});
 		// The demo is hash-routed. Navigating /themes/cool → /themes/warm reuses
 		// this view with new params; the router re-renders on hashchange, and the
@@ -321,8 +320,7 @@ export default class SchemePanel extends PuzzleView {
 		}
 
 		this._probedScheme = scheme;
-		this.setData({ values, contrast, summary, ready: true });
-		this.refresh();
+		this.setState({ values, contrast, summary, ready: true });
 	}
 }
 

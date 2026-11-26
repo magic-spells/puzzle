@@ -33,12 +33,12 @@ function deferred() {
 	});
 	return { promise, resolve };
 }
-// setData re-renders flush on the next animation frame (PuzzleView #scheduleRender).
+// setState re-renders flush on the next animation frame (PuzzleView #scheduleRender).
 const frame = () =>
 	new Promise((r) =>
 		typeof requestAnimationFrame === 'function' ? requestAnimationFrame(() => r()) : setTimeout(r, 0)
 	);
-// A bind write is setData + refresh(): the re-render lands on an animation frame
+// A bind write is setState + refresh(): the re-render lands on an animation frame
 // after data() re-runs, so drain both queues a few times.
 async function flush() {
 	for (let i = 0; i < 5; i++) {
@@ -60,10 +60,10 @@ class Note extends PuzzleModel {
 }
 
 // A view whose data() reads the store (so hydration is observable) and whose render
-// carries a click handler + local setData (so client interactivity is observable).
+// carries a click handler + local setState (so client interactivity is observable).
 class Counter extends PuzzleView {
 	created() {
-		this.setData({ clicks: 0 });
+		this.setState({ clicks: 0 });
 	}
 	data() {
 		const notes = this.ctx.store.findMany('note');
@@ -73,7 +73,7 @@ class Counter extends PuzzleView {
 		const d = this.getData();
 		return h('div', { class: 'counter' }, [
 			h('ul', {}, d.notes.map((n) => h('li', { key: n.id }, [text(n.body)]))),
-			h('button', { '@click': () => this.setData({ clicks: d.clicks + 1 }) }, [
+			h('button', { '@click': () => this.setState({ clicks: d.clicks + 1 }) }, [
 				text(`clicks: ${d.clicks}`),
 			]),
 		]);
@@ -482,7 +482,7 @@ describe('static kernel — mountStatic (D81)', () => {
 		const button = el.querySelector('button');
 		expect(button.textContent).toBe('clicks: 0');
 		button.click();
-		await frame(); // the setData re-render flushes on the next animation frame
+		await frame(); // the setState re-render flushes on the next animation frame
 		expect(el.querySelector('button').textContent).toBe('clicks: 1');
 	});
 
@@ -557,6 +557,31 @@ describe('static kernel — mountStatic (D81)', () => {
 		expect(nestedWillShow).toBe(1);
 	});
 
+	it('a prerender:false page plays its routed view enter, as the router initial nav', async () => {
+		// The topmost view animates in exactly once; the layout never does on first paint.
+		const shown = [];
+		const animated = (name, render) => {
+			const C = class extends PuzzleView {
+				animations = { in: { from: { opacity: 0 }, to: { opacity: 1 }, duration: 5 } };
+				viewWillShow() {
+					shown.push(name);
+				}
+			};
+			C.prototype.render = render;
+			return stamp(C, `app/${name}.pzl`);
+		};
+		const Page = animated('Page', () => h('p', {}, [text('page')]));
+		const Shell = animated('Shell', () => h('div', {}, [slot()]));
+		const cfg = { target: '#app', routes: [{ path: '/', view: Page, layout: Shell, prerender: false }] };
+		const { pages } = await prerender(cfg, { mode: 'static' });
+		seedDocument({ content: '', data: pages[0].data });
+
+		await mountStatic({ target: '#app', views: [Page], layout: Shell, route: pages[0].route });
+		await tick();
+
+		expect(shown).toEqual(['Page']);
+	});
+
 	it('mounts a prerender:false page into the empty target (same code path)', async () => {
 		const cfg = {
 			target: '#app',
@@ -581,6 +606,18 @@ describe('static kernel — mountStatic (D81)', () => {
 
 		expect(el.querySelectorAll('.counter li').length).toBe(1);
 		expect(el.textContent).toContain('zulu');
+	});
+
+	it('a prerender:false page takes its route title over the shell’s', async () => {
+		const route = { path: '/app', name: 'spa', view: Counter, prerender: false, meta: { title: 'Workbench' } };
+		const { pages } = await prerender({ target: '#app', models: { note: Note }, routes: [route] }, { mode: 'static' });
+		expect(pages[0].title).toBeNull(); // the build writes the verbatim shell
+		seedDocument({ content: '', data: pages[0].data });
+		document.title = 'Shell';
+
+		await mountStatic({ target: '#app', views: [Counter], route: pages[0].route, models: { note: Note } });
+
+		expect(document.title).toBe('Workbench');
 	});
 
 	it('ctx.router is a stub whose methods throw', async () => {
@@ -758,9 +795,10 @@ describe('static kernel — mountStatic (D81)', () => {
 	// (ssg/serialize.js serializeAttrs) and only exists once something mounts. A
 	// static page has no router, so mountStatic is that something — the whole
 	// interactivity budget of `output: 'static'`. The view is the Go compiler's
-	// ACTUAL output (tests/fixtures/binding/LocalForm.compiled.js).
+	// ACTUAL output (tests/fixtures/binding/LocalForm.compiled.js); pzlc does not
+	// stamp it, so the test stamps it the way a static build's plugin does.
 	it('attaches the synthesized bind listener over prerendered markup (D147)', async () => {
-		const cfg = { target: '#app', routes: [{ path: '/', name: 'form', view: LocalForm }] };
+		const cfg = { target: '#app', routes: [{ path: '/', name: 'form', view: stamp(LocalForm, 'app/views/LocalForm.pzl') }] };
 		const { pages } = await prerender(cfg, { mode: 'static' });
 		const page = pages[0];
 
@@ -956,7 +994,8 @@ describe('static kernel — read-state island (D161)', () => {
 	it.each([
 		{ label: 'one record', records: [{ id: 'p1', title: 'build-time post' }] },
 		{ label: 'an empty collection', records: [] },
-	])('transfers authored loadMany state for $label without refetching at mount', async ({ records }) => {
+		{ label: 'a server query', records: [{ id: 'p1', title: 'build-time post' }], query: { page: 1 } },
+	])('transfers authored loadMany state for $label without refetching at mount', async ({ records, query }) => {
 		const loadMany = vi
 			.fn()
 			.mockResolvedValueOnce(records)
@@ -970,7 +1009,7 @@ describe('static kernel — read-state island (D161)', () => {
 				lastStore = this.ctx.store;
 			}
 			data() {
-				return { posts: this.ctx.store.findMany('post') };
+				return { posts: this.ctx.store.findMany('post', query && { query }) };
 			}
 			render() {
 				return h('ul', {},
@@ -989,7 +1028,10 @@ describe('static kernel — read-state island (D161)', () => {
 			{ mode: 'static' }
 		);
 		const page = pages[0];
-		const readState = { v: 1, complete: [], loaded: ['post'], absent: [] };
+		// a query load marks no collection LOADED (D193): its entry is all it settles
+		const readState = query
+			? { v: 1, complete: [], loaded: [], absent: [], queries: [['post?[["page",1]]', 'post', query, ['p1'], null]] }
+			: { v: 1, complete: [], loaded: ['post'], absent: [] };
 		expect(page.readState).toEqual(readState);
 		expect(loadMany).toHaveBeenCalledTimes(1);
 		document.body.innerHTML = injectStaticShell('<div id="app"></div>', {

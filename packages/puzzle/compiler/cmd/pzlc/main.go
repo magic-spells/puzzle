@@ -16,9 +16,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/evanw/esbuild/pkg/api"
 	"github.com/magic-spells/puzzle/compiler/internal/codegen"
-	"github.com/magic-spells/puzzle/packages/puzzle-lang/parser"
+	"github.com/magic-spells/puzzle/compiler/internal/standalone"
 )
 
 func main() {
@@ -50,16 +49,13 @@ func main() {
 		fmt.Fprintf(os.Stderr, "pzlc: %v\n", err)
 		os.Exit(1)
 	}
-	sec, err := parser.SplitSections(string(src), in)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
-	}
 	assetsDir := *assets
 	if assetsDir == "" {
-		assetsDir = defaultAssetsDir(in)
+		assetsDir = standalone.AssetsDirFor(in)
 	}
-	res, err := codegen.Compile(sec, codegen.Options{Filename: in, Mode: em, AssetsDir: assetsDir})
+	// the shared standalone pipeline (split, parse, codegen, and type stripping
+	// for a lang="ts" script) — the same one `puzzle compile` runs.
+	res, err := standalone.Compile(in, src, em, assetsDir)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
@@ -70,27 +66,6 @@ func main() {
 		fmt.Fprintf(os.Stderr, "%s:%d:%d: warning: %s\n", w.File, w.Line, w.Col, w.Message)
 	}
 	code := res.JS
-	// TypeScript scripts (v1.22, D54): the bundler path lets esbuild strip types
-	// via LoaderTS, but pzlc emits a standalone module with no bundler, so strip
-	// types here with esbuild's Transform API. The result stays runnable ESM JS.
-	if sec.ScriptsLang == "ts" {
-		tr := api.Transform(code, api.TransformOptions{
-			Loader:     api.LoaderTS,
-			Format:     api.FormatESModule,
-			Sourcefile: in,
-		})
-		if len(tr.Errors) > 0 {
-			for _, m := range tr.Errors {
-				if m.Location != nil {
-					fmt.Fprintf(os.Stderr, "pzlc: %s:%d:%d: %s\n", m.Location.File, m.Location.Line, m.Location.Column, m.Text)
-				} else {
-					fmt.Fprintf(os.Stderr, "pzlc: %s\n", m.Text)
-				}
-			}
-			os.Exit(1)
-		}
-		code = string(tr.Code)
-	}
 	if err := os.MkdirAll(filepath.Dir(out), 0o755); err != nil {
 		fmt.Fprintf(os.Stderr, "pzlc: %v\n", err)
 		os.Exit(1)
@@ -98,26 +73,5 @@ func main() {
 	if err := os.WriteFile(out, []byte(code), 0o644); err != nil {
 		fmt.Fprintf(os.Stderr, "pzlc: %v\n", err)
 		os.Exit(1)
-	}
-}
-
-// defaultAssetsDir finds the {#svg} assets root for input by walking up to the
-// nearest ancestor directory named "app" and returning <app>/assets; "" if none
-// (a project with no app/ dir — {#svg} then errors with a clear message).
-func defaultAssetsDir(input string) string {
-	abs, err := filepath.Abs(input)
-	if err != nil {
-		return ""
-	}
-	dir := filepath.Dir(abs)
-	for {
-		if filepath.Base(dir) == "app" {
-			return filepath.Join(dir, "assets")
-		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			return ""
-		}
-		dir = parent
 	}
 }

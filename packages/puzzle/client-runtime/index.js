@@ -2,7 +2,7 @@
  * @magic-spells/puzzle — package entry (constellation/doc/DOC-SPEC.md §1).
  *
  * Target export surface: { PuzzleApp, PuzzleView, PuzzleModel, Puzzle, lazy }.
- * Phase 1 (constellation/doc/DOC-RUNTIME-KERNEL.md) is landing module by module — exports
+ * Phase 1 is landing module by module — exports
  * appear here as they reach SPEC conformance:
  *
  *   [x] PuzzleModel, Puzzle (field builders)  — model.js
@@ -18,7 +18,7 @@ export { PuzzleView } from './views/PuzzleView.js';
 export { FormatterRegistry } from './formatters.js';
 export { lazy } from './router/lazy.js';
 
-// Compiler support (constellation/doc/DOC-COMPILER-DESIGN.md §b): compiled .pzl modules import
+// Compiler support (constellation/doc/DOC-COMPILER-DESIGN.md, "The lane" step 2): compiled .pzl modules import
 // ViewNode/SLOT_TAG/displayValue/listRows from the package root — the injected
 // render() builds trees, applies the shared display-coercion rule, and renders
 // its item-form {#for} sites with them. Each is imported only by a module that

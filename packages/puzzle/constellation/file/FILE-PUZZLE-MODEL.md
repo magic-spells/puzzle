@@ -6,8 +6,20 @@ language: javascript
 summary: Model base class, schema builders, validation, relationships, and safe assignment.
 connections:
   - COMPONENT-PUZZLE-MODEL
-verified_at: '2026-08-24T21:39:15.808Z'
-verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
+verified_at: '2026-11-24T18:13:21.008Z'
+verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
 ---
 
-Source binding for the owning component card. Behavioral intent stays in the connected component; this card anchors that plan to `client-runtime/model.js`.
+# model.js
+
+`PuzzleModel` and the `Puzzle.*` field builders ([[COMPONENT-PUZZLE-MODEL]]).
+Records are instances of the user's model class, so getters and methods work
+wherever a record is read.
+
+- Validation enforces at the local write boundary: `createRecord`/`update` throw
+  `PuzzleValidationError`; `validate()` returns `{ valid, errors }`.
+- Identity is normalized at every index/comparison boundary, never on a record's
+  fields (D112).
+- Date classification goes only through `dates.js` ([[FILE-DATES]]) at every JSON
+  boundary. Its only import is `dates.js`; it must stay DOM-free so the store and
+  prerender can load it under Node.

@@ -23,7 +23,7 @@ import { PuzzleModel, Puzzle } from '../client-runtime/model.js';
 const h = (tag, attrs = {}, children = []) => new ViewNode(tag, attrs, children);
 const text = (value) => new ViewNode('text', { value });
 const comp = (Class, attrs = {}, children = []) => new ViewNode(Class, attrs, children);
-// setData re-renders schedule through requestAnimationFrame (jsdom fires that on a
+// setState re-renders schedule through requestAnimationFrame (jsdom fires that on a
 // ~16ms timer), and a child mount then resolves data() across microtasks — so flush
 // past several rAF ticks + microtask drains.
 const flush = async () => {
@@ -129,7 +129,7 @@ describe('mountComponent — a throwing enter hook leaves the mounted tree alone
 			// And the position still PATCHES the same live instance: a host re-render
 			// updates props in place instead of mounting a fresh component over a
 			// placeholder (what the shared-catch teardown forced).
-			host.setData({ n: 1 });
+			host.setState({ n: 1 });
 			await flush();
 			expect(el.querySelector('.child').textContent).toBe('1');
 			expect(instances).toHaveLength(1);

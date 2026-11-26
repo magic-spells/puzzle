@@ -89,7 +89,7 @@
                     <li key={ child.index }>
                       <a
                         href={ child.href }
-                        class={ child.flyoutLinkClass }
+                        class={ child.linkClass }
                         aria-current={ child.active ? 'page' : false }
                         @click={ onFlyoutLink }>
                         <span class="min-w-0 flex-1 truncate text-left">{ child.label }</span>
@@ -222,7 +222,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 //                       owns its collapsed state internally, toggled by the built-in
 //                       EDGE TOGGLE on the right border; pass it and the PARENT owns it — the
 //                       rail only reflects the prop and *asks* to change via @collapse.
-//                       Collapsed = an icon-only w-[3.75rem] rail (expanded is w-64); the
+//                       Collapsed = an icon-only w-15 rail (expanded is w-64); the
 //                       width eases via transition-[width] (motion-reduce disables it).
 //   variant     string  'surface' (default) | 'rail'. `surface` is a content-level rail:
 //                       bg-surface, border-border, text-muted rows, the brand tint on the
@@ -261,18 +261,13 @@ import { PuzzleView } from '@magic-spells/puzzle';
 // replaces the old footer toggle button; the footer area is now slot-only. See the
 // EDGE_TOGGLE constant for the interaction rationale (cursor, touch, keyboard).
 //
-// SUBMENU GUIDE + ACTIVE MARKER. An expanded submenu is ruled by a vertical guide
-// (a `before` pseudo-element on the list, NOT a border — see CHILD_MARK), and the
-// ACTIVE child paints a brand-coloured bar on that same line. A flyout has no
-// guide, so its rows use `flyoutLinkClass` and carry no marker.
-//
 // COLLAPSED + SUBMENUS — FLYOUT. A collapsed parent remains a disclosure button; click
 // pops its children out to the RIGHT in a fixed panel anchored at rect.right + 8,
 // rect.top, then clamped above the viewport bottom in afterUpdate. One flyout opens at
 // a time. Outside pointerdown, Escape, a child-link click, any capture-phase scroll or
 // resize, and any collapsed change dismiss it. Escape is wired on trigger AND panel and
 // refocuses the trigger. Listeners attach in openFlyout and detach in closeFlyout plus
-// destroyed(). The inline `_openMap` survives a collapsed round trip. The trigger uses
+// destroyed(). The inline `openMap` survives a collapsed round trip. The trigger uses
 // aria-haspopup="true", aria-expanded, and aria-controls switching between its region
 // and flyout ids; the plain-link panel is labelled by the trigger and intentionally has
 // no menu role. It carries data-sidebar-flyout, never data-sidebar-submenu. A consumer
@@ -285,7 +280,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 // COLLAPSE ANIMATION — one DOM serves both states: fixed row padding keeps each icon in
 // place and only class/attribute values change. The list p-2 plus row px-3 puts a size-5
 // icon center 1.875rem from the rail edge, so the collapsed width is twice that:
-// w-[3.75rem]. Labels, badges, and chevrons stay mounted and fade while row overflow
+// w-15. Labels, badges, and chevrons stay mounted and fade while row overflow
 // clips them. Group headings use a CSS grid 1fr ↔ 0fr track animation — deliberately
 // the one CSS-only, height-agnostic deviation from the established WAAPI height idiom;
 // unsupported browsers degrade to a snap plus fade. Submenu height continues through
@@ -313,7 +308,6 @@ const VARIANTS = {
     badge: 'bg-surface-sunken text-muted',
     quiet: 'text-muted',
     line: 'border-border',
-    guide: 'before:bg-border',
     edgeArrow: 'border-border bg-surface text-muted',
   },
   rail: {
@@ -323,7 +317,6 @@ const VARIANTS = {
     badge: 'bg-rail-active text-rail-muted',
     quiet: 'text-rail-muted',
     line: 'border-rail-edge',
-    guide: 'before:bg-rail-edge',
     edgeArrow: 'border-rail-edge bg-rail-active text-rail-ink',
   },
 };
@@ -352,16 +345,9 @@ const EDGE_ARROW =
 // Shared row chrome. Unconditional outline COLOR (outline-ring) sits alongside the
 // focus-visible reveal so the outline never flashes from the default on focus.
 const ROW_BASE =
-  'group flex items-center gap-3 rounded-md text-sm ' +
+  'group flex items-center gap-3 rounded-md text-sm overflow-hidden ' +
   'transition-[color,background-color] duration-200 ease-out motion-reduce:transition-none ' +
   'outline-ring focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring';
-// THE CLIP IS SEPARATE FROM THE BASE because ONE row must not have it: an inline
-// submenu's active child draws its marker OUTSIDE its own box, on the guide line
-// 8px to its left, and `overflow-hidden` would slice it off. Every other row —
-// every top-level row and every flyout row — keeps it, which is what lets a label
-// disappear as the rail narrows instead of spilling into the gutter. The inline
-// children are clipped anyway, by the collapsible region that wraps them.
-const ROW_CLIP = 'overflow-hidden';
 const BADGE = 'shrink-0 rounded-full px-2 py-0.5 text-xs font-medium';
 
 // ROW_PAD is load-bearing geometry: list p-2 + row px-3 centers the size-5 icon
@@ -379,35 +365,15 @@ const GROUP_ROW =
 const FLYOUT_GAP = 8;
 const FLYOUT_MARGIN = 8;
 const FLYOUT =
-  'fixed z-50 min-w-[10rem] rounded-lg border border-border bg-surface p-1 shadow-lg';
+  'fixed z-50 min-w-40 rounded-lg border border-border bg-surface p-1 shadow-lg';
 const FLYOUT_HEADING =
   'px-2.5 pb-1 pt-2 text-xs font-medium uppercase tracking-wide text-muted';
 
 const linkClass = (active, v) =>
-  [ROW_BASE, ROW_CLIP, ROW_PAD, active ? v.active : v.idle].join(' ');
+  [ROW_BASE, ROW_PAD, active ? v.active : v.idle].join(' ');
 
-const CHILD_PAD = 'px-3 py-1.5';
-
-// THE ACTIVE CHILD'S MARKER, drawn ON the submenu's guide line rather than beside
-// it. The offset is the `pl-2` between the guide and the row, minus half a
-// pixel so the 2px bar sits centred on the 1px guide, so the two
-// measure from the same edge — which is why the guide is a pseudo-element now and
-// not a `border-l`: a border sits outside the padding box and the row would have
-// had to guess its width. `w-0.5` and not `w-px`: the bar's LEFT edge lands on the
-// guide's, and it covers it and one pixel more — a 1px bar read as a slightly
-// bluer guide rather than as a mark.
-const CHILD_MARK =
-  'before:absolute before:inset-y-1 before:left-[calc(var(--spacing)*-2-0.5px)] before:w-0.5 before:rounded-full before:bg-brand';
-
-// An INLINE submenu row: `relative` for the marker above, and no clip.
 const childLinkClass = (active, v) =>
-  [ROW_BASE, 'relative', CHILD_PAD, active ? `${v.active} ${CHILD_MARK}` : v.idle].join(' ');
-
-// A FLYOUT row (the collapsed rail's pop-out). Same row, NO marker: there is no
-// guide line in a flyout for it to land on, so it would be a bar floating in the
-// panel's padding.
-const flyoutLinkClass = (active, v) =>
-  [ROW_BASE, ROW_CLIP, CHILD_PAD, active ? v.active : v.idle].join(' ');
+  [ROW_BASE, 'px-3 py-1.5', active ? v.active : v.idle].join(' ');
 
 // Normalize the raw items prop into tagged rows the template branches on, resolving
 // active state against activePath. The array index is kept as a stable key for the
@@ -459,26 +425,27 @@ function normalizeItems(items, activePath) {
 export default class Sidebar extends PuzzleView {
   created() {
     this._uid = ++uid;
-    // Per-parent open state keyed by item index (instance field, not view data — the
-    // submenu-open booleans feed the render via data() and are flipped with refresh()).
-    this._openMap = {};
+    // render-feeding ui state lives in the state layer. data() reads every key
+    // through getState(), so a setState() write re-runs data() on its own:
+    //   openMap               per-parent submenu open flags, keyed by item index
+    //   uncontrolledCollapsed the rail's own collapsed flag (ignored when controlled)
+    //   flyoutIndex           the collapsed parent whose flyout is open, or null
+    //   flyoutPos             the flyout panel's fixed left/top
+    this.setState({
+      openMap: {},
+      uncontrolledCollapsed: false,
+      flyoutIndex: null,
+      flyoutPos: { left: 0, top: 0 },
+    });
     // Last activePath we auto-opened for, so navigation into a submenu opens it once.
     this._lastActive = undefined;
     // Per-region open state the animation loop diffs against (keyed by data-index).
     this._regionState = {};
-    // Uncontrolled collapsed state — instance field, NOT view data: the visible
-    // layout (rail width, icon-only rows) is derived from it inside data(), so
-    // the toggle must refresh() to re-run data(). A setData key would update
-    // silently without re-deriving the render model (setData never re-runs
-    // data()), leaving the click with no visible effect.
-    this._uncontrolledCollapsed = false;
-    // Flyout state stays in instance fields because data() derives the panel model.
-    this._flyoutIndex = null;
-    this._flyoutPos = { left: 0, top: 0 };
+    // listener bookkeeping only, never rendered.
     this._flyoutBound = false;
     this._needsFlyoutClamp = false;
     this._onDocPointerDown = (event) => {
-      if (this._flyoutIndex === null) return;
+      if (this._flyoutIndex() === null) return;
       const panel = this.element && this.element.querySelector('[data-sidebar-flyout]');
       if (panel && panel.contains(event.target)) return;
       // A trigger's own click handler owns closing or switching the flyout.
@@ -487,8 +454,18 @@ export default class Sidebar extends PuzzleView {
     };
     // Scroll and resize invalidate the measured anchor, so dismiss instead of chasing it.
     this._onFlyoutDismiss = () => {
-      if (this._flyoutIndex !== null) this.closeFlyout({ refocus: false });
+      if (this._flyoutIndex() !== null) this.closeFlyout({ refocus: false });
     };
+  }
+
+  // the open flyout's item index, or null.
+  _flyoutIndex() {
+    const index = this.getState().flyoutIndex;
+    return index == null ? null : index;
+  }
+
+  _openMap() {
+    return this.getState().openMap;
   }
 
   // ---- collapsed: optional-controlled resolution ---------------------------
@@ -505,7 +482,7 @@ export default class Sidebar extends PuzzleView {
     if (this.props.collapsible === false) return false;
     return this._collapsedControlled()
       ? !!this.props.collapsed
-      : !!this._uncontrolledCollapsed;
+      : !!this.getState().uncontrolledCollapsed;
   }
 
   _requestCollapsed(next) {
@@ -513,11 +490,11 @@ export default class Sidebar extends PuzzleView {
     this.closeFlyout({ refocus: false });
     const { collapse } = this.props;
     if (typeof collapse === 'function') collapse(next);
-    if (!this._collapsedControlled()) this._uncontrolledCollapsed = next;
+    if (!this._collapsedControlled()) this.setState({ uncontrolledCollapsed: next });
   }
 
   _regionOpen(index) {
-    return this._openMap[index] === true && !this._collapsed();
+    return this._openMap()[index] === true && !this._collapsed();
   }
 
   // ---- collapsed submenu flyout --------------------------------------------
@@ -528,8 +505,10 @@ export default class Sidebar extends PuzzleView {
       this.element.querySelector(`[data-sidebar-trigger][data-index="${index}"]`);
     if (!trigger) return;
     const rect = trigger.getBoundingClientRect();
-    this._flyoutIndex = index;
-    this._flyoutPos = { left: rect.right + FLYOUT_GAP, top: rect.top };
+    this.setState({
+      flyoutIndex: index,
+      flyoutPos: { left: rect.right + FLYOUT_GAP, top: rect.top },
+    });
     this._needsFlyoutClamp = true;
     if (!this._flyoutBound) {
       document.addEventListener('pointerdown', this._onDocPointerDown);
@@ -537,21 +516,19 @@ export default class Sidebar extends PuzzleView {
       window.addEventListener('resize', this._onFlyoutDismiss);
       this._flyoutBound = true;
     }
-    this.refresh();
   }
 
   closeFlyout({ refocus = false } = {}) {
-    if (this._flyoutIndex === null) return;
-    const index = this._flyoutIndex;
+    const index = this._flyoutIndex();
+    if (index === null) return;
     if (this._flyoutBound) {
       document.removeEventListener('pointerdown', this._onDocPointerDown);
       window.removeEventListener('scroll', this._onFlyoutDismiss, true);
       window.removeEventListener('resize', this._onFlyoutDismiss);
       this._flyoutBound = false;
     }
-    this._flyoutIndex = null;
+    this.setState({ flyoutIndex: null });
     this._needsFlyoutClamp = false;
-    this.refresh();
     if (refocus) {
       const trigger =
         this.element &&
@@ -567,23 +544,28 @@ export default class Sidebar extends PuzzleView {
       FLYOUT_MARGIN,
       window.innerHeight - panel.offsetHeight - FLYOUT_MARGIN
     );
-    const top = Math.min(Math.max(this._flyoutPos.top, FLYOUT_MARGIN), maxY);
-    if (top !== this._flyoutPos.top) {
-      this._flyoutPos = { ...this._flyoutPos, top };
+    const pos = this.getState().flyoutPos;
+    const top = Math.min(Math.max(pos.top, FLYOUT_MARGIN), maxY);
+    if (top !== pos.top) {
+      this.setState({ flyoutPos: { ...pos, top } });
+      // refresh() on purpose: this runs in afterUpdate, and the clamped position
+      // has to land in the same frame or the panel paints once unclamped.
       this.refresh();
     }
   }
 
   // ---- render model --------------------------------------------------------
 
-  data(params, props) {
+  data({ props }) {
     const activePath = props.activePath || '';
     const collapsed = this._collapsed();
     const collapsible = props.collapsible !== false;
     const v = variantOf(props.variant);
     const items = normalizeItems(props.items, activePath);
     const base = `pieces-sidebar-${this._uid}`;
-    const flyoutIndex = collapsed ? this._flyoutIndex : null;
+    const flyoutIndex = collapsed ? this._flyoutIndex() : null;
+    let openMap = this._openMap();
+    const flyoutPos = this.getState().flyoutPos;
     const labelClass = [LABEL_BASE, collapsed ? 'opacity-0' : ''].join(' ');
 
     // Auto-open the submenu containing the active child — on first render and again
@@ -591,9 +573,15 @@ export default class Sidebar extends PuzzleView {
     // force-closes what the user opened.
     if (activePath !== this._lastActive) {
       this._lastActive = activePath;
-      items.forEach((it) => {
-        if (it.kind === 'parent' && it.childActive) this._openMap[it.index] = true;
-      });
+      const opening = items.filter(
+        (it) => it.kind === 'parent' && it.childActive && openMap[it.index] !== true
+      );
+      if (opening.length) {
+        openMap = { ...openMap };
+        opening.forEach((it) => { openMap[it.index] = true; });
+        // a write inside data() never re-runs it: this run already uses openMap.
+        this.setState({ openMap });
+      }
     }
 
     // Decorate each row with its open flag, ids, and precomputed classes.
@@ -604,7 +592,7 @@ export default class Sidebar extends PuzzleView {
           collapsed ? 'grid-rows-[0fr] opacity-0' : 'grid-rows-[1fr]',
         ].join(' ');
       } else if (it.kind === 'parent') {
-        it.open = this._openMap[it.index] === true;
+        it.open = openMap[it.index] === true;
         it.visualOpen = it.open && !collapsed;
         it.triggerId = `${base}-trigger-${it.index}`;
         it.submenuId = `${base}-submenu-${it.index}`;
@@ -624,23 +612,12 @@ export default class Sidebar extends PuzzleView {
           it.visualOpen ? 'rotate-90' : '',
           collapsed ? 'opacity-0' : '',
         ].join(' ');
-        // The guide line is a `before` pseudo-element on the list, not a
-        // `border-l`: a border lives outside the padding box, so the active
-        // child's marker could not be positioned against it without hard-coding
-        // the border's width. As a pseudo-element both sit on `left-0` of the
-        // same box, and CHILD_MARK's offset is literally this `pl-2` (less half a pixel to centre).
         it.submenuClass = [
-          'relative ml-[1.375rem] mt-0.5 space-y-0.5 pl-2',
-          'before:absolute before:inset-y-0 before:left-0 before:w-px',
-          v.guide,
-          'transition-opacity duration-200 ease-out motion-reduce:transition-none',
+          'ml-5.5 mt-0.5 space-y-0.5 border-l pl-2 transition-opacity duration-200 ease-out motion-reduce:transition-none',
+          v.line,
           collapsed ? 'opacity-0' : '',
         ].join(' ');
-        it.children = it.children.map((c) => ({
-          ...c,
-          linkClass: childLinkClass(c.active, v),
-          flyoutLinkClass: flyoutLinkClass(c.active, v),
-        }));
+        it.children = it.children.map((c) => ({ ...c, linkClass: childLinkClass(c.active, v) }));
       } else if (it.kind === 'link') {
         it.linkClass = linkClass(it.active, v);
         it.ariaCurrent = it.active ? 'page' : false;
@@ -668,12 +645,12 @@ export default class Sidebar extends PuzzleView {
       footerClass: 'mt-auto shrink-0 overflow-hidden px-3 pt-2 pb-3 empty:hidden',
       flyoutClass: FLYOUT,
       flyoutHeadingClass: FLYOUT_HEADING,
-      flyoutStyle: `left:${this._flyoutPos.left}px;top:${this._flyoutPos.top}px;`,
+      flyoutStyle: `left:${flyoutPos.left}px;top:${flyoutPos.top}px;`,
       toggleLabel,
       edgeToggleClass: EDGE_TOGGLE,
       edgeLineClass: EDGE_LINE,
       edgeArrowClass: [EDGE_ARROW, v.edgeArrow].join(' '),
-      rootClass: [NAV_BASE, v.nav, collapsed ? 'w-[3.75rem]' : 'w-64', props.class || ''].join(' '),
+      rootClass: [NAV_BASE, v.nav, collapsed ? 'w-15' : 'w-64', props.class || ''].join(' '),
     };
   }
 
@@ -688,7 +665,7 @@ export default class Sidebar extends PuzzleView {
 
   afterUpdate() {
     // An outside-controlled expansion removes the panel before closeFlyout runs.
-    if (this._flyoutIndex !== null && !this._collapsed()) this.closeFlyout();
+    if (this._flyoutIndex() !== null && !this._collapsed()) this.closeFlyout();
     if (this._needsFlyoutClamp) {
       this._needsFlyoutClamp = false;
       this._clampFlyout();
@@ -785,22 +762,21 @@ export default class Sidebar extends PuzzleView {
     toggleSubmenu: (index) => {
       if (this._collapsed()) {
         // Collapsed submenus pop out to the right, one at a time. Preserve
-        // _openMap so expanded disclosure state survives a collapsed round trip.
-        if (this._flyoutIndex === index) this.closeFlyout({ refocus: false });
+        // openMap so expanded disclosure state survives a collapsed round trip.
+        if (this._flyoutIndex() === index) this.closeFlyout({ refocus: false });
         else this.openFlyout(index);
         return;
       }
-      this._openMap[index] = !this._openMap[index];
-      this.refresh();
+      const openMap = this._openMap();
+      this.setState({ openMap: { ...openMap, [index]: !openMap[index] } });
     },
 
     toggleCollapsed: () => {
       this._requestCollapsed(!this._collapsed());
-      if (!this._collapsedControlled()) this.refresh();
     },
 
     onFlyoutEscape: (event) => {
-      if (this._flyoutIndex === null) return;
+      if (this._flyoutIndex() === null) return;
       event.preventDefault();
       this.closeFlyout({ refocus: true });
     },

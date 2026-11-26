@@ -9,11 +9,11 @@ import { PuzzleView } from '@magic-spells/puzzle';
 // <tab-group> owns its id, role="tabpanel", aria-labelledby and — critically —
 // its `hidden` property.
 //
-// NEVER PUT A DISPLAY UTILITY ON THIS HOST. The component's stylesheet hides an
-// inactive panel with `tab-panel[hidden] { display: none }` in
-// layer(components); a `block` or `flex` utility sits in the utilities layer and
-// would outrank it, leaving every panel permanently visible. Put the layout on
-// an element inside instead. Never render `hidden` here either — it is the
+// A DISPLAY UTILITY ON THIS HOST CANNOT UN-HIDE IT. An inactive panel carries
+// the `hidden` attribute, which Tailwind's preflight enforces with
+// `display: none !important` (the component's own `tab-panel[hidden]` rule
+// says the same in layer(components)), so a `block` or `flex` utility here
+// only lays out the visible panel. Never render `hidden` here — it is the
 // component's to write.
 //
 // PANELS PAIR WITH TABS BY POSITION. Keep one Panel per Tab, in the same order;
@@ -40,7 +40,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 //   class  rendered on <tab-panel>
 
 export default class TabsPanel extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     return {
       value: props.value == null ? undefined : String(props.value),
       panelClass: props.class || false,

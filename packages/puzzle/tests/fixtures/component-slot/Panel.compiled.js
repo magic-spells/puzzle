@@ -1,7 +1,6 @@
-
+        
 import { PuzzleView } from '@magic-spells/puzzle';
 export default class Panel extends PuzzleView {
-  data(_params, props) { return props; }
   events = { close: () => this.props.close?.(this.props.title) };
 }
 
@@ -17,4 +16,3 @@ Panel.prototype.render = function () {
     new ViewNode(SLOT_TAG),
   ]);
 };
-Panel.__pzlModule = 'Panel.pzl';

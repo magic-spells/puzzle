@@ -59,7 +59,7 @@ Two footguns in the scripts: `npm run build` in this package is aliased to
 `node scripts/release-prep.mjs`, so it runs the whole release preparation —
 cross-compiling five Go binaries and packing a tarball — not a framework build.
 And `release:prep` hard-fails on the `@magic-spells/puzzle` ranges in the
-scaffold templates and every `examples/*/package.json`, so that sweep is
+`starters/*/package.json` and every `examples/*/package.json`, so that sweep is
 enforced, not merely advised.
 
 ## Current release state
@@ -68,8 +68,8 @@ enforced, not merely advised.
   `0.1.2` (the embedded agent skill + `puzzle add skills`, D78/v1.45), `0.2.0`
   (2026-07-24), `0.3.0` (2026-07-25), `0.3.1` (2026-07-25), `0.4.0`
   (2026-07-28), `0.5.0` (2026-08-07), `0.6.0` (2026-08-15), `0.7.0`
-  (2026-09-09), and **`0.8.0` (2026-10-01, the current `latest`)** are live on
-  npm (six packages since 0.7.0 — the root plus five platform binaries — MIT,
+  (2026-09-09), `0.8.0` (2026-10-01), and **`0.9.0` (2026-10-21, the current
+  `latest`)** are live on npm (six packages since 0.7.0 — the root plus five platform binaries — MIT,
   manual publish via
   `npm run release:prep` — there is no CI publish). Everything from D88 onward
   shipped in `0.3.0` — minor, not patch: two new export subpaths (`./testing`,
@@ -82,7 +82,7 @@ enforced, not merely advised.
   — check `npm view @magic-spells/puzzle versions` before trusting this
   paragraph.
   `0.2.0` adds path-shaped links via
-  `router.url()` + the `link` formatter (D79/v1.46) and the true static-pages
+  `router.url()` + the `link` function (D79/v1.46) and the true static-pages
   output mode (`output: 'static'` / `--static`, D81/v1.47); the D67
   prerendered-SPA mode is renamed `output: 'hybrid'` / `--hybrid` — the config
   rename is why this is 0.2.0, not 0.1.3. Also in 0.2.0: compiler a11y
@@ -215,7 +215,7 @@ enforced, not merely advised.
   version-floor mechanism closes the gap as D169 (0.8.0): each piece manifest
   now pins the floor it needs, so the gate becomes "every floor a manifest
   declares is published on npm".
-- **`0.8.0` (2026-10-01, published — the current `latest`; tagged `v0.8.0`
+- **`0.8.0` (2026-10-01, published; tagged `v0.8.0`
   with `packages/puzzle-lang/v0.8.0`; `0.7.1` was never published and is
   folded in):** one language, incremental rendering. D169 registry version
   floors; D170 incremental rendering (persistent `{#for}` row blocks,
@@ -226,12 +226,12 @@ enforced, not merely advised.
   each `vX.Y.Z`); D173 core semantics (`?.` member guarding on every step,
   loop domain, slot-filled rule, value printing, script-less components); D174
   the function library (19 standard functions plus PuzzleKit's `link` and
-  `timeago`; formatters that duplicated JS methods, the list formatters and
-  `noescape` removed; sanitized `raw`; apps still register under the
-  `formatters` config key); D175 translations (`t`, `ctx.i18n`); D176 the
+  `timeago`; functions that duplicated JS methods, the list functions and
+  `noescape` removed; sanitized `raw`; apps register under the `functions`
+  config key since 0.10); D175 translations (`t`, `ctx.i18n`); D176 the
   expression language — a closed JavaScript-shaped grammar parsed once in
   `packages/puzzle-lang/expr`, functions instead of `|` pipes (the `|` steer
-  names each removed formatter's replacement), `.length` not `.size`, no
+  names each removed function's replacement), `.length` not `.size`, no
   `this`; D168 rewritten as the merged whitespace rule. Also in: any
   JavaScript identifier as a component class or tag name, TypeScript apps
   end to end (`init --typescript`, `app/app.ts`, typed `puzzle generate`
@@ -243,9 +243,10 @@ enforced, not merely advised.
   DECISION-D176-EXPRESSION-LANGUAGE). Heavily BREAKING for templates — the
   CHANGELOG opens the entry with an "Upgrading from 0.7" checklist.
   Production sizes: hello-world **21.9 KB gzip**, todos **26.0 KB gzip**.
-- **`0.9.0` (ready to publish (stamps bumped; Cory tags and publishes) —
-  until he does, `0.8.0` stays npm `latest`; there is no npm
-  `0.8.1`, which was the Go-module-only `packages/puzzle-lang/v0.8.1` tag):** multilingual static sites. D177
+- **`0.9.0` (2026-10-21, published; tagged `v0.9.0` with
+  `packages/puzzle-lang/v0.9.0` and merged to `main`; there is no npm
+  `0.8.1`, which was the Go-module-only `packages/puzzle-lang/v0.8.1` tag, and
+  `packages/puzzle-lang/v0.9.1` is Go-module-only too):** multilingual static sites. D177
   locale URL prefixes (`i18n.routing: 'prefix'`, per-locale prerender in
   static and hybrid plus SPA path routing, `hreflang` + `site`, sitemap,
   first-visit redirect, `<html dir>`, translated `meta` titles; BREAKING:
@@ -256,8 +257,9 @@ enforced, not merely advised.
   `is={ cards[key] }` forwards children as the normal default slot; nullish
   selection renders nothing; BREAKING: `Component` is a reserved tag/family
   root); and D181 content-hashed production entry/CSS/page
-  module names and static-import modulepreloads (`build.hashNames` follows
-  `build.splitting`, with a `false` opt-out). The agent/tooling APIs:
+  module names and static-import modulepreloads (`build.hashNames` followed
+  `build.splitting` in 0.9.0; 0.10.0 turns it on for every production
+  build). The agent/tooling APIs:
   D182 `push()`/`replace()` resolve a never-rejecting `NavigationResult`;
   D183 `router.views` and the `agent` route field; D184 `store.observe()`;
   D185 `app.idle()`; D186 dynamic URL bindings drop script schemes; D187
@@ -271,8 +273,30 @@ enforced, not merely advised.
   `data-theme` is `dark | dim | mixed | light`, BREAKING for copied theme
   files) and every item-form `{#for}` row keyed. Production sizes: hello-world
   **23.0 KB gzip**, todos **27.0 KB gzip** (about +1 KB each over 0.8.0,
-  mostly the D182–D189 built-in APIs). The next free decision number is
-  **D190**.
+  mostly the D182–D189 built-in APIs).
+- **`0.10.0` (ready to publish (stamps bumped; Cory tags and publishes) —
+  until he does, `0.9.0` stays npm `latest`):** forms, server queries, tests
+  and deploys. D190 `env` config values (`import.meta.env.KEY`); D191
+  `setState()`/`getState()` (BREAKING: `setData()` is gone; a `setState()` of
+  a key `data()` read re-runs `data()`, D23); D192 the opt-in `/forms`
+  subpath (`createForm`); D193 server queries (`findMany` `query`,
+  `store.invalidate()`, `store.syncStatus()`); D194 the `/vitest` plugin and
+  the scaffolded test suite; D195 lazy-route link prefetch; D196 named routes;
+  D197 `data({ params, props, shared })` and `share()` (BREAKING); D198 deploy
+  templates (`puzzle add deploy <host>`); D199 the upgrade pass,
+  `puzzle check --fix`, with the `<Outlet/>` rename (a bare `<Slot/>` is an
+  error) and the `functions` config key (BREAKING); D200 the Node 24 minimum
+  (BREAKING); D201 `dev.proxy` `{ target, changeOrigin }`; D202 the CLI stops
+  when it and the project's installed runtime are a breaking release apart
+  (`build`, `dev`, `check`, `generate`, `add piece`; `doctor` fails its runtime
+  row). Also BREAKING:
+  production builds hash output names by default (D181), `puzzle check` needs
+  TypeScript 7, React/Vue/Svelte spellings are compile errors (D147),
+  `StoreOptions`/`PuzzleValue` are removed, and `injectShell` /
+  `injectStaticShell` take no `title`. New examples: `auth`,
+  `paginated-posts`. Production sizes: hello-world **23.9 KB gzip**, todos
+  **27.8 KB gzip** (+0.9 KB and +0.8 KB over 0.9.0). The next free decision number
+  is **D203**.
 - Product line: v1 through v1.81 (D134 = v1.64, D141 = v1.65, D144 = v1.66,
   D145 = v1.67, D147 = v1.68, D148 = v1.69, D150 = v1.70, the D145 errorView
   amendment = v1.71, D157 = v1.72, D158 = v1.73, D159 = v1.74, D160 = v1.75,
@@ -285,9 +309,10 @@ enforced, not merely advised.
   decision record — do not restate them here; they move faster than this file.
   (There is deliberately no DOC-DECISIONS index card: each decision lives in
   its numbered card only, never in two spots.)
-- Public package: `@magic-spells/puzzle`, with root, `./adapter`, `./morph`,
-  `./router-modes`, `./ssg`, `./static`, `./testing`, `./fixtures`, and
-  `./puzzle-env` exports (plus the build-served `./formatters/manifest` and
+- Public package: `@magic-spells/puzzle`, with root, `./adapter`, `./forms`
+  (D192), `./morph`,
+  `./router-modes`, `./ssg`, `./static`, `./testing`, `./fixtures`,
+  `./vitest` (Node-only, D194), and `./puzzle-env` exports (plus the build-served `./formatters/manifest` and
   `./i18n/manifest`, which a Puzzle build replaces at bundle time)
   plus a `puzzle` binary shim and five
   optional platform binary packages (macOS/Linux arm64/x64, Windows x64 —
@@ -306,8 +331,9 @@ enforced, not merely advised.
   `FRAMEWORK_VERSION` literal in `client-runtime/devtools.js` (it ships in the
   runtime), and the sibling-package train: pieces (package.json,
   demo/package.json, the demo header badge in
-  `demo/app/layouts/Default.pzl`) and devtools (package.json,
-  panel/package.json, extension/manifest.json). The repo manifest must **not** declare
+  `demo/app/layouts/Default.pzl`), the ESLint and Prettier plugins
+  (package.json each) and devtools (package.json, panel/package.json,
+  extension/manifest.json). The repo manifest must **not** declare
   `optionalDependencies` — the platform pins are injected at pack time by
   `scripts/inject-platform-pins.mjs` (`prepack` injects, `postpack` restores),
   and `npm run verify:pack` fails if the repo manifest carries them. Then run
@@ -320,6 +346,12 @@ enforced, not merely advised.
   `prepublishOnly` now refuses a directory publish outright. After publishing,
   run `npm run verify:published` — it is the only check that inspects the
   registry metadata npm actually resolves against.
+- Then `npm run starter-repos -- --push` regenerates the four starter repos
+  (`magic-spells/puzzle-starter`, `puzzle-starter-static`, `puzzle-starter-ts`,
+  `puzzle-starter-static-ts`) from `starters/`, one commit per release; without
+  `--push` it only writes the folders to look at. Before the first run, create
+  all four repos on GitHub empty (no README or licence: each push replaces the
+  whole tree). Run it from the published release commit.
 - Every framework tag `vX.Y.Z` needs a companion `packages/puzzle-lang/vX.Y.Z`
   tag, pushed with it (`git tag packages/puzzle-lang/vX.Y.Z && git push origin
   packages/puzzle-lang/vX.Y.Z`): Go finds a subdirectory module's versions only
@@ -329,7 +361,7 @@ enforced, not merely advised.
 - Before every release, sweep the `@magic-spells/puzzle` dependency ranges that
   are NOT bumped by the version scripts and point them at the version being
   published:
-  - `compiler/internal/scaffold/templates/{default,todos}{,-ts}/package.json` — these
+  - `starters/*/package.json` (each starter and its `-ts` overlay) — these
     are `go:embed`ed into the binary, so a stale range ships a broken
     `puzzle init`: caret ranges do not cross 0.x minors, so `^0.1.0` installs
     `0.1.x` into an app scaffolded by a `0.3.0` binary. Fixing this requires
@@ -342,13 +374,13 @@ enforced, not merely advised.
     the "bump it at every release" comment did not stop it sitting at `0.3.0`
     through the `0.3.1` bump.
   Check with `rg -n '"@magic-spells/puzzle":' examples/*/package.json
-  compiler/internal/scaffold/templates/*/package.json`. Leave each template's
+  starters/*/package.json`. Leave each starter's
   own `"version"` field alone; that is the scaffolded app's starting version.
 - Since 0.6.0 the pieces registry is version-locked: `puzzle add piece`
   resolves `@magic-spells/puzzle-pieces` to the CLI's major.minor. Publish the
   matching pieces release (from `../puzzle-pieces` — the `release:prep`
   summary prints it in order) at or before the CLI release, or zero-config
-  `add piece` falls back to an older minor — or hard-fails when none exists.
+  `add piece` and `add theme` stop with an error.
   The devtools zip (`npm run build:compiler`, then `build:zip` in
   `../puzzle-devtools`) is separate and unhurried.
 - Sweep the release-facing prose no script checks: CHANGELOG completeness for
@@ -407,13 +439,16 @@ lockfile, or `npm ci` hard-fails). The three editor grammars
 (puzzle-vscode/sublime/zed) stay in separate repos and are **not part of the
 npm release train**: each is **dev-install only** — cloned and linked into the
 editor by hand, never published to a marketplace — and each is **versioned
-independently** of the framework (all three are stamped `0.4.0`, the 0.8.0
-grammar, on their own `release/0.4.0` branches; each is tagged `v0.3.0`, the
-0.7.0 grammar). Because they carry their own copy of the template grammar,
-sweep all three whenever the grammar changes, as a PR into a new
-`release/x.y.z` in each repo; the 0.7.0 sweep added dotted tags, `<Snippet>`,
-and the `\{` / `\}` brace escape in text and attribute values, and the 0.8.0
-sweep added the expression language. The absorbed puzzle-pieces and
+independently** of the framework (all three are stamped `0.5.0` on their own
+`release/0.5.0` branches, which carry the 0.9.0 grammar plus the 0.10.0 sweep;
+puzzle-vscode and puzzle-sublime are tagged `v0.5.0`, the 0.9.0 grammar).
+Because they carry their own copy of the template grammar, sweep all three
+whenever the grammar changes, as a PR into a new `release/x.y.z` in each repo;
+the 0.7.0 sweep added dotted tags, `<Snippet>`, and the `\{` / `\}` brace
+escape in text and attribute values, the 0.8.0 sweep added the expression
+language, and the 0.10.0 sweep (PR #8 in each repo, merged into
+`release/0.5.0`) added the `<Outlet>` marker and, in puzzle-vscode, the
+`data({ … })`, `share()` and `setState()` snippets. The absorbed puzzle-pieces and
 puzzle-devtools repos are archived on GitHub, never deleted.
 
 ## Architecture at a glance
@@ -496,9 +531,13 @@ puzzle-devtools repos are archived on GitHub, never deleted.
   rewrites the script body. TypeScript is transpile-only.
 - A compiled class stays untouched; codegen attaches `prototype.render` after
   it. `PuzzleView` is a plain class, not an HTMLElement.
-- `data()` owns the replace-on-commit model layer. `setData()` owns persistent
-  local UI state and rerenders without rerunning `data()`. Use `refresh()` when
-  local state feeds `data()`-derived values.
+- `data()` owns the replace-on-commit derived layer. `setState()` owns persistent
+  local UI state; a write to a key `data()` read (through `getData()` or
+  `getState()`, called before its first `await`) re-runs `data()` with the
+  next render, once per burst, and any other key just rerenders (D23).
+  `refresh()` is only for on-purpose re-runs: `data()` reading an instance
+  field, a module variable or the clock, or a caller that needs the new
+  model rendered synchronously.
 - Store queries inside `data()` auto-subscribe, and on an adapter-backed model a
   tracked `findOne`/`findMany` that misses queues a fetch and re-runs the pass
   rather than committing (D161). Reads outside `data()` never fetch. A record
@@ -511,11 +550,12 @@ puzzle-devtools repos are archived on GitHub, never deleted.
   data, subscriptions — D146) commit together. Failed or superseded pushes do
   not partially commit.
 - `<Children>` is the component default marker, `<Slot name="x">` is named
-  composition, and `<Slot>` is the router outlet. A marker is self-closing or
+  composition, and `<Outlet>` is the router outlet (a `<Slot>` with no name is
+  a compile error since 0.10, D199; `<Outlet>` in a component warns). A marker is self-closing or
   paired — a paired body is fallback content, rendered only when nothing fills
   the position (D141) — and any lowercase `<slot>`/`<children>` is a
   positioned compile error steering to the capitalized form (D134). A
-  `<Snippet>` body is a composition **leaf** — no `<Children>`, `<Slot>`, nested
+  `<Snippet>` body is a composition **leaf** — no `<Children>`, `<Outlet>`, `<Slot>`, nested
   `<Snippet>`, or `ref=` inside one (D166). A tag is a component when its
   first character is anything but an ASCII lowercase letter — the only
   characters that can begin an HTML element name — so `<Card>`, `<Übersicht>`
@@ -560,13 +600,11 @@ puzzle-devtools repos are archived on GitHub, never deleted.
 - Use `rg` / `rg --files` for discovery. Preserve unrelated user changes in a
   dirty worktree.
 - Keep changes narrow. Do not add abstraction layers for hypothetical needs.
-- `examples/todos` and scaffolded todos templates should stay aligned with the
-  grammar and public docs.
 - Generated `.pzl` templates must remain compiler-tested.
 - Function is the project term for the template library (`round`, `date`,
-  `t`, …); never call one a filter or a pipe. `formatter` survives only as the
-  `formatters` config key apps register under and in the registry's code
-  names.
+  `t`, …); never call one a filter or a pipe. Apps register theirs under the
+  `functions` config key; `formatter` survives only in the runtime's internal
+  names (`ctx.formatters`, the registry), which no app writes.
 - Future or rejected features must be clearly labeled. Do not describe them as
   shipped.
 - Update current-state prose in card bodies. Keep only durable, surprising

@@ -19,7 +19,7 @@ const h = (tag, attrs = {}, children = []) => new ViewNode(tag, attrs, children)
 const text = (value) => new ViewNode('text', { value });
 const comp = (Class, attrs = {}, children = []) => new ViewNode(Class, attrs, children);
 
-// A child mount resolves data() across microtasks and setData re-renders through
+// A child mount resolves data() across microtasks and setState re-renders through
 // rAF (jsdom fires that on a ~16ms timer) — the same flush the keyed
 // reconciliation suite uses.
 const flush = async () => {
@@ -184,7 +184,7 @@ describe('a cached component vnode across an unmount', () => {
 
 		// Branch on again (walkthrough G): mounting the SAME vnode must build a new
 		// instance — adopting the destroyed one would mount a view whose mounted(),
-		// setData() and refresh() are all inert, with no diagnostic.
+		// setState() and refresh() are all inert, with no diagnostic.
 		vm.render(tree(true));
 		await flush();
 		expect(instances).toHaveLength(2);
@@ -192,7 +192,7 @@ describe('a cached component vnode across an unmount', () => {
 		expect(container.querySelector('.panel').textContent).toBe('panel');
 
 		// And the fresh instance is live.
-		instances[1].setData({ n: 1 });
+		instances[1].setState({ n: 1 });
 		await flush();
 		expect(container.querySelector('.panel').textContent).toBe('panel');
 	});

@@ -18,6 +18,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/magic-spells/puzzle/compiler/internal/fsutil"
 )
 
 // Kind selects which scaffold to emit.
@@ -169,7 +171,9 @@ func Generate(opts Options) (*Result, error) {
 // scaffolded component may be named one — plain, family root, or family member:
 // the compiler matches these tags before it resolves a component, so <Slot>,
 // <Slot.Foo>, and <Frame.Slot> are markers or compile errors, never yours.
-var markerNames = []string{"Children", "Slot", "Snippet", "Portal"}
+var markerNames = []string{"Children", "Outlet", "Slot", "Snippet", "Portal"}
+
+var markerList = strings.Join(markerNames, ", ")
 
 func isMarkerName(s string) bool {
 	for _, m := range markerNames {
@@ -201,7 +205,7 @@ func generateFamily(opts Options, ts bool) (*Result, error) {
 		return nil, fmt.Errorf("Component is a reserved built-in tag — rename Component.pzl (for example, Card.pzl) and its imports")
 	}
 	if isMarkerName(opts.Name) {
-		return nil, fmt.Errorf("component family root %q is a reserved composition marker (Children, Slot, Snippet, Portal)", opts.Name)
+		return nil, fmt.Errorf("component family root %q is a reserved composition marker (%s)", opts.Name, markerList)
 	}
 
 	seen := map[string]bool{opts.Name: true}
@@ -214,7 +218,7 @@ func generateFamily(opts Options, ts bool) (*Result, error) {
 		case member == "Component":
 			return nil, fmt.Errorf("Component is a reserved built-in tag — rename Component.pzl (for example, Card.pzl) and its imports")
 		case isMarkerName(member):
-			return nil, fmt.Errorf("family member %q is a reserved composition marker (Children, Slot, Snippet, Portal)", member)
+			return nil, fmt.Errorf("family member %q is a reserved composition marker (%s)", member, markerList)
 		case member == opts.Name:
 			return nil, fmt.Errorf("family member %q collides with the family root", member)
 		case seen[member]:
@@ -350,12 +354,12 @@ func render(kind Kind, name string, ts bool) (content, filename string, err erro
 			return "", "", fmt.Errorf("Component is a reserved built-in tag — rename Component.pzl (for example, Card.pzl) and its imports")
 		}
 		// The compiler matches the composition markers BEFORE it resolves a
-		// capitalized tag as a component (D134), so <Slot>, <Children>, <Snippet>,
-		// and <Portal> can never name YOUR component — a scaffold at one of those
+		// capitalized tag as a component (D134), so <Slot>, <Children>, <Outlet>,
+		// <Snippet>, and <Portal> can never name YOUR component — a scaffold at one of those
 		// names is a file nothing can ever invoke. Views and layouts are routed by
 		// class, never written as tags, so the guard is component-only.
 		if kind == KindComponent && isMarkerName(name) {
-			return "", "", fmt.Errorf("component name %q is a reserved composition marker (Children, Slot, Snippet, Portal) — the compiler resolves <%s> itself, so a component by that name could never be invoked", name, name)
+			return "", "", fmt.Errorf("component name %q is a reserved composition marker (%s) — the compiler resolves <%s> itself, so a component by that name could never be invoked", name, markerList, name)
 		}
 		tmpl := map[Kind]string{
 			KindComponent: componentTemplate,
@@ -406,12 +410,12 @@ func pascal(s string) string {
 func modelHint(name string, ts bool) string {
 	cls := pascal(name)
 	if ts {
-		return "Register it in app/models/index.ts:\n" +
+		return "Register it in app/models/index.ts (create it if the app has none, and pass it to new PuzzleApp as models):\n" +
 			fmt.Sprintf("    import %s from './%s';\n", cls, name) +
 			"    // then add to the registry object:\n" +
 			fmt.Sprintf("    %s: %s", name, cls)
 	}
-	return "Register it in app/models/index.js:\n" +
+	return "Register it in app/models/index.js (create it if the app has none, and pass it to new PuzzleApp as models):\n" +
 		fmt.Sprintf("    import %s from './%s.js';\n", cls, name) +
 		"    // then add to the registry object:\n" +
 		fmt.Sprintf("    %s: %s", name, cls)
@@ -434,7 +438,7 @@ func withinRoot(root, dest string) error {
 	if err != nil {
 		return err
 	}
-	absDest, err = evalSymlinksAllowMissing(absDest)
+	absDest, err = fsutil.EvalSymlinksAllowMissing(absDest)
 	if err != nil {
 		return err
 	}
@@ -443,38 +447,6 @@ func withinRoot(root, dest string) error {
 		return fmt.Errorf("refusing to write outside the project root: %s (--path is relative to the project root)", dest)
 	}
 	return nil
-}
-
-// evalSymlinksAllowMissing resolves the nearest existing ancestor before
-// appending a destination's missing tail. Keep this in lockstep with the sibling
-// containment helper in internal/pieces, which protects piece destinations and
-// registry reads with the same fail-closed behavior for dangling symlinks.
-func evalSymlinksAllowMissing(name string) (string, error) {
-	current := name
-	var missing []string
-	for {
-		resolved, err := filepath.EvalSymlinks(current)
-		if err == nil {
-			for i := len(missing) - 1; i >= 0; i-- {
-				resolved = filepath.Join(resolved, missing[i])
-			}
-			return resolved, nil
-		}
-		if !os.IsNotExist(err) {
-			return "", err
-		}
-		if _, lerr := os.Lstat(current); lerr == nil {
-			return "", err
-		} else if !os.IsNotExist(lerr) {
-			return "", lerr
-		}
-		parent := filepath.Dir(current)
-		if parent == current {
-			return "", err
-		}
-		missing = append(missing, filepath.Base(current))
-		current = parent
-	}
 }
 
 func relOrAbs(root, p string) string {

@@ -14,9 +14,9 @@ connections:
   - DECISION-D70-TEMPLATE-COMMENTS
   - DECISION-D113-SSG-RAWTEXT-RULE
   - DECISION-D167-COMPONENT-FAMILIES
-  - DECISION-D174-STANDARD-FORMATTERS
-verified_at: '2026-08-24T18:51:36.546Z'
-verified_sha: 31e1b877e13b623c27f82efba25d6b3da8e7aede
+  - DECISION-D174-FUNCTION-LIBRARY
+verified_at: '2026-11-24T18:05:31.213Z'
+verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
 code_refs:
   - client-runtime/views/viewManager.js
 ---
@@ -54,7 +54,7 @@ body); opener content after `raw` is ignored, like `{#comment}`.
   `island`, `key`, `flip` are omitted from the emitted vnode (the `@@` escape
   can't encode them); namespace checks don't apply.
 - **Component grammar is inert**: `<slot>`, `<children>` and capitalized tags
-  (`<Card/>`, `<Slot/>`, `<Portal>`) parse as plain elements, so samples show
+  (`<Card/>`, `<Outlet/>`, `<Portal>`) parse as plain elements, so samples show
   composition syntax without instantiating it or tripping
   [[DECISION-D167-COMPONENT-FAMILIES]] steering errors.
 - **`@` shim is usage-gated (D89).** Any raw block in template or skeleton sets
@@ -77,7 +77,7 @@ Use inside an attribute value is a positioned compile error.
   future syntax.
 - Entity-escape every prerendered body — corrupts script/style RAWTEXT.
 - `{#raw}` as dynamic raw HTML — dynamic markup is the sanitized `raw()`
-  function ([[DECISION-D174-STANDARD-FORMATTERS]]); the block stays static.
+  function ([[DECISION-D174-FUNCTION-LIBRARY]]); the block stays static.
 - Splitter scanning the raw body as brace groups — an unbalanced `{` or quote
   runs the JS-aware scan past `</puzzle-view>` and is quadratic on brace-heavy
   bodies.

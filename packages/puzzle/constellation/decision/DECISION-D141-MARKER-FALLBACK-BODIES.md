@@ -8,8 +8,8 @@ connections:
   - COMPONENT-VIEW-MANAGER
   - DOC-SPEC-TEMPLATE
   - DECISION-D170-INCREMENTAL-VDOM-LISTS
-verified_at: '2026-09-27T00:25:55.351Z'
-verified_sha: 3957beaf4eb72e0fe9fb06853a96761b66a209b8
+verified_at: '2026-11-24T18:13:21.008Z'
+verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
 code_refs:
   - client-runtime/views/viewManager.js
   - client-runtime/ssg/preload.js
@@ -26,11 +26,11 @@ gating prop always has a value (an emoji picker's `label` is its aria-label).
 ## Decision
 
 Paired composition markers carry a fallback body — `<Children>…</Children>`,
-`<Slot name="x">…</Slot>`, `<Slot>…</Slot>`. The fallback renders only when
+`<Slot name="x">…</Slot>`, `<Outlet>…</Outlet>`. The fallback renders only when
 nothing fills that position; supplied content (call site or router) replaces it
 entirely. Self-closing markers and empty paired bodies have no fallback.
 
-- **One mechanism.** `<Children>` and bare `<Slot>` are the same AST node, so
+- **One mechanism.** `<Children>` and `<Outlet>` are the same AST node, so
   fallback works identically for default content, named slots, and the router
   outlet (shown when no child route occupies it).
 - **"Filled" means rendered.** A position is filled only when its content
@@ -67,13 +67,12 @@ entirely. Self-closing markers and empty paired bodies have no fallback.
 
 - Prop-opt-in defaults only — cannot express icon-as-default when the gating
   prop always has a value.
-- A public is-slot-filled probe — more API for the same need; still unclaimed.
+- A public is-slot-filled probe — more API for the same need.
 - Fallback on named slots only — would split the one Slot/Children mechanism
   and lose the empty-outlet case.
 - Eager fallback (body as the marker's children) — evaluated on every render,
   and its value-printing warnings fired for snippet-filled VirtualList rows
-  whose fallback never renders. Lazy: snippet-filled rows ~17% faster,
-  fallback-showing rows ~5% slower (1,000-row build+expand).
+  whose fallback never renders.
 - Silencing diagnostics during fallback construction — keeps the wasted work
   and hides real warnings when the fallback does render.
 

@@ -99,8 +99,8 @@ export const MARKDOWN_CLASSES = {
 	taskBodyDone: 'min-w-0 text-muted line-through',
 	blockquote: 'mt-4 first:mt-0 border-l-2 border-border pl-4 italic text-muted',
 	codeBlock:
-		'mt-4 first:mt-0 overflow-x-auto rounded-lg bg-surface-sunken p-4 font-mono text-[13px]/relaxed text-body whitespace-pre',
-	inlineCode: 'rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink',
+		'mt-4 first:mt-0 overflow-x-auto rounded-lg bg-surface-sunken p-4 font-mono text-code/relaxed text-body whitespace-pre',
+	inlineCode: 'rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-code text-ink',
 	link: 'text-brand underline underline-offset-2 hover:opacity-80',
 	image: 'mt-4 first:mt-0 max-w-full rounded-lg',
 	rule: 'my-6 h-px border-0 bg-border',
@@ -114,7 +114,7 @@ export const MARKDOWN_CLASSES = {
 	alignCenter: 'text-center',
 	alignRight: 'text-right',
 	htmlLiteral:
-		'mt-3 first:mt-0 leading-7 whitespace-pre-wrap font-mono text-[13px] text-muted',
+		'mt-3 first:mt-0 leading-7 whitespace-pre-wrap font-mono text-code text-muted',
 };
 
 // ---- URL / attribute guards -----------------------------------------------

@@ -110,10 +110,15 @@ const installCss = `/* app/styles/styles.css */
 @import "@magic-spells/dropdown-panel/css" layer(components);`;
 
 const usageMarkup = `<!-- app/layouts/Default.pzl -->
-<header class="flex items-center justify-between">
-  <a href="{ link('/') }">{ t('brand') }</a>
-  <LanguageMenu locales={ locales } label={ t('language') } align="end"/>
-</header>
+<puzzle-view>
+  <header class="flex items-center justify-between">
+    <a href="{ link('/') }">{ t('brand') }</a>
+    <LanguageMenu locales={ locales } label={ t('language') } align="end"/>
+  </header>
+  <main>
+    <Outlet/>
+  </main>
+</puzzle-view>
 
 <script>
 import { PuzzleView } from '@magic-spells/puzzle';

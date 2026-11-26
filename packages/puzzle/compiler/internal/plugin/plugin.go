@@ -1,7 +1,7 @@
 // Package plugin implements the esbuild onLoad plugin for *.pzl files
-// (constellation/doc/DOC-COMPILER-DESIGN.md §b). Everything happens in memory, per file:
+// (constellation/doc/DOC-COMPILER-DESIGN.md, "The lane"). Everything happens in memory, per file:
 // read → SplitSections → codegen.Compile → return JS. Parse/codegen errors
-// become esbuild api.Message values with file/line/col (§e) so the build fails
+// become esbuild api.Message values with file/line/col (DOC-COMPILER-DESIGN, "No partial output") so the build fails
 // with normal esbuild formatting; a file that fails to compile emits no output.
 //
 // <style> blocks are collected into a per-plugin, mutex-guarded map (esbuild
@@ -10,6 +10,7 @@
 package plugin
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -39,7 +40,7 @@ type Plugin struct {
 	// scan read, and the usage of each compiled .pzl it did not.
 	usageSet   bool
 	scanned    map[string]bool
-	unscanned  map[string]fileUsage
+	unscanned  map[string]unscannedFile
 	runtimeDir string
 	// i18nEnabled/i18nManifest back the D175 locale manifest module and the
 	// __PUZZLE_HAS_I18N__ define (see SetI18n).
@@ -50,6 +51,17 @@ type Plugin struct {
 	// cache is the build-scoped .pzl transform memo shared with this build's
 	// other esbuild passes, or nil for "transform every time" (WatchBuilder).
 	cache *CompileCache
+	// stripStamps drops the D81 Class.__pzlModule stamp (SetStripStamps).
+	stripStamps bool
+}
+
+// SetStripStamps compiles every .pzl without its Class.__pzlModule stamp. A
+// production SPA build sets it: only dev diagnostics and the static/hybrid
+// prerender read the stamp. Every pass sharing one CompileCache must agree.
+func (p *Plugin) SetStripStamps(strip bool) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.stripStamps = strip
 }
 
 // New creates a Plugin rooted at the app directory (the directory containing
@@ -66,7 +78,7 @@ func New(appRoot string) *Plugin {
 		assetsDir:  filepath.Join(appRoot, "app", "assets"),
 		css:        map[string]string{},
 		formatters: map[string]bool{"escape": true},
-		unscanned:  map[string]fileUsage{},
+		unscanned:  map[string]unscannedFile{},
 	}
 }
 
@@ -142,7 +154,7 @@ func (p *Plugin) setup(build api.PluginBuild) {
 		})
 
 		if len(res.errs) > 0 {
-			// Never emit partial output for a failed file (§e). WatchFiles still
+			// Never emit partial output for a failed file (DOC-COMPILER-DESIGN, "No partial output"). WatchFiles still
 			// carries any {#svg} paths seen (incl. a missing one) so esbuild
 			// invalidates this cached failure once the file appears (D46).
 			return api.OnLoadResult{
@@ -195,6 +207,10 @@ func (p *Plugin) setup(build api.PluginBuild) {
 func (p *Plugin) transformPZL(path string, src []byte) pzlResult {
 	p.mu.Lock()
 	svgCache := p.cache.svgCache()
+	if svgCache == nil {
+		svgCache = codegen.NewSVGCache()
+	}
+	strip := p.stripStamps
 	p.mu.Unlock()
 
 	// App-relative filename: drives ModeForPath (app/views, app/layouts →
@@ -202,10 +218,18 @@ func (p *Plugin) transformPZL(path string, src []byte) pzlResult {
 	// absolute path if it is somehow outside the root.
 	name := p.relName(path)
 	out := pzlResult{name: name, loader: api.LoaderJS}
+	// Codegen can report an error inside a {#svg} asset. Keep its read/scan
+	// available even without a build cache, so diagnostics reuse those bytes.
+	source := func(file string) []byte {
+		if file == name {
+			return src
+		}
+		return svgCache.Load(filepath.Join(p.appRoot, filepath.FromSlash(file)), file).Data
+	}
 
 	sec, serr := parser.SplitSections(string(src), name)
 	if serr != nil {
-		out.errs = toMessages(serr, name)
+		out.errs = toMessages(serr, name, source)
 		return out
 	}
 
@@ -233,13 +257,17 @@ func (p *Plugin) transformPZL(path string, src []byte) pzlResult {
 		out.loader = api.LoaderTS
 	}
 
+	// The app-relative name is also the module stamp (D81): view/layout classes
+	// carry Class.__pzlModule so the static-pages build can map a route back to
+	// its source .pzl for per-page entry generation.
+	modulePath := name
+	if strip {
+		modulePath = ""
+	}
 	res, cerr := codegen.Compile(sec, codegen.Options{
-		Filename: name,
-		Mode:     codegen.ModeForPath(name),
-		// The app-relative name is also the module stamp (D81): view/layout
-		// classes carry Class.__pzlModule so the static-pages build can map a
-		// route back to its source .pzl for per-page entry generation.
-		ModulePath: name,
+		Filename:   name,
+		Mode:       codegen.ModeForPath(name),
+		ModulePath: modulePath,
 		AssetsDir:  p.assetsDir,
 		// Bundled builds dedup {#svg} into shared virtual modules (D46
 		// amendment); the standalone pzlc path leaves this off and inlines.
@@ -251,15 +279,10 @@ func (p *Plugin) transformPZL(path string, src []byte) pzlResult {
 	out.watchFiles = res.InlinedFiles
 	out.warnings = res.Warnings
 	if cerr != nil {
-		out.errs = toMessages(cerr, name)
+		out.errs = toMessages(cerr, name, source)
 		return out
 	}
-	out.js = res.JS
-	if sec.Scripts != "" {
-		// Codegen keeps the script first and verbatim. Padding its original
-		// position makes native JS/TS diagnostics refer to the .pzl source.
-		out.js = strings.Repeat("\n", sec.ScriptsPos.Line-1) + strings.Repeat(" ", sec.ScriptsPos.Col-1) + out.js
-	}
+	out.js = codegen.AlignScript(sec, res.JS)
 
 	// Out-of-band codegen warnings (e.g. a template expression referencing a
 	// <script> import). The bundle build runs at LogLevelSilent, so print
@@ -392,46 +415,50 @@ func (p *Plugin) relName(path string) string {
 }
 
 // toMessages converts a parser/codegen error into esbuild messages — one
-// message per ParseError, batching an ErrorList (§e).
-func toMessages(err error, fallbackFile string) []api.Message {
+// message per ParseError, batching an ErrorList (DOC-COMPILER-DESIGN, "No partial output").
+func toMessages(err error, fallbackFile string, source func(string) []byte) []api.Message {
 	switch e := err.(type) {
 	case parser.ErrorList:
 		msgs := make([]api.Message, 0, len(e))
 		for _, pe := range e {
-			msgs = append(msgs, peMessage(pe, fallbackFile))
+			msgs = append(msgs, peMessage(pe, fallbackFile, source))
 		}
 		if len(msgs) == 0 {
 			return []api.Message{{Text: err.Error()}}
 		}
 		return msgs
 	case *parser.ParseError:
-		return []api.Message{peMessage(e, fallbackFile)}
+		return []api.Message{peMessage(e, fallbackFile, source)}
 	default:
 		return []api.Message{{Text: err.Error()}}
 	}
 }
 
 // peMessage maps a *parser.ParseError to an api.Message. ParseError columns are
-// 1-based; esbuild Location.Column is 0-based in bytes.
-func peMessage(pe *parser.ParseError, fallbackFile string) api.Message {
+// 1-based bytes; esbuild columns are 0-based bytes. Length stays zero: the
+// parser reports a point, not a token span. Keep tabs and UTF-8 verbatim.
+func peMessage(pe *parser.ParseError, fallbackFile string, source func(string) []byte) api.Message {
 	file := pe.File
 	if file == "" {
 		file = fallbackFile
 	}
-	col := pe.Col - 1
-	if col < 0 {
-		col = 0
-	}
 	msg := api.Message{
-		Text: pe.Message,
-		Location: &api.Location{
-			File:   file,
-			Line:   pe.Line,
-			Column: col,
-		},
+		Text:     pe.Message,
+		Location: sourceLocation(file, pe.Line, pe.Col, source(file)),
 	}
 	if pe.Note != "" {
 		msg.Notes = []api.Note{{Text: pe.Note}}
 	}
 	return msg
+}
+
+// sourceLocation is shared by all positioned plugin diagnostics. Columns are
+// 1-based bytes on input; a zero length marks a point without inventing a span.
+func sourceLocation(file string, line, col int, src []byte) *api.Location {
+	lineText := ""
+	lines := bytes.Split(src, []byte{'\n'})
+	if line > 0 && line <= len(lines) {
+		lineText = string(bytes.TrimSuffix(lines[line-1], []byte{'\r'}))
+	}
+	return &api.Location{File: file, Line: line, Column: max(0, col-1), LineText: lineText}
 }

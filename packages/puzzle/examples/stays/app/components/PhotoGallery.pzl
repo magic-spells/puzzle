@@ -43,7 +43,7 @@
 import { PuzzleView } from '@magic-spells/puzzle';
 
 export default class PhotoGallery extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     const listing = props.listing || null;
 
     // photos is a Puzzle.array() of {from,to,icon}; it can be briefly empty

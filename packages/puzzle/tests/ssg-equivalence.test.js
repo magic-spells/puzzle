@@ -110,7 +110,7 @@ describe('SSG serializer ⟷ ViewManager equivalence (M1)', () => {
 
 	it('nested components with preloaded data', async () => {
 		class Badge extends PuzzleView {
-			data(params, props) {
+			data({ props }) {
 				return { n: props.count };
 			}
 			render() {

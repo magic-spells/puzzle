@@ -17,12 +17,6 @@ import { PuzzleView } from '@magic-spells/puzzle';
 // A single comment. The mutation is parent-owned: this component only reports
 // intent through the @remove callback prop, and the parent decides what to do.
 export default class CommentItem extends PuzzleView {
-  data(params, props) {
-    return {
-      comment: props.comment
-    };
-  }
-
   events = {
     handleRemove: (event) => {
       const { remove } = this.props;

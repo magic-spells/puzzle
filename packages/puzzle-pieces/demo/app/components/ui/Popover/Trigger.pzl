@@ -45,7 +45,7 @@ const BUTTON =
   'transition-colors hover:bg-surface-sunken ' + FOCUS;
 
 export default class Trigger extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     return {
       triggerClass: [props.variant === 'button' ? BUTTON : LINK, props.class]
         .filter(Boolean)

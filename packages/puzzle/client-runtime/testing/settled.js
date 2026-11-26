@@ -53,11 +53,11 @@ export function ensureTracking() {
 		return trackLatestWork(this, refresh.apply(this, args), `view ${name} data promise`);
 	};
 
-	const setData = PuzzleView.prototype.setData;
-	PuzzleView.prototype.setData = function (...args) {
+	const setState = PuzzleView.prototype.setState;
+	PuzzleView.prototype.setState = function (...args) {
 		views.add(this);
 		advanceWork(`view ${viewName(this)} re-render`);
-		return setData.apply(this, args);
+		return setState.apply(this, args);
 	};
 
 	// Destroy supersedes a suspended data() run just as a newer refresh does. Do
@@ -208,7 +208,7 @@ export function registerRouter(router) {
  * Drain framework-owned work to a fixed point (v1.58, D94).
  *
  * Each pass forces registered stores through Store.flush(), applies any
- * rAF-scheduled setData render through PuzzleView.flushUpdates(), awaits the
+ * rAF-scheduled setState render through PuzzleView.flushUpdates(), awaits the
  * CURRENT last-wins data/navigation promises known at that point, then repeats.
  * Two unchanged microtask-stable passes cover work created by a promise
  * continuation without relying on requestAnimationFrame or D63's 220ms fallback

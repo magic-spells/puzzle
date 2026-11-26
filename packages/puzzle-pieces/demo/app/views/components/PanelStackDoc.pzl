@@ -223,8 +223,6 @@ import Toc from '@/components/docs/Toc.pzl';
 // consts because literal tag names and {#…} tokens would be parsed as template
 // syntax in prose.
 const installCmd = 'puzzle add piece panel-stack';
-// TODO: switch to ^0.2.0 once published — the demo pins the package by file:
-// path while 0.2.0 is unreleased. Consumers install the published range.
 const installDep = 'npm install @magic-spells/panel-stack@^0.2.0';
 const installCss = `/* app/styles/styles.css */
 @import "tailwindcss";
@@ -270,7 +268,7 @@ const codeControlled = `// Controlled and EDGE-triggered: only a change to \`cur
 // element.current under a syncing guard.
 <PanelStack current={ panel } @change={ setPanel }>…</PanelStack>
 
-// setPanel: (handle) => this.setData('panel', handle)`;
+// setPanel: (handle) => this.setState('panel', handle)`;
 
 const codeEffect = `<PanelStack effect="stack">…</PanelStack>`;
 
@@ -279,10 +277,10 @@ const rootRows = [
   { name: 'defaultCurrent', desc: 'Uncontrolled seed, frozen into the attribute once. Seeds the stack as [root, current] so Back still works.' },
   { name: 'effect', desc: "'slide' (default) | 'stack'." },
   { name: 'class', desc: 'Merged onto the panel-stack host. Give it a size — the stack fills its parent.' },
-  { name: '@change(handle)', desc: 'Value-first, once per transition, derived from all three upstream events. A nested stack is filtered out by target.' },
-  { name: '@push(detail)', desc: 'Raw { fromHandle, toHandle }. Cancelable — preventDefault() blocks the push and the component restores itself.' },
-  { name: '@pop(detail)', desc: 'Raw { fromHandle, toHandle }.' },
-  { name: '@reset(detail)', desc: 'Raw { rootHandle }, when the stack collapses back to the root.' },
+  { name: '@change(handle)', desc: 'Value-first, once per settled transition, from the component\'s panel-stack:change event. A nested stack is filtered out by target.' },
+  { name: '@push(event)', desc: 'The raw event; event.detail is { fromHandle, toHandle }. Cancelable — event.preventDefault() blocks the push and the component restores itself.' },
+  { name: '@pop(event)', desc: 'The raw event; event.detail is { fromHandle, toHandle }.' },
+  { name: '@reset(event)', desc: 'The raw event; event.detail is { rootHandle }, when the stack collapses back to the root.' },
 ];
 
 const panelRows = [
@@ -321,7 +319,7 @@ const BACK =
 
 export default class PanelStackDoc extends PuzzleView {
   created() {
-    this.setData({ current: 'root', changeCount: 0 });
+    this.setState({ current: 'root', changeCount: 0 });
   }
 
   data() {
@@ -359,12 +357,10 @@ export default class PanelStackDoc extends PuzzleView {
 
   events = {
     goTo: (handle) => {
-      this.setData('current', handle);
-      this.refresh();
+      this.setState('current', handle);
     },
     onChange: (handle) => {
-      this.setData({ current: handle, changeCount: this.getData().changeCount + 1 });
-      this.refresh();
+      this.setState({ current: handle, changeCount: this.getData().changeCount + 1 });
     },
   };
 }

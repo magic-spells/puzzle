@@ -1,6 +1,7 @@
 package config
 
 import (
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -337,8 +338,8 @@ func TestLoadConfigHashNames(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if cfg.HashNames() || cfg.Build.HashNames != nil {
-			t.Fatal("hashNames must be unset and default to false without a config file")
+		if !cfg.HashNames() || cfg.Build.HashNames != nil {
+			t.Fatal("hashNames must be unset and default to true without a config file")
 		}
 	})
 
@@ -349,11 +350,11 @@ func TestLoadConfigHashNames(t *testing.T) {
 		want bool
 		set  bool
 	}{
-		{name: "absent means false", body: "export default {};\n"},
-		{name: "absent follows splitting true", body: "export default { build: { splitting: true } };\n", want: true},
-		{name: "absent follows splitting false", body: "export default { build: { splitting: false } };\n"},
-		{name: "null means unset", body: "export default { build: { hashNames: null } };\n"},
-		{name: "null follows splitting", body: "export default { build: { splitting: true, hashNames: null } };\n", want: true},
+		{name: "absent means true", body: "export default {};\n", want: true},
+		{name: "absent with splitting true", body: "export default { build: { splitting: true } };\n", want: true},
+		{name: "absent ignores splitting false", body: "export default { build: { splitting: false } };\n", want: true},
+		{name: "null means unset", body: "export default { build: { hashNames: null } };\n", want: true},
+		{name: "explicit false without splitting", body: "export default { build: { hashNames: false } };\n", set: true},
 		{name: "explicit true without splitting", body: "export default { build: { hashNames: true } };\n", want: true, set: true},
 		{name: "explicit false overrides splitting", body: "export default { build: { splitting: true, hashNames: false } };\n", set: true},
 	} {
@@ -391,13 +392,29 @@ func TestLoadConfigHashNames(t *testing.T) {
 
 func TestLoadConfigDevProxy(t *testing.T) {
 	requireNode(t)
-	root := writeConfig(t, "export default { dev: { proxy: { '/api': 'http://localhost:3091' } } };\n")
+	// The string form is the target alone. The object form is Vite's; a key other
+	// than target and changeOrigin is ignored, like any unknown config key.
+	root := writeConfig(t, "export default { dev: { proxy: { '/api': 'http://localhost:3091', '/auth': { target: 'https://auth.test', changeOrigin: true }, '/ws': { target: 'http://localhost:3092', ws: true } } } };\n")
 	cfg, err := LoadConfig(root)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if got := cfg.Dev.Proxy["/api"]; got != "http://localhost:3091" {
-		t.Fatalf("Dev.Proxy[/api] = %q, want http://localhost:3091", got)
+	want := map[string]Proxy{
+		"/api":  {Target: "http://localhost:3091"},
+		"/auth": {Target: "https://auth.test", ChangeOrigin: true},
+		"/ws":   {Target: "http://localhost:3092"},
+	}
+	if !maps.Equal(cfg.Dev.Proxy, want) {
+		t.Fatalf("Dev.Proxy = %+v, want %+v", cfg.Dev.Proxy, want)
+	}
+}
+
+func TestLoadConfigDevProxyChangeOriginMustBeBoolean(t *testing.T) {
+	requireNode(t)
+	root := writeConfig(t, "export default { dev: { proxy: { '/api': { target: 'http://localhost:3091', changeOrigin: 'yes' } } } };\n")
+	_, err := LoadConfig(root)
+	if err == nil || !strings.Contains(err.Error(), `dev.proxy changeOrigin for "/api" must be a boolean; got "yes"`) {
+		t.Fatalf("want the changeOrigin type error, got %v", err)
 	}
 }
 
@@ -427,12 +444,20 @@ func TestLoadConfigNullBehavesAsUnset(t *testing.T) {
 			name: "all three null",
 			body: "export default { build: { dropConsole: null, sourceMap: null }, output: null };\n",
 		},
+		{
+			name: "proxy target undefined",
+			body: "export default { dev: { proxy: { '/api': undefined } } };\n",
+		},
+		{
+			name: "proxy target unset in either form",
+			body: "export default { dev: { proxy: { '/api': { target: undefined, changeOrigin: true }, '/auth': null } } };\n",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg, err := LoadConfig(writeConfig(t, tt.body))
 			if err != nil {
-				t.Fatalf("a null value should be treated as unset, got error: %v", err)
+				t.Fatalf("an unset value should load without error: %v", err)
 			}
 			if !cfg.DropConsole() {
 				t.Error("DropConsole() = false, want the unset default true")
@@ -445,6 +470,9 @@ func TestLoadConfigNullBehavesAsUnset(t *testing.T) {
 			}
 			if cfg.Output != "" {
 				t.Errorf("Output = %q, want the unset default \"\"", cfg.Output)
+			}
+			if len(cfg.Dev.Proxy) != 0 {
+				t.Errorf("Dev.Proxy = %v, want no proxied prefix", cfg.Dev.Proxy)
 			}
 		})
 	}
@@ -484,13 +512,15 @@ func TestLoadConfigDevProxyPrefixMustStartWithSlash(t *testing.T) {
 
 func TestLoadConfigDevProxyTargetMustBeAbsoluteHTTPURL(t *testing.T) {
 	requireNode(t)
-	root := writeConfig(t, "export default { dev: { proxy: { '/api': 'localhost:3091' } } };\n")
-	_, err := LoadConfig(root)
-	if err == nil {
-		t.Fatal("expected an error for a non-URL dev.proxy target")
-	}
-	if !strings.Contains(err.Error(), `dev.proxy target for "/api" must be an absolute http or https URL`) {
-		t.Fatalf("unexpected error: %v", err)
+	// The object form's target follows the string form's rule, a non-string
+	// target fails it too, and the message shows the whole entry.
+	for _, entry := range []string{`'localhost:3091'`, `3091`, `{ target: 'localhost:3091' }`, `{ target: 3091 }`} {
+		t.Run(entry, func(t *testing.T) {
+			_, err := LoadConfig(writeConfig(t, "export default { dev: { proxy: { '/api': "+entry+" } } };\n"))
+			if err == nil || !strings.Contains(err.Error(), `dev.proxy target for "/api" must be an absolute http or https URL; got `) {
+				t.Fatalf("want the target error, got %v", err)
+			}
+		})
 	}
 }
 
@@ -542,8 +572,8 @@ func TestLoadConfigDevProxyTrailingSlashAndSiblingsAccepted(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if got := cfg.Dev.Proxy["/api/"]; got != "http://localhost:3091" {
-		t.Fatalf("Dev.Proxy[/api/] = %q, want http://localhost:3091", got)
+	if got := cfg.Dev.Proxy["/api/"].Target; got != "http://localhost:3091" {
+		t.Fatalf("Dev.Proxy[/api/].Target = %q, want http://localhost:3091", got)
 	}
 	if len(cfg.Dev.Proxy) != 3 {
 		t.Fatalf("Dev.Proxy = %v, want all three prefixes preserved", cfg.Dev.Proxy)
@@ -630,5 +660,63 @@ func TestLoadConfigOutputNonStringRejected(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "output") {
 		t.Errorf("error should name output, got: %v", err)
+	}
+}
+
+func TestLoadConfigEnv(t *testing.T) {
+	requireNode(t)
+	t.Setenv("PUZZLE_TEST_API_URL", "https://api.example")
+	root := writeConfig(t, `export default { env: { API_URL: process.env.PUZZLE_TEST_API_URL, BETA: false, LIMIT: 3.5, $key: '', café: true, ['__proto__']: 'literal' } };`)
+	cfg, err := LoadConfig(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for key, want := range map[string]string{"API_URL": `"https://api.example"`, "BETA": "false", "LIMIT": "3.5", "$key": `""`, "café": "true", "__proto__": `"literal"`} {
+		if got := string(cfg.Env[key]); got != want {
+			t.Errorf("env.%s = %s, want %s", key, got, want)
+		}
+	}
+}
+
+func TestLoadConfigEnvUnset(t *testing.T) {
+	requireNode(t)
+	for _, env := range []string{"null", "undefined", "{}"} {
+		t.Run(env, func(t *testing.T) {
+			cfg, err := LoadConfig(writeConfig(t, "export default {env: "+env+"};"))
+			if err != nil || len(cfg.Env) != 0 {
+				t.Fatalf("env = %v, error %v; want no env values", cfg.Env, err)
+			}
+		})
+	}
+}
+
+func TestLoadConfigEnvInvalid(t *testing.T) {
+	requireNode(t)
+	t.Setenv("PUZZLE_TEST_MISSING_ENV", "")
+	if err := os.Unsetenv("PUZZLE_TEST_MISSING_ENV"); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct{ name, env, want string }{
+		{"bad-key", `{'API-URL': 'x'}`, `env key "API-URL" must be a JavaScript identifier`},
+		{"empty-key", `{'': 'x'}`, `env key "" must be a JavaScript identifier`},
+		{"digit-key", `{'1KEY': 'x'}`, `env key "1KEY" must be a JavaScript identifier`},
+		{"array", `[]`, "env must be a flat object of strings, numbers or booleans; got []"},
+		{"string", `'x'`, `env must be a flat object of strings, numbers or booleans; got "x"`},
+		{"number", `3`, "env must be a flat object of strings, numbers or booleans; got 3"},
+		{"boolean", `false`, "env must be a flat object of strings, numbers or booleans; got false"},
+		{"nested", `{KEY: { nested: true }}`, `env.KEY must be a string, number or boolean; got {"nested":true}`},
+		{"array-value", `{KEY: []}`, "env.KEY must be a string, number or boolean; got []"},
+		{"null-value", `{KEY: null}`, "env.KEY must be a string, number or boolean; got null"},
+		{"undefined-value", `{KEY: undefined}`, "env.KEY must be a string, number or boolean; got null"},
+		{"unset-env", `{API_URL: process.env.PUZZLE_TEST_MISSING_ENV}`, "env.API_URL must be a string, number or boolean; got null"},
+		{"nan", `{KEY: NaN}`, "env.KEY must be a string, number or boolean; got null"},
+		{"infinity", `{KEY: Infinity}`, "env.KEY must be a string, number or boolean; got null"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := LoadConfig(writeConfig(t, "export default {env: "+tc.env+"};"))
+			if want := ConfigFileName + ": " + tc.want; err == nil || err.Error() != want {
+				t.Fatalf("error = %v, want %q", err, want)
+			}
+		})
 	}
 }

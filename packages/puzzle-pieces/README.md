@@ -2,8 +2,9 @@
 
 Beautifully-behaved UI components for the [Puzzle framework](https://github.com/magic-spells/puzzle).
 Tailwind-styled, accessible, morph-aware — and **copied into your app, not installed
-from npm**. This package exists only as the transport for `puzzle add piece` — the CLI
-downloads it and copies sources into your app; you never install or import it.
+from npm**. For pieces, this package is only the transport for `puzzle add piece`: the
+CLI downloads it and copies the sources into your app. Install it only if you want to
+import the theme files and the appearance helper (see [Themes](#themes)).
 
 Part of the [`magic-spells/puzzle`](https://github.com/magic-spells/puzzle) monorepo —
 this package lives at `packages/puzzle-pieces` and releases in lockstep with the framework.
@@ -15,7 +16,7 @@ live docs and examples for every piece.
 
 Puzzle compiles `.pzl` single-file components. It can compile `.pzl` files from an
 installed package that declares `@magic-spells/puzzle` as a peer dependency, but your
-Tailwind scan covers only `app/`, so a piece imported from `node_modules` would render
+Tailwind scan skips `node_modules`, so a piece imported from there would render
 unstyled, and it would not be yours to edit. So puzzle-pieces is copy-in: each piece is
 source you copy into `app/components/ui/`.
 Your `puzzle build` compiles it, your Tailwind scan picks up its classes, and the
@@ -37,7 +38,11 @@ don't have them yet, and prints — never auto-runs — any npm install you need
 line carries a version floor per package (`npm install
 @magic-spells/collapsible-content@^1.2.0`) — the release the piece was built
 against — so run it as printed rather than installing the bare name.
-Existing files are never overwritten unless you pass `--overwrite`, and a
+A piece that wraps a web component also prints the stylesheet import that
+component needs, if any (`@import "@magic-spells/dialog-panel/css" layer(components);`
+for Dialog): add it once to `app/styles/styles.css` after `@import "tailwindcss";`, in
+the printed order (Sheet's own sheet follows dialog-panel's, which it overrides).
+Existing files are never overwritten unless you pass `--force` (`-f`), and a
 `pieces.lock` of content hashes is kept so a future `diff`/`update` command can tell
 upstream changes from your local edits.
 
@@ -81,8 +86,8 @@ Browse them all in the [live component library](https://magicspells.io/puzzle-pi
 in [`registry/ui/`](./registry/ui/), or by running the docs app locally:
 
 ```sh
-npm run build:compiler                  # once, at the monorepo root: the demo runs ../../puzzle/puzzle
-cd demo && npm install && npm run dev   # http://localhost:3070
+npm run build:compiler                                         # once, at the monorepo root: the demo runs ../../puzzle/puzzle
+cd packages/puzzle-pieces/demo && npm install && npm run dev   # http://localhost:3070
 ```
 
 Every piece is a native Puzzle component compiling to plain semantic HTML with ARIA
@@ -90,8 +95,8 @@ and Tailwind utility classes against the semantic tokens in
 [`registry/theme/pieces.css`](./registry/theme/pieces.css) — no hex colors,
 controlled-component APIs throughout. Sixteen pieces are thin wrappers around a
 `@magic-spells` web component (the sheets, the dialogs, the dropdown-panel family,
-Tabs, Select, …); those declare the package in their `piece.json` and the CLI prints
-the `npm install` for you.
+Tabs, Select, …); those declare the package (and any stylesheet it needs) in their
+`piece.json`, and the CLI prints the `npm install` and the `@import` for you.
 
 ## Themes
 
@@ -151,9 +156,13 @@ Inline `@magic-spells/puzzle-pieces/pre-paint` in `<head>` before the stylesheet
 account never sees a white flash. Every palette × style passes WCAG 2.2 AA on every
 declared pair (`npm test` — `test/contrast.test.mjs`); the docs site's `/themes/*`
 panels show the live values and ratios. To add a palette: copy a scheme file, rename its
-selectors, retune the values, list it in `registry.json` `themes`, and add it to
-`SCHEMES` in `appearance.js` and `pre-paint.js` (and the demo's `tokenNames.js`); the
-tests enforce identical token sets and AA for the new file.
+selectors, retune the values, list it in `registry.json` `themes`, export it in
+`package.json`, and add it to `SCHEMES` in `appearance.js` and `pre-paint.js`, to
+`DEFAULT_SCHEMES` in the `appearance-picker` piece, and to `SCHEMES` in
+`test/lib/parse-theme.mjs` and the demo's `tokenNames.js`. Then sync the demo's copies of
+`appearance.js`, the inline pre-paint in `public/index.html` and `AppearancePicker.pzl`,
+import the file in the demo's `styles.css`, and run `npm test`: it enforces identical
+token sets and AA for the new file.
 
 ## License
 

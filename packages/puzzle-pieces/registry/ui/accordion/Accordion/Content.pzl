@@ -42,7 +42,7 @@ import Collapsible from '../Collapsible/index.js';
 const CONTENT = 'px-4 pb-4';
 
 export default class Content extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     return {
       contentClass: [CONTENT, props.class].filter(Boolean).join(' '),
       defaultOpen: props.defaultOpen ? true : false,

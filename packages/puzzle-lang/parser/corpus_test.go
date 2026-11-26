@@ -10,8 +10,8 @@ import (
 )
 
 // corpus_test.go proves the expression grammar against every .pzl file the
-// monorepo ships or tests with: the framework's examples, the scaffold
-// templates, the pieces registry and demo, the DevTools panel, the runtime
+// monorepo ships or tests with: the framework's examples, the `puzzle init`
+// starters, the pieces registry and demo, the DevTools panel, the runtime
 // test fixtures, and the codegen and check goldens. Each file is parsed
 // in full — which parses every expression position with package expr — and
 // every expression position must carry a tree. From the Go module cache the
@@ -20,7 +20,7 @@ import (
 
 var corpusRoots = []string{
 	"../../puzzle/examples",
-	"../../puzzle/compiler/internal/scaffold",
+	"../../puzzle/starters",
 	"../../puzzle-pieces/registry",
 	"../../puzzle-pieces/demo",
 	"../../puzzle-devtools/panel",

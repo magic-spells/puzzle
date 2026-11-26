@@ -1,7 +1,7 @@
 <puzzle-view class="h-screen flex bg-ink text-fg overflow-hidden">
   <!-- Persistent left rail, Apple Photos style. It stays mounted across every
        navigation that reuses this layout (All Photos / Album / Photo), so only
-       the routed <Slot/> below swaps — the one-animator rule means the sidebar
+       the routed <Outlet/> below swaps — the one-animator rule means the sidebar
        never animates. Independently scrollable; hidden below md (no hamburger —
        out of scope), where the grid takes the full width.
 
@@ -52,7 +52,7 @@
        scroll INDEPENDENTLY of the sidebar. No max-width wrapper: the grid views
        are full-bleed (Apple Photos style) and pad themselves. -->
   <main class="flex-1 min-w-0 overflow-y-auto">
-    <Slot/>
+    <Outlet/>
   </main>
 </puzzle-view>
 
@@ -72,7 +72,7 @@ export default class DefaultLayout extends PuzzleView {
   //
   // findMany('photo') subscribes this layout to the store, so the derived album
   // list (and the All-Photos total) update reactively.
-  data(params, props) {
+  data({ params }) {
     const photos = this.ctx.store.findMany('photo');
     const routeName = this.route ? this.route.route.name : '';
     return {

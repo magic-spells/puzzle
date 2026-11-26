@@ -13,7 +13,6 @@ import (
 	"github.com/magic-spells/puzzle/compiler/internal/fsutil"
 	"github.com/magic-spells/puzzle/compiler/internal/locales"
 	"github.com/magic-spells/puzzle/compiler/internal/plugin"
-	"github.com/magic-spells/puzzle/compiler/internal/ui"
 )
 
 // WatchBuilder is the incremental esbuild driver for `puzzle dev` (D27). It
@@ -35,8 +34,8 @@ type WatchBuilder struct {
 	// or app/app.js). The esbuild context is frozen over it, so every rebuild
 	// re-resolves and refuses to go on once the answer changes.
 	appEntry string
-	// refused holds the changed paths of rebuilds the entry check turned away,
-	// replayed into the next rebuild.
+	// refused holds the changed paths of rebuilds that failed, replayed into
+	// the next rebuild: a batch is consumed only once its effects land in dist.
 	refused []string
 	pl      *plugin.Plugin
 	ctx     api.BuildContext
@@ -56,7 +55,7 @@ type WatchBuilder struct {
 	prevPublic map[string]bool
 	// publicSource is the source directory used by the last successful public
 	// sync ("" when the project had no public tree). Keeping it separately from
-	// publicDir(root)'s current answer is what lets a delete/rename of app/public
+	// PublicDir(root)'s current answer is what lets a delete/rename of app/public
 	// switch cleanly to the root fallback, and what makes a public tree that
 	// APPEARS mid-session sync on the next rebuild: the two disagree, and no
 	// changed path need touch either directory.
@@ -64,6 +63,9 @@ type WatchBuilder struct {
 	// landed becomes true only after a whole Rebuild succeeds. Until then every
 	// attempt retains initial-build behavior, including a full public sync.
 	landed bool
+	warned bool
+	// A confirmed CSS link stays valid until the public tree changes.
+	cssLinked bool
 	// bundleInputs is the last successful esbuild graph. A public asset normally
 	// needs only mirroring, but public/ is still ordinary source on disk and an
 	// app may import from it. Only skip esbuild when none of the changed public
@@ -79,6 +81,7 @@ type WatchBuilder struct {
 	// esbuild context is configured and whether rebuild writes and prunes the
 	// outputs itself.
 	splitting bool
+	env       map[string]json.RawMessage
 	// prevOutputs is the set of dist-relative paths THIS builder wrote on the
 	// previous rebuild (splitting only). A one-shot build prunes for free — it
 	// stages a fresh tree and swaps it in — but dev keeps dist warm, so every
@@ -138,6 +141,8 @@ type RebuildResult struct {
 
 // WatchOptions configure the incremental dev builder.
 type WatchOptions struct {
+	Env map[string]json.RawMessage
+
 	// Splitting mirrors build.splitting (puzzle.config.js) into the dev loop, so
 	// a developer sees the same lazy chunks the production build will emit. It
 	// also switches this builder off esbuild's own writer — see the prevOutputs
@@ -206,7 +211,7 @@ func NewWatchBuilder(root string, opts WatchOptions) (*WatchBuilder, error) {
 	// the HMR snapshot/restore hooks are live for `puzzle dev`. __PUZZLE_TAKEOVER__
 	// is true too — `puzzle dev` has no resolved output mode, and a dev bundle must
 	// never be the thing that silently drops a code path.
-	ctx, ctxErr := api.Context(watchBundleOptions(absRoot, entry, outdir, pl, opts.Splitting, opts.Fixtures, fixtures))
+	ctx, ctxErr := api.Context(watchBundleOptions(absRoot, entry, outdir, pl, opts.Splitting, opts.Fixtures, fixtures, opts.Env))
 	if ctxErr != nil {
 		return nil, fmt.Errorf("puzzle dev: creating esbuild context: %s", ctxErr.Error())
 	}
@@ -225,14 +230,15 @@ func NewWatchBuilder(root string, opts WatchOptions) (*WatchBuilder, error) {
 		fixtures:    fixtures,
 		useFixtures: opts.Fixtures,
 		splitting:   opts.Splitting,
+		env:         opts.Env,
 	}, nil
 }
 
 // watchBundleOptions assembles the dev context's BuildOptions. Shared by
 // construction and refreshUsage's context replacement so a rebuilt context can
 // never drift from the original one.
-func watchBundleOptions(absRoot, entry, outdir string, pl *plugin.Plugin, splitting, useFixtures bool, fixtures fixturesWrapper) api.BuildOptions {
-	buildOpts := newBundleOptions(absRoot, entry, outdir, pl, bundleFlags{Dev: true, Takeover: true, Splitting: splitting})
+func watchBundleOptions(absRoot, entry, outdir string, pl *plugin.Plugin, splitting, useFixtures bool, fixtures fixturesWrapper, env map[string]json.RawMessage) api.BuildOptions {
+	buildOpts := newBundleOptions(absRoot, entry, outdir, pl, bundleFlags{Env: env, Dev: true, Takeover: true, Splitting: splitting})
 	// Metafile carries the module graph's Inputs, used after each rebuild to prune
 	// CSS from files no longer imported (see Rebuild → plugin.PruneCSS). It is
 	// produced regardless of Write.
@@ -269,16 +275,15 @@ func (b *WatchBuilder) RebuildProfile(changed []string, prof *PhaseProfile) (Reb
 
 func (b *WatchBuilder) rebuild(changed []string, prof *PhaseProfile) (RebuildResult, error) {
 	var out RebuildResult
-	// A batch the entry check refuses is carried into the next rebuild rather
-	// than dropped: the usage scan, locale reload and public sync below all key
-	// off `changed`, and the rebuild after the fix must still see those paths.
+	// A failed batch is carried into the next rebuild rather than dropped: the
+	// usage scan, locale reload and public sync below all key off `changed`, and
+	// the rebuild after the fix must still see those paths.
 	changed = append(b.refused, changed...)
+	b.refused = changed
 	if err := entryUnchanged(b.root, b.appEntry); err != nil {
-		b.refused = changed
 		return out, err
 	}
-	b.refused = nil
-	currentPublic := publicDir(b.root)
+	currentPublic := PublicDir(b.root)
 	syncPublic := !b.landed || currentPublic != b.publicSource ||
 		pathsTouchDir(changed, currentPublic) || pathsTouchDir(changed, b.publicSource)
 	publicOnly := b.landed && !b.pendingBundleCommit && b.haveBundleInputs && len(changed) > 0 &&
@@ -334,12 +339,7 @@ func (b *WatchBuilder) rebuild(changed []string, prof *PhaseProfile) (RebuildRes
 		// onLoad callbacks for otherwise-valid files may already have changed the
 		// plugin's candidate CSS. Do not prune or promote it: CSS() continues to
 		// return the last fully successful snapshot.
-		lines := api.FormatMessages(result.Errors, api.FormatMessagesOptions{
-			Kind:          api.ErrorMessage,
-			Color:         ui.New(os.Stderr).Enabled(),
-			TerminalWidth: 0,
-		})
-		return out, fmt.Errorf("puzzle build failed:\n%s", strings.Join(lines, "\n"))
+		return out, formatBuildErrors("puzzle build failed", result.Errors)
 	}
 	if !publicOnly && b.splitting {
 		// Write:false is on, so nothing has reached dist yet. Materialize this
@@ -390,7 +390,8 @@ func (b *WatchBuilder) rebuild(changed []string, prof *PhaseProfile) (RebuildRes
 			_ = os.Remove(filepath.Join(b.outdir, filepath.FromSlash(rel)))
 		}
 		b.prevPublic = copied
-		b.publicSource = publicDir(b.root)
+		b.cssLinked = false
+		b.publicSource = PublicDir(b.root)
 		out.PublicSynced = true
 		endPublic()
 	}
@@ -401,7 +402,14 @@ func (b *WatchBuilder) rebuild(changed []string, prof *PhaseProfile) (RebuildRes
 		endCSS()
 		b.pendingBundleCommit = false
 		b.commitLocales()
+		if !b.warned && !b.cssLinked {
+			b.warned = warnUnlinkedCSS(result.Metafile, b.outdir, b.entry, func() bool {
+				b.cssLinked = shellHashSupport(b.root).appCSS
+				return b.cssLinked
+			})
+		}
 	}
+	b.refused = nil
 	b.landed = true
 	return out, nil
 }
@@ -649,7 +657,7 @@ func (b *WatchBuilder) refreshUsage() error {
 		return nil
 	}
 
-	next, ctxErr := api.Context(watchBundleOptions(b.root, b.entry, b.outdir, b.pl, b.splitting, b.useFixtures, b.fixtures))
+	next, ctxErr := api.Context(watchBundleOptions(b.root, b.entry, b.outdir, b.pl, b.splitting, b.useFixtures, b.fixtures, b.env))
 	if ctxErr != nil {
 		return fmt.Errorf("puzzle dev: refreshing esbuild context: %s", ctxErr.Error())
 	}

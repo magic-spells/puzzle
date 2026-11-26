@@ -100,11 +100,18 @@
         </p>
         <CodeBlock code={ importSnippet } lang="css"/>
         <p class="mt-4 text-sm/relaxed text-body">
-          A copy-in path — <span class="font-mono text-code text-ink">puzzle add theme { nameArg }</span> —
-          is planned, so a palette can be vendored into an app and retuned in place. Until it
-          lands, copy the files out of
-          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-code text-ink">registry/theme/*.css</code>
-          by hand.
+          To vendor a palette into the app and retune it in place, run
+          <span class="font-mono text-code text-ink">puzzle add theme { nameArg }</span>. The default
+          palette lands in
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-code text-ink">app/styles/pieces.css</code>
+          and every other one in
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-code text-ink">app/styles/themes/{ nameArg }.css</code>.
+          Each is recorded in
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-code text-ink">pieces.lock</code>,
+          and the CLI prints the
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-code text-ink">@import</code>
+          and <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-code text-ink">data-scheme</code>
+          lines to add. With no name, it lists the palettes and this app’s state for each.
         </p>
       </section>
 
@@ -213,7 +220,7 @@
       <section id="adding" class="mt-14 scroll-mt-20">
         <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Adding a palette</h2>
         <p class="mb-4 text-sm/relaxed text-body">
-          A palette is one file plus five registrations. Copy an existing scheme file, rename
+          A palette is one file plus the registrations below. Copy an existing scheme file, rename
           its selectors to the new name, and retune the values — keeping every token, because
           the tests compare token sets across files.
         </p>
@@ -361,12 +368,15 @@ const addSteps = [
 	'Copy a scheme file in registry/theme/ to the new name and rename its selectors — the palette block and its dim and mixed blocks.',
 	'Retune the values. Keep every token name; only values change.',
 	'Add { name, file, label, description } to the themes array in registry/registry.json.',
+	'Export it in package.json as ./themes/<name>.css.',
 	'Add the name to SCHEMES in registry/theme/appearance.js AND to SCHEMES in registry/theme/pre-paint.js — the two lists have to agree.',
-	'Add it to demo/app/lib/tokenNames.js and to test/lib/parse-theme.mjs, so the demo and the tests can see it.',
+	'Add it to DEFAULT_SCHEMES in registry/ui/appearance-picker/AppearancePicker.pzl — it must equal SCHEMES in appearance.js.',
+	'Add it to SCHEMES in test/lib/parse-theme.mjs and in demo/app/lib/tokenNames.js, so the tests and the demo can see it.',
+	'Sync the demo copies (demo/app/lib/appearance.js, the inline pre-paint in demo/app/public/index.html, demo/app/components/ui/AppearancePicker.pzl) and import the file in demo/app/styles/styles.css.',
 ];
 
 export default class Theming extends PuzzleView {
-	data(params, props) {
+	data() {
 		return {
 			htmlTag: '<html>',
 			headTag: '<head>',

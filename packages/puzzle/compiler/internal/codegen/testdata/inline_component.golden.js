@@ -2,7 +2,7 @@
 import { PuzzleView } from '@magic-spells/puzzle';
 
 export default class InlineComponent extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     return { label: props.label };
   }
   events = {
@@ -22,4 +22,3 @@ InlineComponent.prototype.render = function () {
     new ViewNode('text', { value: __s(__d.label, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'label' : 0) }),
   ]);
 };
-InlineComponent.__pzlModule = 'inline_component.pzl';

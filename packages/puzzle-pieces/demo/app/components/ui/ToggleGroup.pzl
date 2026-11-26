@@ -7,7 +7,7 @@
         class={ item.class }
         aria-pressed={ item.pressedAttr }
         disabled={ item.disabled }
-        @click={ toggle(item.value, event) }>
+        @click={ toggle(item.value) }>
         { item.label }
       </button>
     {/for}
@@ -23,24 +23,24 @@ import { PuzzleView } from '@magic-spells/puzzle';
 // can deselect the active item (click it again → ''). Each button carries
 // aria-pressed; there is no roving/selected radio semantics.
 //
-// ICON STORY: Puzzle can't take a raw inline-SVG string through a prop (a
-// component only inlines SVG via the compile-time {#svg} block, which needs a
-// literal file path — not per-item data). So `items[].icon` is NOT rendered.
-// `label` is REQUIRED and is what shows. For an "icon-only" group today, pass a
-// short/single-character or emoji label (e.g. '≡', 'B', '★', '🔇'); it stays a
-// real accessible name. A future icon-slot story would need a slots-in-a-loop
-// primitive Puzzle doesn't have yet.
+// ICON STORY: `items[].icon` is NOT rendered — this piece never reads it.
+// (Per-item icons are possible: Toolbar, ButtonGroup, Tree and Timeline draw
+// each item's icon from an SVG path `d` string; ToggleGroup has no icon
+// support.) `label` is REQUIRED and is what shows. For an "icon-only" group
+// today, pass a short/single-character or emoji label (e.g. '≡', 'B', '★',
+// '🔇'); it stays a real accessible name, so screen readers still announce
+// the control.
 //
 //   // single-select (with deselect), '' = nothing selected
 //   <ToggleGroup items={ aligns } value={ align } @change={ setAlign }
 //                label="Text alignment"/>
 //
 //   // multiple-select, value is an array
-//   <ToggleGroup type="multiple" items={ marks } value={ marks$ }
+//   <ToggleGroup type="multiple" items={ markItems } value={ marks }
 //                @change={ setMarks } label="Text formatting"/>
 //
 //   // aligns = [{ value:'left', label:'Left' }, { value:'center', label:'Center' }]
-//   // marks  = [{ value:'bold', label:'B' }, { value:'italic', label:'I', disabled:true }]
+//   // markItems = [{ value:'bold', label:'B' }, { value:'italic', label:'I', disabled:true }]
 //
 // Props:
 //   items   [{ value, label, disabled? }] — label required (a11y name); icon ignored
@@ -49,7 +49,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 //   label   → aria-label on the role="group" container (omit and it's absent)
 //   class   appended last to the container
 // Callback:
-//   @change(value, event)  value-first, typeof-guarded. single → the new value,
+//   @change(value)         value-first, typeof-guarded. single → the new value,
 //                          or '' when the active item is deselected. multiple →
 //                          the new array of selected values (items-order preserved,
 //                          newly added appended).
@@ -69,13 +69,13 @@ const ITEM_BASE =
   // Negative offset keeps the focus ring inside the clipped (overflow-hidden)
   // container instead of getting cropped away.
   'focus-visible:outline-2 focus-visible:-outline-offset-2 outline-ring focus-visible:outline-ring ' +
-  'disabled:opacity-50 disabled:pointer-events-none';
+  'disabled:opacity-50 disabled:cursor-not-allowed';
 
-const OFF = 'bg-surface text-body hover:bg-surface-sunken hover:text-ink';
-const ON = 'bg-faint text-ink hover:bg-faint';
+const OFF = 'bg-surface text-body not-disabled:hover:bg-surface-sunken not-disabled:hover:text-ink';
+const ON = 'bg-faint text-ink not-disabled:hover:bg-faint';
 
 export default class ToggleGroup extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     const type = props.type === 'multiple' ? 'multiple' : 'single';
     const groupDisabled = !!props.disabled;
     const value = props.value;
@@ -108,7 +108,7 @@ export default class ToggleGroup extends PuzzleView {
   }
 
   events = {
-    toggle: (val, event) => {
+    toggle: (val) => {
       const { type, value, items } = this.getData();
       const item = items.find((i) => i.value === val);
       if (!item || item.disabled) return;
@@ -125,7 +125,7 @@ export default class ToggleGroup extends PuzzleView {
       }
 
       const { change } = this.props;
-      if (typeof change === 'function') change(next, event);
+      if (typeof change === 'function') change(next);
     },
   };
 }

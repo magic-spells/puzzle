@@ -8,7 +8,7 @@ import (
 )
 
 // sections.go is the .pzl section splitter
-// (packages/puzzle/constellation/doc/DOC-COMPILER-DESIGN.md §b step 1). It carves
+// (packages/puzzle/constellation/doc/DOC-COMPILER-DESIGN.md, "The lane" step 1). It carves
 // a file into its <puzzle-view> (with attributes preserved for the root vnode),
 // the optional <puzzle-skeleton> loading template (v1.8, D39),
 // the opaque <script> body, and the optional <style> body. The
@@ -76,7 +76,7 @@ var sectionNames = []string{"puzzle-view", "puzzle-skeleton", "script", "style"}
 
 // SplitSections splits src into its sections, tolerant of whitespace and order.
 // A missing <puzzle-view>, or more than one of any section, is an error with a
-// position (packages/puzzle/constellation/doc/DOC-COMPILER-DESIGN.md §b, §e).
+// position (packages/puzzle/constellation/doc/DOC-COMPILER-DESIGN.md, "The lane" step 1 and "No partial output").
 // <script> is OPTIONAL (DOC-SPEC.md §4): a template-only .pzl leaves Scripts == "" and codegen
 // synthesizes a PuzzleView subclass named from the filename.
 func SplitSections(src, filename string) (*Sections, error) {
@@ -525,7 +525,8 @@ func parseAttrString(attrsRaw string, base Position, file, section string) ([]At
 	if strings.TrimSpace(attrsRaw) == "" {
 		return nil, nil
 	}
-	p := &parser{lex: newAttrLexer(attrsRaw, base, file), file: file}
+	dom := section == "puzzle-view"
+	p := &parser{lex: newAttrLexer(attrsRaw, base, file), file: file, opts: Options{SkipForeignSyntaxCheck: !dom}}
 	if err := p.advance(); err != nil {
 		return nil, toPE(err)
 	}
@@ -537,7 +538,7 @@ func parseAttrString(attrsRaw string, base Position, file, section string) ([]At
 		}
 		name := t.Value
 		npos := tokPos(t)
-		if e := checkAttrNamespace(name, npos, file); e != nil {
+		if e := checkAttrName(name, npos, file, dom, p.opts); e != nil {
 			return nil, e
 		}
 		if err := p.advance(); err != nil {
@@ -547,7 +548,7 @@ func parseAttrString(attrsRaw string, base Position, file, section string) ([]At
 			if err := p.advance(); err != nil {
 				return nil, toPE(err)
 			}
-			a, e := buildAttr(name, npos, p.cur, file, exprScope{})
+			a, e := p.buildAttr(name, npos, p.cur, section)
 			if e != nil {
 				return nil, e
 			}

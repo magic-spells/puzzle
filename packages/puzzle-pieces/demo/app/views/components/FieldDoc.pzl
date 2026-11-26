@@ -6,7 +6,9 @@
         <p class="mt-2 text-body">
           The workhorse labeled text input — label, hint or error helper text, and ARIA wiring come
           built in. Controlled: the parent owns the value and updates it from
-          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">@change</code>.
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">@change</code>,
+          or hand it a form from <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">@magic-spells/puzzle/forms</code>
+          and a <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">name</code> and it wires itself.
         </p>
       </header>
 
@@ -51,6 +53,15 @@
             <Field label="Read-only" value="Locked field" disabled />
           </div>
         </ExampleBox>
+
+        <ExampleBox id="form" title="With a form" code={ codeForm }>
+          <form class="w-full max-w-sm space-y-3" @submit={ save(event) } novalidate>
+            <Field form={ form } name="name" label="Name" />
+            <Field form={ form } name="email" type="email" label="Email" hint="Leave it, then come back" />
+            <button type="submit" class="h-9 rounded-lg border border-border px-3 text-sm text-ink">Save</button>
+            {#if savedAs}<p class="text-sm text-muted">Saved { savedAs }</p>{/if}
+          </form>
+        </ExampleBox>
       </div>
     </article>
 
@@ -59,7 +70,8 @@
 </puzzle-view>
 
 <script>
-import { PuzzleView } from '@magic-spells/puzzle';
+import { PuzzleView, PuzzleModel, Puzzle } from '@magic-spells/puzzle';
+import { createForm } from '@magic-spells/puzzle/forms';
 import Field from '@/components/ui/Field.pzl';
 import ExampleBox from '@/components/docs/ExampleBox.pzl';
 import CodeBlock from '@/components/docs/CodeBlock.pzl';
@@ -74,7 +86,7 @@ const codeHero = `<Field label="Full name" placeholder="Ada Lovelace" value={ na
 
 // parent
 events = {
-  setName: (v) => this.setData('name', v),
+  setName: (v) => this.setState('name', v),
 };`;
 
 const codeHint = `<Field label="Company" hint="As it appears on your invoice" placeholder="Acme Inc." />`;
@@ -83,12 +95,39 @@ const codeError = `<Field label="Email" value="taken@example.com" error="That ad
 
 const codeDisabled = `<Field label="Read-only" value="Locked field" disabled />`;
 
+const codeForm = `<form @submit={ save(event) } novalidate>
+  <Field form={ form } name="name" label="Name" />
+  <Field form={ form } name="email" type="email" label="Email" />
+  <button type="submit">Save</button>
+</form>
+
+// parent: form comes from @magic-spells/puzzle/forms
+created() {
+  this.form = createForm(this, Signup, { fields: ['name', 'email'] });
+}
+events = {
+  save: (event) => this.form.submit(event, (values) => api.save(values)),
+};`;
+
+// the rules the "with a form" example validates against. createForm reads
+// them through the model's static validate(), so the model needs no store.
+class Signup extends PuzzleModel {
+  static schema = {
+    name: Puzzle.string().required('Enter your name'),
+    email: Puzzle.string()
+      .required('Enter an email')
+      .validate((v) => /^[^@\s]+@[^@\s]+$/.test(v), 'That doesn\'t look like an email'),
+  };
+}
+
 export default class FieldDoc extends PuzzleView {
   created() {
-    this.setData({ name: '' });
+    this.setState({ name: '', savedAs: '' });
+    // writes the controller to state as `form`; Field reads values and errors from it
+    this.form = createForm(this, Signup, { fields: ['name', 'email'] });
   }
 
-  data(params, props) {
+  data() {
     return {
       ...this.getData(),
       installCmd,
@@ -98,18 +137,22 @@ export default class FieldDoc extends PuzzleView {
       codeHint,
       codeError,
       codeDisabled,
+      codeForm,
       toc: [
         { label: 'Installation', href: '#installation' },
         { label: 'Usage', href: '#usage' },
         { label: 'Hint', href: '#hint' },
         { label: 'Error', href: '#error' },
         { label: 'Disabled', href: '#disabled' },
+        { label: 'With a form', href: '#form' },
       ],
     };
   }
 
   events = {
-    setName: (v) => this.setData('name', v),
+    setName: (v) => this.setState('name', v),
+    // a real app would send the values to a server here; the demo just echoes them
+    save: (event) => this.form.submit(event, (values) => this.setState('savedAs', values.email)),
   };
 }
 </script>

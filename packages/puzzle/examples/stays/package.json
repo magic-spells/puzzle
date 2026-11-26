@@ -1,14 +1,14 @@
 {
   "name": "stays",
   "version": "1.0.0",
-  "description": "Puzzle Stays — an Airbnb-style stays marketplace showcasing nested routes (v1.3), the store, formatters, and the animation system",
+  "description": "Puzzle Stays — an Airbnb-style stays marketplace showcasing nested routes (v1.3), the store, template functions, and the animation system",
   "main": "app.js",
   "scripts": {
     "dev": "puzzle dev",
     "build": "puzzle build"
   },
   "dependencies": {
-    "@magic-spells/puzzle": "^0.9.0"
+    "@magic-spells/puzzle": "^0.10.0"
   },
   "devDependencies": {
     "@tailwindcss/cli": "^4.1.14",

@@ -42,4 +42,3 @@ ElseIf.prototype.render = function () {
         ]),
   ]);
 };
-ElseIf.__pzlModule = 'else_if.pzl';

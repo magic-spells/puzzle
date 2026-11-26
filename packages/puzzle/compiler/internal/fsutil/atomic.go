@@ -13,6 +13,28 @@ func FileExists(path string) bool {
 	return err == nil && !info.IsDir()
 }
 
+// FindUp returns the first existing <dir>/rel, or "" if there is none, in a
+// lexical walk up from the absolute start directory to the filesystem root (a
+// symlinked project directory is not resolved). A dependency hoisted to a
+// workspace root's node_modules is found from every app below it.
+func FindUp(start, rel string) string {
+	dir, err := filepath.Abs(start)
+	if err != nil {
+		return ""
+	}
+	for {
+		candidate := filepath.Join(dir, rel)
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return ""
+		}
+		dir = parent
+	}
+}
+
 // RejectSymlink returns an error when path exists and is a symbolic link or a
 // non-directory. A missing path is fine — the caller creates it. Tool-owned
 // scratch directories are created, swept, and removed wholesale, so a symlinked
@@ -32,6 +54,38 @@ func RejectSymlink(path string) error {
 		return fmt.Errorf("%s is not a directory — the .puzzle scratch directory must be a real directory", path)
 	}
 	return nil
+}
+
+// EvalSymlinksAllowMissing mirrors filepath.EvalSymlinks for a destination that
+// may not exist yet: resolve the nearest existing ancestor, then append the
+// missing suffix. A dangling symlink fails closed instead of being mistaken for
+// a missing ordinary path segment.
+func EvalSymlinksAllowMissing(name string) (string, error) {
+	current := name
+	var missing []string
+	for {
+		resolved, err := filepath.EvalSymlinks(current)
+		if err == nil {
+			for i := len(missing) - 1; i >= 0; i-- {
+				resolved = filepath.Join(resolved, missing[i])
+			}
+			return resolved, nil
+		}
+		if !os.IsNotExist(err) {
+			return "", err
+		}
+		if _, lerr := os.Lstat(current); lerr == nil {
+			return "", err
+		} else if !os.IsNotExist(lerr) {
+			return "", lerr
+		}
+		parent := filepath.Dir(current)
+		if parent == current {
+			return "", err
+		}
+		missing = append(missing, filepath.Base(current))
+		current = parent
+	}
 }
 
 // WriteFileAtomic writes data to a temporary file in the same directory as path

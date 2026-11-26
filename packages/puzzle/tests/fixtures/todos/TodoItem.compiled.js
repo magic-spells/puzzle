@@ -8,7 +8,7 @@ export default class TodoItem extends PuzzleView {
   // Returning the record itself is what makes the checkbox writable: the
   // template's `checked={ todo.completed }` resolves to this record, so the
   // synthesized handler has something to call update() on.
-  data(params, props) {
+  data({ props }) {
     return { todo: props.todo };
   }
 
@@ -24,7 +24,7 @@ export default class TodoItem extends PuzzleView {
   };
 
   // Enter/leave animations (constellation/doc/DOC-SPEC.md §12). The root div
-  // (overflow-hidden, no padding) is the animation target; the inner h-[65px]
+  // (overflow-hidden, no padding) is the animation target; the inner h-16.25
   // content div keeps the row from squishing while the root's height collapses.
   // The root's natural height IS 65px, so the enter `to` equals the element's
   // stylesheet state (the release contract in animate.js).
@@ -34,7 +34,7 @@ export default class TodoItem extends PuzzleView {
   };
 }
 
-import { ViewNode } from '@magic-spells/puzzle';
+import { ViewNode, displayValue as __s } from '@magic-spells/puzzle';
 
 TodoItem.prototype.render = function () {
   const __d = this.getData();
@@ -42,7 +42,7 @@ TodoItem.prototype.render = function () {
 
   return new ViewNode('div', { class: 'overflow-hidden' }, [
     new ViewNode('div', {
-      class: 'group h-[65px] flex items-center px-5 border-b border-line hover:bg-surface-2 transition-colors',
+      class: 'group h-16.25 flex items-center px-5 border-b border-line hover:bg-surface-2 transition-colors',
     }, [
       new ViewNode('label', { class: 'flex items-center cursor-pointer mr-4' }, [
         new ViewNode('input', {
@@ -63,7 +63,7 @@ TodoItem.prototype.render = function () {
             ? [
                 (this.__c[0] ??= new ViewNode('div', { class: 'absolute inset-0 flex items-center justify-center' }, [
                   new ViewNode('svg', {
-                    class: 'w-3 h-3 text-ink',
+                    class: 'w-3 h-3 text-page',
                     fill: 'currentColor',
                     viewBox: '0 0 20 20',
                   }, [
@@ -75,20 +75,22 @@ TodoItem.prototype.render = function () {
                   ]),
                 ])),
               ]
-            : []),
+            : [
+                new ViewNode('#'),
+              ]),
         ]),
       ]),
       new ViewNode('span', {
-        class: `flex-1 truncate ${__d.todo?.completed ? 'text-faint line-through' : ''}${!__d.todo?.completed ? 'text-fg' : ''}`,
+        class: `flex-1 truncate ${__d.todo?.completed ? 'text-faint line-through' : ''}${!__d.todo?.completed ? 'text-ink' : ''}`,
       }, [
-        new ViewNode('text', { value: String(__d.todo?.text) }),
+        new ViewNode('text', { value: __s(__d.todo?.text, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'todo.text' : 0) }),
       ]),
-      new ViewNode('span', { class: 'ml-4 shrink-0 font-mono text-[11px] text-faint tabular-nums' }, [
-        new ViewNode('text', { value: String((__f["datetime"] || __f.__missing("datetime"))(__d.todo?.createdAt, 'short')) }),
+      new ViewNode('span', { class: 'ml-4 shrink-0 font-mono text-11 text-faint tabular-nums' }, [
+        new ViewNode('text', { value: __s((__f["datetime"] || __f.__missing("datetime"))(__d.todo?.createdAt, 'short'), typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'datetime(todo.createdAt, \'short\')' : 0) }),
       ]),
       new ViewNode('button', {
         class: 'ml-3 w-7 h-7 shrink-0 rounded-md flex items-center justify-center text-xl leading-none text-faint hover:text-danger hover:bg-danger/10 opacity-0 group-hover:opacity-100 transition-all',
-        '@click': (event) => this.events.remove(event),
+        '@click': ((this.__h ??= {})[0] ??= (event) => this.events.remove(event)),
         title: 'Delete todo',
       }, [
         new ViewNode('text', { value: '×' }),

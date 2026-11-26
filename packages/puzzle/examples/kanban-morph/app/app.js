@@ -66,7 +66,7 @@ const seedTasks = [
     status: 'doing',
     order: 1,
     description:
-      'The two-lane rule: per-frame ghost movement writes transforms directly and never touches the store; only slot changes go through setData + refresh. Sixty store flushes a second is how boards die.',
+      'The two-lane rule: per-frame ghost movement writes transforms directly and never touches the store; only slot changes go through setState. Sixty store flushes a second is how boards die.',
   },
   {
     id: 'task-6',

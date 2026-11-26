@@ -1,10 +1,28 @@
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+        
 import { PuzzleView } from '@magic-spells/puzzle';
 import Wrapper from './Wrapper.compiled.js';
 
 export default class SnippetsHost extends PuzzleView {
   created() {
-    this.setData({
+    this.setState({
       users: [{ id: 1, name: 'Ada' }, { id: 2, name: 'Grace' }],
       group: { title: 'Core' },
       suffix: 'v1',
@@ -16,7 +34,7 @@ export default class SnippetsHost extends PuzzleView {
       const users = this.getData().users.map((user) => (
         user.id === id ? { ...user, name: `${user.name}?` } : user
       ));
-      this.setData({ users, suffix: 'v2' });
+      this.setState({ users, suffix: 'v2' });
     },
   };
 }
@@ -60,4 +78,3 @@ SnippetsHost.prototype.render = function () {
     ]),
   ]);
 };
-SnippetsHost.__pzlModule = 'SnippetsHost.pzl';

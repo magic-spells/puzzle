@@ -16,8 +16,8 @@ connections:
   - FILE-CLI
   - FILE-DEV-SERVER
   - DOC-SPEC-BUILD
-verified_at: '2026-08-24T21:11:50.859Z'
-verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
+verified_at: '2026-11-24T18:13:21.008Z'
+verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
 ---
 
 # D156 — observable, change-aware, concurrent build pipeline

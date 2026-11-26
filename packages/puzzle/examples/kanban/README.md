@@ -70,18 +70,18 @@ DnD possible with **zero framework changes**:
    card between columns automatically re-renders both columns. Filters are applied
    after the fact, in JS.
 5. **Store notifications batch into ONE `requestAnimationFrame` flush.** `_notify`
-   accumulates keys in a Set; N `record.update()` calls in one tick → each subscriber
+   accumulates keys in a Map; N `record.update()` calls in one tick → each subscriber
    notified at most once. The drop commit below issues up to ~10 updates and produces
    exactly one board re-render.
-6. **`setData()` does NOT re-run `data()`.** It merges local state and schedules a
-   re-render of the *old* model. If `data()` derives anything from local state (it does
-   here — the placeholder position), you must call `this.refresh()` after `setData()`.
-   `refresh()` re-runs `data()` **synchronously** when `data()` is sync, then patches.
+6. **`setState()` re-runs `data()` when `data()` read the key** (D23). `data()` reads
+   the drag keys back with `getData()` to place the placeholder, so each publish re-runs
+   it before the next render, and every publish within one frame shares that one run.
+   No `refresh()` anywhere in the drag path.
 7. **The runtime owns FLIP** (v1.51, D85). A `flip` attribute on a keyed row root
    animates retained rows from their old visual position to their new one — measured
    before the patch, played after it, inside `patchKeyedChildren`. This board used to
    hand-roll it from `beforeUpdate()` / `afterUpdate()`, which still wrap every patch
-   synchronously (`beforeUpdate → patch → afterUpdate` in one tick, `PuzzleView._render`)
+   synchronously (`beforeUpdate → patch → afterUpdate` in one tick, `PuzzleView`'s `#renderNowInner`)
    and are still the right hooks for measurements the framework does *not* do for you.
    Position-on-reorder is no longer one of them.
 8. **`{#for}` bodies are auto-keyed** — the codegen keys the single root with
@@ -104,11 +104,11 @@ DnD possible with **zero framework changes**:
   `ghost.style.transform = translate3d(...)`. The ghost is a `cloneNode(true)` appended
   to `document.body` — *outside* Puzzle's render tree, so patches never touch it and it
   never appears in FLIP measurements.
-- **Slow lane (only when the target slot actually changes):** `setData({ targetCol,
-  targetIndex }) + refresh()` → `data()` recomposes column arrays → keyed patch moves
+- **Slow lane (only when the target slot actually changes):** `setState({ targetCol,
+  targetIndex })` → `data()` re-runs and recomposes column arrays → keyed patch moves
   the placeholder → the rows' `flip` attribute animates every card that shifted.
 
-Running ghost movement through `setData` would re-patch the board 60×/sec. Don't.
+Running ghost movement through `setState` would re-patch the board 60×/sec. Don't.
 
 ## Drag state machine
 
@@ -133,12 +133,12 @@ DRAGGING
   │    z-index:9999, rotate(3deg) scale(1.03), shadow)
   │   record pointer offset within the card (so the grab point stays under the cursor)
   │   record dragHeight = card height (placeholder matches it exactly)
-  │   publish drag state + refresh()  ← card leaves the flow, placeholder appears
+  │   publish drag state (setState)   ← card leaves the flow, placeholder appears
   │
   │ every pointermove:
   │   moveGhost()                       (fast lane)
   │   hitTest(x,y) → { col, index }     (see below)
-  │   if slot changed → publish + refresh()   (slow lane → FLIP)
+  │   if slot changed → publish (setState)   (slow lane → FLIP)
   │   outside all columns → col=null → placeholder hidden, drop would cancel
   ▼
 pointerup, targetCol set   → DROP:   commit to store, cleanup()
@@ -147,8 +147,8 @@ Escape                     → CANCEL: same
 view destroyed mid-drag    → cleanup()  (safety net in destroyed())
 
 cleanup(): remove the 3 document listeners (keep the exact bound fn refs as instance
-fields!), remove ghost from body, restore userSelect/cursor, null the drag state,
-refresh() → board re-renders without the placeholder.
+fields!), remove ghost from body, restore userSelect/cursor, null the drag state
+with setState → data() re-runs, board re-renders without the placeholder.
 ```
 
 ### Why document listeners, not `setPointerCapture`
@@ -273,7 +273,7 @@ targetTasks.forEach((t, i) => t.update({ status: targetCol, order: i }));
   via `findMany('task')` (fact #4) — re-runs `data()` once, and FLIP settles both
   columns in a single pass. **No manual "which columns changed" bookkeeping exists
   anywhere.** That's the demo's whole point.
-- The CANCEL path never touches the store: clearing local drag state + `refresh()`
+- The CANCEL path never touches the store: clearing local drag state with `setState()`
   restores the pre-drag order from the untouched records.
 
 ## Gotcha checklist (all hit or preempted while building this)
@@ -282,7 +282,7 @@ targetTasks.forEach((t, i) => t.update({ status: targetCol, order: i }));
       document listeners.
 - [ ] Guard `startDrag` re-entry (`if (this._drag) return`) — a second pointerdown
       mid-drag (multi-touch) would overwrite state and leak the ghost.
-- [ ] `setData()` alone won't recompute `data()` — pair with `refresh()`.
+- [ ] `data()` must read the drag keys through `getData()` for `setState()` to re-run it; a value parked on an instance field (`this._drag`) is invisible to that tracking.
 - [ ] Exclude the placeholder from hit-test measurement (feedback loop).
 - [ ] `{#if}` can't be a `{#for}` body root — branch inside the item component.
 - [ ] `.kanban-card { touch-action:none; user-select:none }` in CSS **and**

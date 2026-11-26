@@ -1,4 +1,17 @@
 
+
+
+
+
+
+
+
+
+
+
+
+
+        
 import { PuzzleView } from '@magic-spells/puzzle';
 
 const WORDS = ['alpha', 'beta', 'gamma', 'delta'];
@@ -9,7 +22,7 @@ const WORDS = ['alpha', 'beta', 'gamma', 'delta'];
 // refresh() must keep live.
 export default class LocalForm extends PuzzleView {
 	created() {
-		this.setData({
+		this.setState({
 			draft: '',
 			age: null,
 			volume: 0,
@@ -76,4 +89,3 @@ LocalForm.prototype.render = function () {
     ]),
   ]);
 };
-LocalForm.__pzlModule = 'LocalForm.pzl';

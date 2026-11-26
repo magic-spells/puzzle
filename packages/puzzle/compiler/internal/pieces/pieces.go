@@ -6,9 +6,11 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 
+	"github.com/magic-spells/puzzle/compiler/internal/fsutil"
 	"github.com/magic-spells/puzzle/compiler/internal/ui"
 	"github.com/magic-spells/puzzle/compiler/internal/version"
 	"github.com/magic-spells/puzzle/packages/puzzle-lang/textutil"
@@ -52,6 +54,7 @@ type Result struct {
 	Source   string
 	Units    []Unit
 	NpmDeps  []string // deduped + sorted; never installed (D3)
+	Styles   []string // component stylesheets, in load order; never imported (D3)
 	Theme    string   // non-empty ⇒ the `@import './pieces.css';` next-step advisory
 	LockPath string
 	// ThemeHint is non-empty when an existing app/styles/pieces.css differs from
@@ -153,6 +156,7 @@ func Add(opts Options) (*Result, error) {
 	// Accumulate npm deps across every resolved piece (deduped, sorted). Printed
 	// as a next step, never executed (D3 — no network installs at build time).
 	result.NpmDeps = collectNpmDeps(resolvedPieces)
+	result.Styles = collectStyles(resolvedPieces)
 
 	// Theme is registry content too: pieces style themselves through its @theme
 	// tokens, so we COPY it into app/styles/pieces.css and lock it exactly like a
@@ -305,7 +309,7 @@ func validateManifestPath(piece, field, value string) error {
 // points outside even when the final file does not exist yet.
 func containedWritePath(resolvedRoot, rel, piece, field, value string) (string, error) {
 	joined := filepath.Join(resolvedRoot, filepath.FromSlash(rel))
-	abs, err := evalSymlinksAllowMissing(joined)
+	abs, err := fsutil.EvalSymlinksAllowMissing(joined)
 	if err != nil {
 		return "", fmt.Errorf("piece %q has invalid %s %q: resolving destination: %w", piece, field, value, err)
 	}
@@ -314,38 +318,6 @@ func containedWritePath(resolvedRoot, rel, piece, field, value string) (string, 
 		return "", fmt.Errorf("piece %q has invalid %s %q: destination resolves outside the project root", piece, field, value)
 	}
 	return abs, nil
-}
-
-// evalSymlinksAllowMissing mirrors filepath.EvalSymlinks for a destination that
-// may not exist yet: resolve the nearest existing ancestor, then append the
-// missing suffix. A dangling symlink fails closed instead of being mistaken for
-// a missing ordinary path segment.
-func evalSymlinksAllowMissing(name string) (string, error) {
-	current := name
-	var missing []string
-	for {
-		resolved, err := filepath.EvalSymlinks(current)
-		if err == nil {
-			for i := len(missing) - 1; i >= 0; i-- {
-				resolved = filepath.Join(resolved, missing[i])
-			}
-			return resolved, nil
-		}
-		if !os.IsNotExist(err) {
-			return "", err
-		}
-		if _, lerr := os.Lstat(current); lerr == nil {
-			return "", err
-		} else if !os.IsNotExist(lerr) {
-			return "", lerr
-		}
-		parent := filepath.Dir(current)
-		if parent == current {
-			return "", err
-		}
-		missing = append(missing, filepath.Base(current))
-		current = parent
-	}
 }
 
 // checkConflicts returns an error listing every existing destination path.
@@ -365,7 +337,7 @@ func checkConflicts(units []plannedUnit) error {
 		return nil
 	}
 	sort.Strings(conflicts)
-	return fmt.Errorf("refusing to overwrite existing file(s) (use --overwrite to replace):\n  %s",
+	return fmt.Errorf("refusing to overwrite existing file(s) (use --force to replace):\n  %s",
 		strings.Join(conflicts, "\n  "))
 }
 
@@ -403,6 +375,21 @@ func collectNpmDeps(resolvedPieces []Piece) []string {
 	return deps
 }
 
+// collectStyles unions the stylesheets of every resolved piece, first occurrence
+// winning. Never sorted: each manifest lists its sheets in load order and the
+// union keeps it, so dialog-panel's sheet still precedes sheet's own.
+func collectStyles(resolvedPieces []Piece) []string {
+	var styles []string
+	for _, p := range resolvedPieces {
+		for _, s := range p.Styles {
+			if !slices.Contains(styles, s) {
+				styles = append(styles, s)
+			}
+		}
+	}
+	return styles
+}
+
 // themeImportAdvisory is the single manual line the user must add — styles.css is
 // user-owned, so we never edit it (D3), we only tell them the one import to wire.
 const themeImportAdvisory = "add `@import './pieces.css';` to app/styles/styles.css (after `@import \"tailwindcss\";`)"
@@ -416,8 +403,8 @@ type plannedTheme struct {
 // states keyed off app/styles/styles.css and app/styles/pieces.css. It performs
 // every read and registry fetch but deliberately does not write:
 //
-//	(a) styles.css already carries the tokens — the manual-merge marker, or an
-//	    import that references pieces.css — nothing to do, no advisory.
+//	(a) styles.css already carries the tokens — the manual-merge marker, or a
+//	    live import of pieces.css — nothing to do, no advisory.
 //	(b) not wired AND app/styles/pieces.css is absent — copy the registry theme
 //	    verbatim to app/styles/pieces.css, return it as a Unit (so it's locked +
 //	    shown), and advise the import.
@@ -439,11 +426,12 @@ func planTheme(opts *Options, reg *Registry) (theme *plannedTheme, advisory stri
 		return nil, "", fmt.Errorf("reading %s: %w", stylesPath, readErr)
 	}
 
-	// (a) Already wired — a hand-merged token block, an import pulling pieces.css
-	// in, or the palette imported straight from the npm package (an app that does
-	// that owns its tokens through the package; copying pieces.css beside it would
-	// only start the drift `add theme` exists to stop).
-	if strings.Contains(styles, themeMarker) || strings.Contains(styles, "pieces.css") ||
+	// (a) Already wired — a hand-merged token block, a live import pulling
+	// pieces.css in (a comment that mentions it is not wiring), or the palette
+	// imported straight from the npm package (an app that does that owns its
+	// tokens through the package; copying pieces.css beside it would only start
+	// the drift `add theme` exists to stop).
+	if strings.Contains(styles, themeMarker) || piecesCssImported(styles) ||
 		themeImportedFromPackage(styles, defaultThemeName) {
 		return nil, "", nil
 	}
@@ -486,13 +474,13 @@ func writePlannedTheme(theme *plannedTheme) error {
 // copy lacks — silently, unless we say so.
 const (
 	staleThemeHintLine    = "app/styles/pieces.css is an older registry theme — run `puzzle add theme default` to refresh it (new pieces use tokens it lacks)"
-	modifiedThemeHintLine = "app/styles/pieces.css differs from the registry theme — merge the new tokens in by hand, or run `puzzle add theme default --overwrite` to replace it (new pieces use tokens it may lack)"
+	modifiedThemeHintLine = "app/styles/pieces.css differs from the registry theme — merge the new tokens in by hand, or run `puzzle add theme default --force` to replace it (new pieces use tokens it may lack)"
 )
 
 // staleThemeHint compares an existing app/styles/pieces.css with the registry's
 // theme. Identical is quiet; a copy still matching its pieces.lock hash is an
 // unmodified older registry theme that `add theme default` refreshes as is;
-// anything else was edited, so the refresh needs --overwrite or a hand merge.
+// anything else was edited, so the refresh needs --force or a hand merge.
 // Tokens hand-merged into styles.css, or imported from the npm package, are not
 // this file's business (npm updates the package; the merge is the user's), and
 // no pieces.css at all is planTheme's state (b). Print-only (D3).
@@ -590,7 +578,7 @@ func RenderSummary(w io.Writer, out *ui.Printer, res *Result) {
 			out.Green("✓"), out.Bold(u.Name), out.Dim(fmt.Sprintf("· %d file%s", n, textutil.Plural(n))))
 	}
 
-	if len(res.NpmDeps) == 0 && len(res.Themes) == 0 && res.Theme == "" && res.ThemeHint == "" {
+	if len(res.NpmDeps) == 0 && len(res.Styles) == 0 && len(res.Themes) == 0 && res.Theme == "" && res.ThemeHint == "" {
 		return
 	}
 	fmt.Fprintf(w, "\n  %s\n", out.Bold("Next steps"))
@@ -602,6 +590,15 @@ func RenderSummary(w io.Writer, out *ui.Printer, res *Result) {
 	}
 	if res.Theme != "" {
 		fmt.Fprintf(w, "    %s %s\n", out.Yellow("→"), res.Theme)
+	}
+	// Above Tailwind the components layer would be declared before its base layer
+	// and preflight would win. Each later sheet is anchored to the one before it,
+	// so lines added one at a time keep the manifests' load order.
+	after := `@import "tailwindcss";`
+	for _, s := range res.Styles {
+		line := `@import "` + s + `" layer(components);`
+		fmt.Fprintf(w, "    %s add `%s` to app/styles/styles.css (after `%s`)\n", out.Yellow("→"), line, after)
+		after = line
 	}
 	if res.ThemeHint != "" {
 		fmt.Fprintf(w, "    %s %s\n", out.Yellow("→"), res.ThemeHint)

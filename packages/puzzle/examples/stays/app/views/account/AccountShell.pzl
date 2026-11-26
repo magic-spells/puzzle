@@ -1,7 +1,7 @@
 <puzzle-view>
   <!-- /account parent view (nested routes v1.3, D30). This shell stays mounted
        while its child pane — Profile / Trips / Wishlist — swaps through the
-       <Slot/> below. On a pane swap the shell is a REUSED ancestor: its data()
+       <Outlet/> below. On a pane swap the shell is a REUSED ancestor: its data()
        re-runs with the full merged params but the shell itself never animates
        (the one-animator rule) — only the leaf pane plays its in/out. -->
   <div>
@@ -37,7 +37,7 @@
 
     <!-- Matched child pane renders here (v1.3 nested-view slot). -->
     <div class="pt-8">
-      <Slot/>
+      <Outlet/>
     </div>
   </div>
 </puzzle-view>
@@ -46,7 +46,7 @@
 import { PuzzleView } from '@magic-spells/puzzle';
 
 export default class AccountShell extends PuzzleView {
-  data(params, props) {
+  data() {
     // The signed-in user is a single record with id 'me'. May be undefined for
     // a beat during the initial seed, so every field has a fallback.
     const me = this.ctx.store.findOne('traveler', 'me');

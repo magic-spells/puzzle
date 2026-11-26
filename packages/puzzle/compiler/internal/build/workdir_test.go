@@ -143,7 +143,7 @@ func TestEnsureWorkTmpWritesSelfIgnoringGitignore(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got, want := tmp, filepath.Join(root, ".puzzle", "tmp"); got != want {
+	if got, want := tmp, resolvePath(filepath.Join(root, ".puzzle", "tmp")); got != want {
 		t.Errorf("scratch dir = %q, want %q", got, want)
 	}
 

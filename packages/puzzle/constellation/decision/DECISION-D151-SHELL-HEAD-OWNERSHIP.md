@@ -9,8 +9,8 @@ connections:
   - DOC-SPEC-ROUTER
   - DECISION-D84-HEAD-MANAGEMENT
   - DECISION-D81-STATIC-PAGES-MODE
-verified_at: '2026-08-24T21:39:15.808Z'
-verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
+verified_at: '2026-11-24T18:13:21.008Z'
+verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
 code_refs:
   - client-runtime/ssg/index.js
   - tests/ssg-head.test.js
@@ -34,7 +34,8 @@ inside the shell's head region** (`client-runtime/ssg/index.js`).
 - `compileShellPlan` locates, per shell: the head region (`<head …>` →
   `</head>`, case-insensitive), its `<title>`, every `data-puzzle-head` marker
   span inside the region, the empty target element, and `</body>`. Managed-tag
-  matchers are module constants; the target matcher is memoized per id. Plans are
+  matchers are module constants; the target element's match is kept on the
+  plan, per target id (`findTarget`). Plans are
   memoized per shell string in a small bounded map, so `injectShell` /
   `injectStaticShell` keep their signatures.
 - A page is one ordered splice: rebuilt head region, target with content, static
@@ -47,7 +48,7 @@ inside the shell's head region** (`client-runtime/ssg/index.js`).
   first `</title>`; neither anchor → no region, pending inserts warn and are
   skipped.
 - Unchanged: escaping, insert order, in-place replacement, duplicate collapse,
-  removal of non-resolving fields, the title-only path, and `prerender: false`
+  removal of non-resolving fields, and `prerender: false`
   (hybrid writes the shell verbatim; static does no head work).
 
 ## Alternatives

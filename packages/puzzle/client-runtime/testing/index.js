@@ -64,7 +64,7 @@ export { installFixtures } from '../fixtures/index.js';
  * @property {Store} [store]
  * @property {Router | InertRouter} [router]
  * @property {Record<string, any>} [models]
- * @property {Record<string, Formatter>} [formatters]
+ * @property {Record<string, Formatter>} [functions] the app's own template functions
  * @property {AdapterCapability} [adapter] the adapter capability (validated by installAdapterCapability)
  * @property {TestI18nOptions} [i18n]
  */
@@ -223,6 +223,11 @@ export async function createTestApp(config = {}) {
  * @returns {TestContext}
  */
 function makeContext(options) {
+	// the option was `formatters` before 0.10 (D199); a test that still passes
+	// it would mount with none of its functions, so it fails here instead.
+	if (/** @type {any} */ (options).formatters !== undefined) {
+		throw new Error('[puzzle] the formatters option is functions since 0.10 — rename it (puzzle check --fix does it)');
+	}
 	const supplied = options.ctx ?? {};
 	const store =
 		options.store ??
@@ -232,7 +237,7 @@ function makeContext(options) {
 		options.router ?? supplied.router ?? makeInertRouter(options.route ?? null);
 	const formatters =
 		supplied.formatters ??
-		makeFormatterRegistry(options.formatters ?? {}, (path) => router.url(path));
+		makeFormatterRegistry(options.functions ?? {}, (path) => router.url(path));
 	// ctx.idle (D189): with no app to observe, it drives work to a fixed point.
 	const idle = supplied.idle ?? (() => settled().then(() => true));
 	/** @type {TestContext} */
@@ -312,16 +317,34 @@ function holdLocaleSlots() {
 	};
 }
 
-/** @param {RouteSnapshot | null} current */
+/**
+ * The public Router with no route table: a push or replace of the current path
+ * is the same-path no-op and any other target matches nothing (D182), so
+ * prefetch() has nothing to load (D195).
+ * @param {RouteSnapshot | null} current
+ * @returns {import('../../types/index.js').Router}
+ */
 function makeInertRouter(current) {
+	/** @type {import('../../types/index.js').Router['push']} */
+	const navigate = async (target) =>
+		target === current?.path ? { ok: true, route: current } : { ok: false, reason: 'not-found' };
 	return {
 		current,
-		push: async () => {},
-		replace: async () => {},
+		views: Object.freeze([]),
+		push: navigate,
+		replace: navigate,
+		prefetch: async () => false,
 		go: async () => {},
 		back: async () => {},
 		forward: async () => {},
-		url: /** @param {string} path */ (path) => path,
+		// a path passes through; a named target (D196) needs a route table this
+		// inert router does not have, so it says so instead of rendering a dead href.
+		url: (target) => {
+			if (typeof target === 'string') return target;
+			throw new Error(
+				'[puzzle] mountView has no route table to resolve a named link — test it with createTestApp and your routes, or pass a router'
+			);
+		},
 		setMorphHandler: () => {},
 	};
 }

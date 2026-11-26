@@ -58,7 +58,7 @@ Badge.__pzlModule = 'components/Badge.pzl';
 
 class Home extends PuzzleView {
 	created() {
-		this.setData('draft', 'local-value');
+		this.setState('draft', 'local-value');
 	}
 
 	data() {
@@ -77,7 +77,7 @@ class Home extends PuzzleView {
 Home.__pzlModule = 'views/Home.pzl';
 
 class Detail extends PuzzleView {
-	data(params) {
+	data({ params }) {
 		return { id: params.id };
 	}
 
@@ -88,7 +88,7 @@ class Detail extends PuzzleView {
 Detail.__pzlModule = 'views/Detail.pzl';
 
 class Item extends PuzzleView {
-	data(params) {
+	data({ params }) {
 		// findOne subscribes to a PER-RECORD key, so a run prepared against another
 		// id adds a key this view is not already subscribed to — the only shape in
 		// which D146 holds anything.
@@ -119,11 +119,29 @@ class Runaway extends PuzzleView {
 }
 Runaway.__pzlModule = 'views/Runaway.pzl';
 
+/** A sharing page and the component whose data() reads what it shares (D197). */
+class TabPanel extends PuzzleView {
+	data({ shared }) {
+		return { active: shared.tabs.active };
+	}
+}
+
+class Tabs extends PuzzleView {
+	share() {
+		return { active: 'first', select: () => {} };
+	}
+
+	render() {
+		return h('puzzle-view', {}, [h(TabPanel, {})]);
+	}
+}
+
 const routes = [
 	{ path: '/', name: 'home', view: Home },
 	{ path: '/detail/:id', name: 'detail', view: Detail },
 	{ path: '/runaway', name: 'runaway', view: Runaway },
 	{ path: '/item/:id', name: 'item', view: Item },
+	{ path: '/tabs', name: 'tabs', view: Tabs },
 ];
 
 const handles = [];
@@ -260,7 +278,7 @@ describe('devtools bridge — requests', () => {
 		});
 	});
 
-	it('inspect:view separates the model layer from the local layer', async () => {
+	it('inspect:view separates the derived layer from the state layer', async () => {
 		const hook = installHook();
 		await bootApp();
 		const homeId = hook.of('view-mounted').find((e) => e.payload.name === 'Home').payload.id;
@@ -273,11 +291,23 @@ describe('devtools bridge — requests', () => {
 			props: {},
 			// data()'s committed result …
 			model: { count: 0, tag: 'model-value' },
-			// … and the setData layer, never merged into one another.
+			// … and the setState layer, never merged into one another.
 			local: { draft: 'local-value' },
 		});
 		expect(inspected.model.draft).toBeUndefined();
 		expect(inspected.local.tag).toBeUndefined();
+	});
+
+	it('inspect:view shows the shared values data() received', async () => {
+		const hook = installHook();
+		const app = await bootApp();
+		await app.visit('/tabs');
+		const panelId = hook.of('view-mounted').find((e) => e.payload.name === 'TabPanel').payload.id;
+
+		const inspected = hook.request('inspect:view', { id: panelId });
+		// The callback is not JSON-safe, so only the value crosses the wire.
+		expect(inspected.shared).toEqual({ tabs: { active: 'first' } });
+		expect(inspected.model).toEqual({ active: 'first' });
 	});
 
 	it('inspect:view reports a missing id as an error payload', async () => {
@@ -597,7 +627,7 @@ describe('devtools bridge — profiler (D121)', () => {
 		// 61 renders inside devperf's one-second window, none of them mutating
 		// anything — the runaway detector's exact trigger.
 		for (let i = 0; i < 61; i++) {
-			runaway.setData('tick', i);
+			runaway.setState('tick', i);
 			runaway.flushUpdates();
 		}
 
@@ -634,7 +664,7 @@ describe('devtools bridge — profiler (D121)', () => {
 		await app.visit('/runaway');
 		hook.request('perf:start');
 		for (let i = 0; i < 61; i++) {
-			runaway.setData('tick', i);
+			runaway.setState('tick', i);
 			runaway.flushUpdates();
 		}
 		hook.request('perf:stop');
@@ -647,7 +677,7 @@ describe('devtools bridge — profiler (D121)', () => {
 		await app.visit('/');
 		await app.visit('/runaway');
 		for (let i = 0; i < 61; i++) {
-			runaway.setData('tick', i);
+			runaway.setState('tick', i);
 			runaway.flushUpdates();
 		}
 

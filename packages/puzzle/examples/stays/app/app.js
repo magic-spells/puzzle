@@ -4,14 +4,14 @@ import routes from './routes.js';
 import models from './models/index.js';
 import { loadState, saveState } from './storage.js';
 
-// Short month names for the date formatters below.
+// Short month names for the date functions below.
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const MONTHS_LONG = ['January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December'];
 
 // Parse an ISO yyyy-mm-dd as a LOCAL date (append T00:00:00 so it isn't shifted
 // into the previous day by the UTC parse). Returns null for junk input so the
-// formatters can degrade gracefully instead of throwing in a template.
+// functions can degrade gracefully instead of throwing in a template.
 function isoDate(iso) {
   if (!iso) return null;
   const d = new Date(`${iso}T00:00:00`);
@@ -19,7 +19,7 @@ function isoDate(iso) {
 }
 
 // The v1 config surface is intentionally small: target, routes, models,
-// formatters, apiURL — see constellation/doc/DOC-SPEC.md §2.
+// functions, apiURL — see constellation/doc/DOC-SPEC.md §2.
 const app = new PuzzleApp({
   target: '#app',
   routes,
@@ -31,10 +31,10 @@ const app = new PuzzleApp({
   // Point apiURL at a CDN/host later and the same endpoints follow it.
   apiURL: '',
 
-  // Display-only formatters (logic belongs in data(), per SPEC §8). These only
+  // Display-only functions (logic belongs in data(), per SPEC §8). These only
   // shape values for presentation — ratings, word forms, and dates. Money uses
-  // the built-in currency formatter: `{ currency(price, '$', 0) }` -> "$1,149".
-  formatters: {
+  // the built-in currency function: `{ currency(price, '$', 0) }` -> "$1,149".
+  functions: {
     // Two-decimal rating: 4.9 -> "4.90", 4.875 -> "4.88".
     rating: (n) => (Math.round((Number(n) || 0) * 100) / 100).toFixed(2),
 

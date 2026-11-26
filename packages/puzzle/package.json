@@ -1,6 +1,6 @@
 {
 	"name": "@magic-spells/puzzle",
-	"version": "0.9.0",
+	"version": "0.10.0",
 	"description": "SPA-first JavaScript framework — single-file .pzl components, reactive data() components, Go + esbuild compiler",
 	"type": "module",
 	"main": "./client-runtime/index.js",
@@ -17,6 +17,10 @@
 		"./adapter": {
 			"types": "./types/adapter.d.ts",
 			"default": "./client-runtime/datastore/adapter.js"
+		},
+		"./forms": {
+			"types": "./types/forms.d.ts",
+			"default": "./client-runtime/forms.js"
 		},
 		"./morph": {
 			"types": "./types/morph.d.ts",
@@ -41,6 +45,10 @@
 		"./fixtures": {
 			"types": "./types/fixtures.d.ts",
 			"default": "./client-runtime/fixtures/index.js"
+		},
+		"./vitest": {
+			"types": "./types/vitest.d.ts",
+			"default": "./client-runtime/vitest/index.js"
 		},
 		"./puzzle-env": {
 			"types": "./puzzle-env.d.ts"
@@ -70,6 +78,8 @@
 	"scripts": {
 		"build:example-modules": "go run ./compiler/cmd/pzlc --mode component examples/todos/app/components/TodoItem.pzl tests/fixtures/todos-compiled/TodoItem.compiled.js && go run ./compiler/cmd/pzlc --mode view examples/todos/app/views/Home.pzl tests/fixtures/todos-compiled/Home.compiled.js && go run ./compiler/cmd/pzlc --mode layout examples/todos/app/layouts/Default.pzl tests/fixtures/todos-compiled/Default.compiled.js",
 		"build:blog": "go run ./compiler/cmd/puzzle build examples/blog --mode development && node -e \"const fs=require('fs');['examples/blog/dist/app.js','examples/blog/dist/index.html','examples/blog/dist/styles.css','examples/blog/dist/api/posts.json'].map(f=>fs.accessSync(f))\"",
+		"build:paginated-posts": "go run ./compiler/cmd/puzzle build examples/paginated-posts --fixtures --mode development && go run ./compiler/cmd/pzlc --mode view examples/paginated-posts/app/views/PostList.pzl tests/fixtures/paginated-posts/PostList.compiled.js && go run ./compiler/cmd/pzlc --mode view examples/paginated-posts/app/views/PostDetail.pzl tests/fixtures/paginated-posts/PostDetail.compiled.js && go run ./compiler/cmd/pzlc --mode view examples/paginated-posts/app/views/Comments.pzl tests/fixtures/paginated-posts/Comments.compiled.js && go run ./compiler/cmd/pzlc --mode view examples/paginated-posts/app/views/NotFound.pzl tests/fixtures/paginated-posts/NotFound.compiled.js && go run ./compiler/cmd/pzlc --mode layout examples/paginated-posts/app/layouts/Default.pzl tests/fixtures/paginated-posts/Default.compiled.js",
+		"build:auth-example": "go run ./compiler/cmd/puzzle build examples/auth --fixtures --mode development && go run ./compiler/cmd/pzlc --mode view examples/auth/app/views/Home.pzl tests/fixtures/auth-example/Home.compiled.js && go run ./compiler/cmd/pzlc --mode view examples/auth/app/views/Login.pzl tests/fixtures/auth-example/Login.compiled.js && go run ./compiler/cmd/pzlc --mode view examples/auth/app/views/Dashboard.pzl tests/fixtures/auth-example/Dashboard.compiled.js && go run ./compiler/cmd/pzlc --mode view examples/auth/app/views/Account.pzl tests/fixtures/auth-example/Account.compiled.js && go run ./compiler/cmd/pzlc --mode view examples/auth/app/views/NotFound.pzl tests/fixtures/auth-example/NotFound.compiled.js && go run ./compiler/cmd/pzlc --mode view examples/auth/app/views/ErrorView.pzl tests/fixtures/auth-example/ErrorView.compiled.js && go run ./compiler/cmd/pzlc --mode layout examples/auth/app/layouts/Default.pzl tests/fixtures/auth-example/Default.compiled.js",
 		"build:virtual-scroll": "go run ./compiler/cmd/pzlc --mode view examples/virtual-scroll/app/views/Home.pzl tests/fixtures/virtual-scroll/Home.compiled.js",
 		"build:slot-forwarding": "go run ./compiler/cmd/pzlc --mode component tests/fixtures/slot-forwarding/Card.pzl tests/fixtures/slot-forwarding/Card.compiled.js && go run ./compiler/cmd/pzlc --mode layout tests/fixtures/slot-forwarding/WrappedLayout.pzl tests/fixtures/slot-forwarding/WrappedLayout.compiled.js",
 		"build:snippets": "go run ./compiler/cmd/pzlc --mode component tests/fixtures/snippets/SnippetList.pzl tests/fixtures/snippets/SnippetList.compiled.js && go run ./compiler/cmd/pzlc --mode component tests/fixtures/snippets/Wrapper.pzl tests/fixtures/snippets/Wrapper.compiled.js && go run ./compiler/cmd/pzlc --mode component tests/fixtures/snippets/WrapperChain.pzl tests/fixtures/snippets/WrapperChain.compiled.js && go run ./compiler/cmd/pzlc --mode view tests/fixtures/snippets/SnippetsHost.pzl tests/fixtures/snippets/SnippetsHost.compiled.js && go run ./compiler/cmd/pzlc --mode view tests/fixtures/snippets/SnippetChainHost.pzl tests/fixtures/snippets/SnippetChainHost.compiled.js",
@@ -79,6 +89,7 @@
 		"build:url-safety": "go run ./compiler/cmd/pzlc --mode component tests/fixtures/url-safety/Links.pzl tests/fixtures/url-safety/Links.compiled.js",
 		"build:component-slot": "go run ./compiler/cmd/pzlc --mode component tests/fixtures/component-slot/Card.pzl tests/fixtures/component-slot/Card.compiled.js && go run ./compiler/cmd/pzlc --mode component tests/fixtures/component-slot/Panel.pzl tests/fixtures/component-slot/Panel.compiled.js && go run ./compiler/cmd/pzlc --mode view tests/fixtures/component-slot/Host.pzl tests/fixtures/component-slot/Host.compiled.js && go run ./compiler/cmd/pzlc --mode view tests/fixtures/component-slot/Conditional.pzl tests/fixtures/component-slot/Conditional.compiled.js",
 		"build:handler-this": "go run ./compiler/cmd/pzlc --mode view tests/fixtures/handler-this/HandlerForms.pzl tests/fixtures/handler-this/HandlerForms.compiled.js && go run ./compiler/cmd/pzlc --mode view tests/fixtures/handler-this/HandlerFormsTs.pzl tests/fixtures/handler-this/HandlerFormsTs.compiled.js",
+		"build:forms": "go run ./compiler/cmd/pzlc --mode component ../puzzle-pieces/registry/ui/field/Field.pzl tests/fixtures/forms/Field.compiled.js && go run ./compiler/cmd/pzlc --mode view tests/fixtures/forms/PostForm.pzl tests/fixtures/forms/PostForm.compiled.js",
 		"build:binding": "go run ./compiler/cmd/pzlc --mode view tests/fixtures/binding/LocalForm.pzl tests/fixtures/binding/LocalForm.compiled.js && go run ./compiler/cmd/pzlc --mode view tests/fixtures/binding/RecordForm.pzl tests/fixtures/binding/RecordForm.compiled.js && go run ./compiler/cmd/pzlc --mode view tests/fixtures/binding/PlainForm.pzl tests/fixtures/binding/PlainForm.compiled.js && go run ./compiler/cmd/pzlc --mode view tests/fixtures/binding/TodoTitles.pzl tests/fixtures/binding/TodoTitles.compiled.js && go run ./compiler/cmd/pzlc --mode view tests/fixtures/binding/ClobberForm.pzl tests/fixtures/binding/ClobberForm.compiled.js && go run ./compiler/cmd/pzlc --mode view tests/fixtures/binding/PrimitiveForm.pzl tests/fixtures/binding/PrimitiveForm.compiled.js",
 		"build:grimoire": "go run ./compiler/cmd/puzzle build examples/grimoire --mode development && node -e \"const fs=require('fs');['examples/grimoire/dist/app.js','examples/grimoire/dist/index.html','examples/grimoire/dist/styles.css'].map(f=>fs.accessSync(f))\"",
 		"build:static-docs": "go run ./compiler/cmd/puzzle build examples/static-docs",
@@ -87,7 +98,7 @@
 		"build:typed-todos": "go run ./compiler/cmd/puzzle build examples/typed-todos --mode development && node -e \"const fs=require('fs');const s=fs.readFileSync('examples/typed-todos/dist/app.js','utf8');['examples/typed-todos/dist/app.js','examples/typed-todos/dist/index.html','examples/typed-todos/dist/styles.css'].map(f=>fs.accessSync(f));if(/\\binterface\\b|: TodoRecord|import type/.test(s)){throw new Error('typed-todos bundle still contains TypeScript syntax')}\"",
 		"build": "node scripts/release-prep.mjs",
 		"build:compiler": "go build -o puzzle ./compiler/cmd/puzzle",
-		"pretest": "npm run build:example-modules && npm run build:blog && npm run build:grimoire && npm run build:i18n && npm run build:locale-prefix && npm run build:static-docs && npm run build:typed-todos && npm run build:virtual-scroll && npm run build:slot-forwarding && npm run build:snippets && npm run build:binding && npm run build:core-semantics && npm run build:raw-html && npm run build:lazy-fallback && npm run build:handler-this && npm run build:component-slot && npm run build:url-safety",
+		"pretest": "npm run build:example-modules && npm run build:blog && npm run build:paginated-posts && npm run build:auth-example && npm run build:grimoire && npm run build:i18n && npm run build:locale-prefix && npm run build:static-docs && npm run build:typed-todos && npm run build:virtual-scroll && npm run build:slot-forwarding && npm run build:snippets && npm run build:binding && npm run build:forms && npm run build:core-semantics && npm run build:raw-html && npm run build:lazy-fallback && npm run build:handler-this && npm run build:component-slot && npm run build:url-safety",
 		"test": "vitest run",
 		"test:watch": "vitest",
 		"test:browser": "playwright test",
@@ -101,6 +112,7 @@
 		"verify:pack": "node scripts/verify-pack.mjs",
 		"measure:size": "node scripts/measure-size.mjs",
 		"verify:published": "node scripts/verify-published.mjs",
+		"starter-repos": "node scripts/starter-repos.mjs",
 		"prepublishOnly": "node scripts/refuse-directory-publish.mjs",
 		"prepack": "node scripts/inject-platform-pins.mjs inject",
 		"postpack": "node scripts/inject-platform-pins.mjs restore",
@@ -113,10 +125,14 @@
 	},
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/magic-spells/puzzle.git"
+		"url": "git+https://github.com/magic-spells/puzzle.git",
+		"directory": "packages/puzzle"
 	},
 	"bugs": {
 		"url": "https://github.com/magic-spells/puzzle/issues"
+	},
+	"engines": {
+		"node": ">=24"
 	},
 	"peerDependencies": {
 		"@magic-spells/morph-engine": ">=0.1.0"

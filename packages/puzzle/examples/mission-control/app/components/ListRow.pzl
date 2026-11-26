@@ -22,7 +22,7 @@ import { tone } from '../data/catalog.js';
 // the staggered cascade below work. `select` is a callback prop (D16): the parent
 // passes @select={ selectItem(item) } and this row invokes this.props.select.
 export default class ListRow extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     return {
       item: props.item,
       active: props.active || false,

@@ -47,9 +47,8 @@
       <section id="icon-only" class="mt-12 scroll-mt-20">
         <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Icon-only groups</h2>
         <p class="mb-3 text-sm text-body">
-          Per-item SVG props aren't possible in Puzzle: a component only inlines SVG through the
-          compile-time svg block, which needs a literal file path, not per-item data. So an item's
-          icon field is never rendered — the label is what shows.
+          ToggleGroup has no icon support: an item's icon field is never rendered — the label is
+          what shows.
         </p>
         <p class="mb-3 text-sm text-body">
           For an icon-only look today, pass a short or emoji label. It stays a real accessible name,
@@ -85,19 +84,21 @@ const codeHero = `const aligns = [
 <ToggleGroup items={ aligns } value={ align } @change={ setAlign } label="Text alignment"/>
 
 // parent
-events = { setAlign: (v) => this.setData('align', v) };`;
+events = { setAlign: (v) => this.setState('align', v) };
+// expose it to the template: data() { return { aligns }; }`;
 
-const codeMultiple = `const marks = [
+const codeMultiple = `const markItems = [
   { value: 'bold', label: 'B' },
   { value: 'italic', label: 'I' },
   { value: 'underline', label: 'U' },
 ];
 
 // multiple-select — value is an array of selected values
-<ToggleGroup type="multiple" items={ marks } value={ marks$ } @change={ setMarks } label="Text formatting"/>
+<ToggleGroup type="multiple" items={ markItems } value={ marks } @change={ setMarks } label="Text formatting"/>
 
 // parent
-events = { setMarks: (v) => this.setData('marks', v) };`;
+events = { setMarks: (v) => this.setState('marks', v) };
+// expose it to the template: data() { return { markItems }; }`;
 
 const codeIcon = `// icon field is ignored — use a short/emoji label as the accessible name
 const aligns = [
@@ -106,14 +107,15 @@ const aligns = [
   { value: 'right', label: '⇥' },
 ];
 
-<ToggleGroup items={ aligns } value={ align } @change={ setAlign } label="Text alignment"/>`;
+<ToggleGroup items={ aligns } value={ align } @change={ setAlign } label="Text alignment"/>
+// expose it to the template: data() { return { aligns }; }`;
 
 export default class ToggleGroupDoc extends PuzzleView {
   created() {
-    this.setData({ align: 'left', marks: ['bold'] });
+    this.setState({ align: 'left', marks: ['bold'] });
   }
 
-  data(params, props) {
+  data() {
     const { marks } = this.getData();
     return {
       ...this.getData(),
@@ -144,8 +146,8 @@ export default class ToggleGroupDoc extends PuzzleView {
   }
 
   events = {
-    setAlign: (v) => this.setData('align', v),
-    setMarks: (v) => this.setData('marks', v),
+    setAlign: (v) => this.setState('align', v),
+    setMarks: (v) => this.setState('marks', v),
   };
 }
 </script>

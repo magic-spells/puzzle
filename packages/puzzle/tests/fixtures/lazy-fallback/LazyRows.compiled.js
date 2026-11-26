@@ -1,4 +1,24 @@
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+        
 import { PuzzleView } from '@magic-spells/puzzle';
 
 // The VirtualList piece's row shape (puzzle-pieces registry/ui/virtual-list):
@@ -10,7 +30,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 // them on every render. `names` loops over primitives instead — a clean row is
 // handed back cached — and `probeName` counts that marker's fallback builds.
 export default class LazyRows extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     const items = Array.isArray(props.items) ? props.items : [];
     return {
       rows: items.map((item, index) => ({ item, index, key: item?.id ?? index })),
@@ -56,4 +76,3 @@ LazyRows.prototype.render = function () {
     ),
   ]);
 };
-LazyRows.__pzlModule = 'LazyRows.pzl';

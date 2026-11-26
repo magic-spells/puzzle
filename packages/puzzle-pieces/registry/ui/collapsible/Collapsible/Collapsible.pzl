@@ -78,9 +78,6 @@ import { PuzzleView } from '@magic-spells/puzzle';
 // not optional cosmetics: the sheet uses plain element selectors, so an unlayered
 // import would outrank every Tailwind utility on these elements.
 //
-// TODO: switch to ^1.2.0 once published — this repo's demo pins the package by
-// file: path while 1.2.0 is unreleased. Consumers install ^1.2.0.
-//
 // Props
 //   open     optional-controlled, edge-triggered as above
 //   class    merged onto <collapsible-group>
@@ -134,7 +131,7 @@ export default class Collapsible extends PuzzleView {
     }
   }
 
-  data(params, props) {
+  data({ props }) {
     return {
       rootClass: props.class || false,
     };

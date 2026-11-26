@@ -97,9 +97,8 @@ function tagAttrs(name) {
 	return has(PLAIN_TAGS, name) ? ' ' : null;
 }
 
-// Elements that never have content (no end tag). Only br/col/hr/img/wbr are
-// kept; the rest are listed so an unwrapped void tag opens nothing.
-const VOID = ' area base br col embed hr img input link meta param source track wbr keygen frame ';
+// The kept elements that never have content (no end tag).
+const VOID = ' br col hr img wbr ';
 // RAWTEXT/RCDATA in the browser: their content is text up to `</name`, so it is
 // scanned the same way and dropped with the element.
 const DROP_RAW = ' script style xmp iframe noembed noframes noscript textarea title ';

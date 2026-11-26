@@ -26,7 +26,7 @@ afterEach(() => {
 });
 
 class Regions extends PuzzleView {
-	data(params, props) {
+	data({ props }) {
 		return { users: props.users, group: props.group };
 	}
 	render() {
@@ -71,7 +71,7 @@ describe('snippets — runtime join (D166)', () => {
 	it('stamps fresh vnodes for every keyed row and patches one changed stamp independently', async () => {
 		class StampList extends PuzzleView {
 			created() {
-				this.setData({
+				this.setState({
 					rows: [
 						{ id: 1, name: 'A' },
 						{ id: 2, name: 'B' },
@@ -96,7 +96,7 @@ describe('snippets — runtime join (D166)', () => {
 		const spans = [...el.querySelectorAll('span')];
 
 		view.getData().rows[1].name = 'B2';
-		view.setData('version', 1);
+		view.setState('version', 1);
 		view.flushUpdates();
 
 		const after = [...el.querySelectorAll('li')];
@@ -110,7 +110,7 @@ describe('snippets — runtime join (D166)', () => {
 		let nextInstance = 0;
 		class StatefulStamp extends PuzzleView {
 			created() { this.instanceId = ++nextInstance; }
-			data(params, props) { return { label: props.label }; }
+			data({ props }) { return { label: props.label }; }
 			render() {
 				return h('button', { class: 'stateful-stamp' }, [
 					text(`${this.getData().label}:${this.instanceId}`),
@@ -119,7 +119,7 @@ describe('snippets — runtime join (D166)', () => {
 		}
 		class VariableStampList extends PuzzleView {
 			created() {
-				this.setData({
+				this.setState({
 					rows: [
 						{ id: 1, label: 'A', extra: false },
 						{ id: 2, label: 'B', extra: false },
@@ -147,7 +147,7 @@ describe('snippets — runtime join (D166)', () => {
 		const before = [...el.querySelectorAll('.stateful-stamp')];
 		const labels = before.map((node) => node.textContent);
 
-		view.setData('rows', view.getData().rows.map((row) =>
+		view.setState('rows', view.getData().rows.map((row) =>
 			row.id === 1 ? { ...row, extra: true } : row
 		));
 		view.flushUpdates();
@@ -178,13 +178,13 @@ describe('snippets — runtime join (D166)', () => {
 		}
 		class Host extends PuzzleView {
 			created() {
-				this.setData({ count: 0 });
+				this.setState({ count: 0 });
 			}
 			render() {
 				const count = this.getData().count;
 				return h('main', {}, [
 					comp(Repeater, {}, [snippet('', ['item'], ({ item }) => [
-						h('button', { '@click': () => this.setData('count', count + 1) }, [
+						h('button', { '@click': () => this.setState('count', count + 1) }, [
 							text(`${item}:${count}`),
 						]),
 					])]),
@@ -205,7 +205,7 @@ describe('snippets — runtime join (D166)', () => {
 	it('component state changes re-stamp snippets with fresh args', async () => {
 		class StatefulList extends PuzzleView {
 			created() {
-				this.setData({ rows: [{ id: 1, name: 'first' }] });
+				this.setState({ rows: [{ id: 1, name: 'first' }] });
 			}
 			render() {
 				return h('ul', {}, this.getData().rows.map((row) =>
@@ -220,7 +220,7 @@ describe('snippets — runtime join (D166)', () => {
 			children: [snippet('row', ['row'], ({ row }) => [text(row.name)])],
 		});
 		expect(el.textContent).toBe('first');
-		view.setData('rows', [{ id: 1, name: 'second' }]);
+		view.setState('rows', [{ id: 1, name: 'second' }]);
 		view.flushUpdates();
 		expect(el.textContent).toBe('second');
 	});
@@ -476,7 +476,7 @@ describe('snippets — forwarding through wrappers (D166 amendment)', () => {
 			}
 		}
 		class KeyedWrapper extends PuzzleView {
-			created() { this.setData({ tick: 0 }); }
+			created() { this.setState({ tick: 0 }); }
 			render() {
 				return h('section', { 'data-tick': this.getData().tick }, [
 					comp(KeyedLeaf, { key: 'leaf' }, [marker('', null)]),
@@ -496,7 +496,7 @@ describe('snippets — forwarding through wrappers (D166 amendment)', () => {
 		const rows = [...el.querySelectorAll('li')];
 		const stamps = [...el.querySelectorAll('strong')];
 
-		view.setData('tick', 1);
+		view.setState('tick', 1);
 		view.flushUpdates();
 
 		expect([...el.querySelectorAll('li')]).toEqual(rows);
@@ -509,7 +509,7 @@ describe('snippets — development diagnostics', () => {
 	it('warns once per component/slot when handed and declared shapes differ', async () => {
 		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
 		class ShapeMismatch extends PuzzleView {
-			created() { this.setData({ tick: 0 }); }
+			created() { this.setState({ tick: 0 }); }
 			render() { return h('div', {}, [marker('row', { user: {} })]); }
 		}
 		const view = new ShapeMismatch();
@@ -517,7 +517,7 @@ describe('snippets — development diagnostics', () => {
 		await view.mount(container(), {
 			children: [snippet('row', ['person'], () => [text('ok')])],
 		});
-		view.setData('tick', 1);
+		view.setState('tick', 1);
 		view.flushUpdates();
 		const messages = warn.mock.calls.map(([message]) => message).filter((message) =>
 			message.includes('the shapes don\'t match')
@@ -599,7 +599,7 @@ describe('snippets — development diagnostics', () => {
 describe('snippets — SSG', () => {
 	it('serializes stamped snippets through the shared expansion pipe', async () => {
 		class ServerList extends PuzzleView {
-			data(params, props) { return { rows: props.rows }; }
+			data({ props }) { return { rows: props.rows }; }
 			render() {
 				return h('ul', {}, this.getData().rows.map((row) =>
 					h('li', { key: row.id }, [marker('row', { row })])

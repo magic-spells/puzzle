@@ -5,12 +5,13 @@ A SPA-first JavaScript framework with single-file components, reactive data bind
 **[▶ Live demo](https://puzzle-music-demo.vercel.app/)** — the [music example app](examples/music) built with Puzzle.
 
 - **~200 ms production builds** — compile, bundle, Tailwind, and minify, end to end (todos example, Apple Silicon)
-- **Small apps, honestly measured** — a minimal app is 23.0 KB gzip with the router, store, and validation included, not just a view layer; the complete todos example ships at 27.0 KB gzip. Regenerated every release by `npm run measure:size`
+- **Small apps, honestly measured** — a minimal app is 23.9 KB gzip with the router, store, and validation included, not just a view layer; the complete todos example ships at 27.8 KB gzip. Regenerated every release by `npm run measure:size`
 - **Zero JavaScript toolchain** — the CLI is one prebuilt Go binary; no Babel, no bundler config, no postinstall scripts
 
 ## Quick start
 
-Install the `puzzle` CLI once (a prebuilt Go binary — no toolchain needed):
+With Node 24 or later, install the `puzzle` CLI once (a prebuilt Go binary — no
+toolchain needed):
 
 ```bash
 npm install -g @magic-spells/puzzle
@@ -23,9 +24,17 @@ puzzle init my-app
 cd my-app
 npm install
 
-puzzle dev     # develop with live reload
-puzzle build   # build for production
+npm run dev     # develop with live reload
+npm test        # run the starter test in tests/
+npm run build   # build for production
 ```
+
+Inside a project, run Puzzle through its npm scripts or `npx puzzle <command>`.
+Both use the CLI installed with the project, which always matches the
+project's Puzzle; a global `puzzle` 0.10 or later from another 0.x minor stops
+and says so, but an older one builds against the wrong runtime without a word,
+so upgrade it (`puzzle upgrade`) or use the project's CLI.
+`npx @magic-spells/puzzle init my-app` scaffolds without the global install.
 
 Or add Puzzle to an existing project — one dev dependency gives you both the
 client runtime and the CLI:
@@ -34,7 +43,7 @@ client runtime and the CLI:
 npm install -D @magic-spells/puzzle
 ```
 
-> **Status: 0.9.0** — the current release. The browser runtime, Go
+> **Status: 0.10.0** — the current release. The browser runtime, Go
 > compiler, static generator, and CLI are implemented and covered by Go,
 > Vitest/jsdom, type, package, example, and browser-focused checks.
 >
@@ -43,7 +52,7 @@ npm install -D @magic-spells/puzzle
 > [CHANGELOG.md](CHANGELOG.md#upgrading-across-versions) before upgrading.
 >
 > **[constellation/doc/DOC-SPEC.md](constellation/doc/DOC-SPEC.md) is the canonical, frozen v1
-> contract** — it indexes the numbered sections (§1–§67) across six domain
+> contract** — it indexes the numbered sections (§1–§69) across six domain
 > cards, and they are the source of truth for exactly what ships; if anything
 > here conflicts with it, the spec wins.
 
@@ -53,24 +62,27 @@ npm install -D @magic-spells/puzzle
 - **Snippets** — `<Snippet fits="row" user>…</Snippet>` hands a component a template it can stamp repeatedly with its own data; parameters are declared as bare attributes, and a snippet forwards through a wrapper's `<Children/>`
 - **Component families** — related components import as one unit and invoke with dot notation (`<Frame.Wrapper>`), scaffolded by `puzzle generate component Frame --family Wrapper,Content`
 - **Reactive data** with automatic view updates
+- **Values for nested views without prop drilling** — a view's `share()` hands values and callbacks to every view its template mounts, at any depth; a nested view reads them in `data({ shared })` under the sharer's class name in camelCase (`Tabs` → `shared.tabs`)
 - **Two-way form binding with no directive** — `value={ draft }` and `checked={ todo.completed }` read *and* write; the compiler synthesizes the handler, so there is no `bind:` prefix and no mirror handler to maintain
+- **Forms without the bookkeeping** — `createForm(this, Post, { from: post })` from the opt-in `@magic-spells/puzzle/forms` subpath gives a bindable draft (`value={ form.values.title }`), errors from the model's rules shown once a field is touched, `dirty`/`changed`, a double-submit guard, server field errors mapped back onto fields, and `reset()`
 - **Model/store architecture** with adapters, relationships, schema validation, persistence, and read/write server sync — opt-in via the `@magic-spells/puzzle/adapter` subpath (local-only apps ship none of it)
 - **Server data with no loading code** — `findOne`/`findMany` inside a view's `data()` fetch whatever the store is missing and settle before the view commits, so a committed `null` always means "does not exist", never "still loading"
+- **Paginated server queries** — `findMany('post', { query: { page } })` caches each page (or cursor) on its own, `store.invalidate('post')` makes the views reading it refetch, and `store.syncStatus(record)` shows a save while it runs
 - **Template expressions that are JavaScript** — `{ truncate(title.toLowerCase(), 40) }`, `{#for t in todos.filter(t => !t.done)}`: one closed grammar and method table, parsed once and shared with Magic Spells Sites, with display functions called like any function
 - **Translations** — `{ t('cart.title') }` with one `app/locales/<tag>.json` per language: nested files, CLDR plurals through `Intl.PluralRules`, missing keys filled from the default at build time, and only the active locale's hashed file downloaded; `this.ctx.i18n.setLocale('es')` switches in place. Apps without `i18n` configured ship none of it
 - **Multilingual static sites** — `i18n.routing: 'prefix'` gives every non-default language its own URLs (`/es/about`) and its own prerendered pages, with `hreflang` alternates, a `sitemap.xml` once `site` is set, a first-visit language redirect, `<html dir>` for right-to-left locales and translated page titles
 - **Raw template blocks** — `{#raw}…{/raw}` turns off template-expression parsing so JSON, JavaScript, CSS, and syntax examples with literal braces compile as-is (HTML inside still renders normally)
-- **Nested routing** with view slots — path routing by default, hash/memory via `hashRouter()`/`memoryRouter()` from `@magic-spells/puzzle/router-modes`; scroll restoration; base paths; anchors; mode-agnostic path-shaped hrefs via the built-in `link` function
+- **Nested routing** with `<Outlet/>`, where a layout or view receives its child route — path routing by default, hash/memory via `hashRouter()`/`memoryRouter()` from `@magic-spells/puzzle/router-modes`; scroll restoration; base paths; anchors; mode-agnostic path-shaped hrefs via the built-in `link` function; named routes, so `link({ name: 'post', params: { slug } })` and `router.push({ name, params })` keep working when a path moves
 - **Prerendered `:param` routes** — `staticPaths` lists a route's pages at build time (`/blog/:slug` becomes one page per post, per language), as an array, a function, or a model name
 - **Runtime component selection** — `<Component is={ cards[embed.type] }>` picks one of the constructors the file imports; no registry, no runtime module lookup
 - **Hooks for tests and tools** — `router.push()` resolves a `NavigationResult` instead of rejecting, `router.views` lists every page (with an optional `agent` description per route), `store.observe()` watches records from outside a view, and `await app.idle()` waits for the app to go quiet
-- **On-demand route views** — `view: lazy(() => import('./views/Admin.pzl'))` in the route table downloads a view or layout the first time a navigation needs it, guards first
+- **On-demand route views** — `view: lazy(() => import('./views/Admin.pzl'))` in the route table downloads a view or layout on demand, guards first. A link to an unguarded lazy route starts the download when the pointer rests on it, a finger touches it or keyboard focus reaches it; `data-prefetch="off"` on a link or `prefetch: false` in the app config turns that off
 - **Virtual DOM** with efficient diffing, pk-aware list keying, and `{#for}` rows and static markup cached between renders
 - **Built-in view & component animations** (Web Animations API), including visibility-triggered enters and app lifecycle hooks
 - **Route transitions**: sequential by default; overlapping cross-fades and shared-element morphs *(experimental — see below)*
 - **App-level error handling** — one compiled `errorView` replaces a failed view in place with `{ error, info, retry }`; the `onError` hook funnels every framework-contained error
 - **Go-based compiler** for fast builds and state-preserving live reload (store and JSON-safe local view state survive edits)
-- **Type-checked templates** — `puzzle check` runs the app's own TypeScript over every `.pzl`, so a typo in `{ user.nmae }` is a type error reported at its real line and column
+- **`puzzle check`** — runs the app's own TypeScript over every `.pzl` and reports at the real line and column: `lang="ts"` scripts as written, and in templates the event handlers (an undeclared handler name, and in a `lang="ts"` component the wrong number of arguments or an argument of a known type that does not fit) and calls to the standard functions. Values a template reads from `data()` are untyped, so `{ user.nmae }` is not an error
 - **SPA-first output with two optional prerender modes** — `output: 'hybrid'` (prerendered pages the SPA takes over) and `output: 'static'` (true static pages, no router or `app.js`); no request-time SSR server or hydration layer
 - **[Puzzle Pieces](../puzzle-pieces) component library** — ready-made `.pzl` components installed with `puzzle add piece <name>` ([browse the catalog](https://magicspells.io/puzzle-pieces))
 
@@ -84,8 +96,9 @@ npm install -D @magic-spells/puzzle
 
 ## Installation
 
-Install Puzzle as a dev dependency. This one package gives you **both** the client
-runtime (`import { PuzzleView } from '@magic-spells/puzzle'`) and the `puzzle` CLI:
+Puzzle needs Node 24 or later. Install it as a dev dependency. This one package
+gives you **both** the client runtime
+(`import { PuzzleView } from '@magic-spells/puzzle'`) and the `puzzle` CLI:
 
 ```bash
 npm install -D @magic-spells/puzzle
@@ -132,8 +145,12 @@ npm run dev
 ```
 
 Every component is `<script lang="ts">` with typed `data()`, props, events and
-lifecycle hooks, the modules are `.ts` — the build entry `app/app.ts`,
-`routes.ts`, the todos template's models — and `package.json` adds
+lifecycle hooks. A component names its props interface on the base class —
+`class TodoItem extends PuzzleView<TodoItemProps>` — so `this.props` is typed
+with no cast and the `props` a `data()` override receives
+(`data({ props }: DataInput<TodoItemProps>)`) must fit it; plain
+`extends PuzzleView` leaves props `any`. The modules are `.ts` — the build
+entry `app/app.ts` and `routes.ts` — and `package.json` adds
 `typescript` plus a `check` script. The build starts from `app/app.ts` when it
 exists, otherwise `app/app.js`, and refuses an app that has both. It strips
 types without checking them; `npm run check` is the type check, under the
@@ -164,11 +181,13 @@ my-puzzle-app/
 │   ├── models/               # Optional models and adapters
 │   ├── views/                # Routed .pzl views
 │   ├── components/           # Reusable .pzl components
-│   ├── layouts/              # Route layouts with <Slot/>
+│   ├── layouts/              # Route layouts with <Outlet/>
 │   ├── assets/               # Source assets, including {#svg} files
 │   ├── styles/               # Tailwind entry + global CSS
 │   └── public/               # Static assets + index.html
+├── tests/                    # Vitest tests (npm test)
 ├── puzzle.config.js          # Compiler, styles, and output config
+├── vitest.config.js          # puzzle() compiles .pzl imports in tests; jsdom for the DOM
 └── package.json
 ```
 
@@ -289,7 +308,7 @@ See [constellation/doc/DOC-TEMPLATE-SYNTAX.md](constellation/doc/DOC-TEMPLATE-SY
   <select value={ selectedOption }></select>
 </form>
 
-<!-- A one-member path writes the record itself, through validated update() -->
+<!-- A record's field writes the record itself, through validated update() -->
 <input type="checkbox" checked={ todo.completed } />
 
 <!-- Event modifiers: prevent / stop / once / passive / capture + key filters, and they stack -->
@@ -298,7 +317,7 @@ See [constellation/doc/DOC-TEMPLATE-SYNTAX.md](constellation/doc/DOC-TEMPLATE-SY
 <div @wheel:passive={ onScroll }>…</div>
 ```
 
-**Two-way binding** (D147): `value=` and `checked=` on a plain `<input>`, `<textarea>`, or `<select>` bind in both directions when the expression is a bare identifier or a one-member path — the compiler synthesizes the write-back handler. A bare identifier writes local state; a path writes the record through validated `update()`. Opt out with your own `@input`/`@change`, a non-path expression (`value={ x ?? '' }`), or a static `readonly`. Handlers on other events (`@blur`, `@keydown:enter`) coexist with the bind.
+**Two-way binding** (D147): `value=` and `checked=` on a plain `<input>`, `<textarea>`, or `<select>` bind in both directions when the expression is a bare identifier or a path of plain `.name` steps (`todo.completed`, `form.values.title`) — the compiler synthesizes the write-back handler. A bare identifier writes local state. A path writes its last field on the object the rest of the path names: a store record through validated `update()`, a plain object in place. Opt out with your own `@input`/`@change`, a non-path expression (`value={ x ?? '' }`), or a static `readonly`. Handlers on other events (`@blur`, `@keydown:enter`) coexist with the bind.
 
 **Event modifiers** (`prevent`, `stop`, `once`, and key filters like `:enter`/`:escape`) stack; the canonical order is key-gate → once-spend → preventDefault → stopPropagation → handler. `passive` and `capture` set the native listener options (D187); `passive` with `prevent` is a compile error.
 
@@ -307,10 +326,10 @@ See [constellation/doc/DOC-TEMPLATE-SYNTAX.md](constellation/doc/DOC-TEMPLATE-SY
 ### Slots & Nested Routing
 
 ```html
-<!-- Layout slot: the routed view renders at <Slot/> -->
+<!-- Layout outlet: the routed view renders at <Outlet/> -->
 <div class="user-layout">
   <nav><!-- user navigation --></nav>
-  <Slot />
+  <Outlet />
   <!-- routed view renders here -->
 </div>
 
@@ -354,7 +373,7 @@ shaped with array methods (`items.filter(…)`, `.toSorted(…)`, `.at(-1)`) or 
 
 The library is the **standard set** — the same names, arguments and meaning
 in PuzzleKit and in Sites — plus the browser-only `link` and `timeago`. An
-app registers its own through the `formatters` config map and calls them the
+app registers its own through the `functions` config map and calls them the
 same way (`{ specialFormat(product.title) }`); one that reuses a standard name
 wins, with a development warning. An unregistered name never crashes a render —
 the value passes through unchanged and a single `console.error` names the
@@ -503,7 +522,7 @@ active prefix for you, and `this.ctx.i18n.locales` is a list of
   import Icon from './Icon.pzl';
 
   export default class Button extends PuzzleView {
-    data(params, props) {
+    data({ props }) {
       const variant = props.variant || 'default'
       const size = props.size || 'medium'
       const icon = props.icon || null
@@ -546,7 +565,7 @@ active prefix for you, and `this.ctx.i18n.locales` is a list of
 `await this.renderTick()` resolves once every pending store flush and scheduled render has landed, including renders those schedule (D188):
 
 ```js
-this.setData({ editing: true });
+this.setState({ editing: true });
 await this.renderTick();
 this.refs.editor.focus();
 ```
@@ -631,11 +650,11 @@ Puzzle — ready-made `.pzl` components (and their styles) you can drop into any
 app. It lives in this monorepo and releases in lockstep with the framework:
 
 ```bash
-puzzle add piece <name>
+npx puzzle add piece <name>
 ```
 
 Pieces are fetched from the `@magic-spells/puzzle-pieces` npm package,
-version-matched to your CLI — puzzle 0.8.x pulls the newest pieces 0.8.x — so a
+version-matched to your CLI — puzzle 0.10.x pulls the newest pieces 0.10.x — so a
 piece is always authored for the compiler installing it. `--pieces-version`
 pins an exact release; `--registry` accepts `npm:pkg[@version]`, a local
 directory, or an http(s) URL.
@@ -663,7 +682,8 @@ Install instructions are in each repository's README.
 - **[User Guide](constellation/doc/DOC-USER-GUIDE.md)** - Complete guide to building Puzzle applications
 - **[Component Reference](constellation/doc/DOC-PUZZLE-FILE.md)** - Complete .pzl component documentation
 - **[Data Layer](constellation/doc/DOC-DATASTORE.md)** - Models, adapters, and store management
-- **[Build Process](constellation/doc/DOC-COMPILATION-FLOW.md)** - Compiler and build system details
+- **[Build Process](constellation/doc/DOC-COMPILER-DESIGN.md)** - Compiler and build system details
+- **[Deploying](deploy/README.md)** - Host configs for Vercel, Netlify, Cloudflare Pages, nginx and Apache (`puzzle add deploy <host>`)
 
 ### AI project memory
 
@@ -675,12 +695,21 @@ full project context and build better plans without re-deriving earlier work.
 
 ## CLI Commands
 
-```bash
-# Development server with live reload
-puzzle dev --port 3000
+Inside a project, type these as `npx puzzle <command>` (or use the npm
+scripts) so the project's own CLI runs: it always matches the project's
+installed Puzzle. A CLI 0.10 or later from another 0.x minor stops `build`,
+`dev`, `check`, `generate` and `add piece` and names both versions
+(`puzzle doctor` reports the same); an older one builds against the wrong
+runtime without a word.
 
-# Production build (default)
+```bash
+# Development server with live reload (-p is --port; --host exposes it on the LAN)
+puzzle dev --port 3000
+puzzle dev -p 3000 --host --open
+
+# Production build (default); -m development for readable output, -q skips the summary, the page report and the update notice
 puzzle build
+puzzle build -m development -q
 
 # True static pages (no router, no app.js; per-page mount module)
 puzzle build --static
@@ -699,9 +728,12 @@ puzzle preview ./my-app --port 4000
 puzzle build --profile-build
 puzzle dev --profile-build
 
-# Upgrade the installed CLI, or only check what is available
+# Upgrade the global CLI and this project, or only check what is available
 puzzle upgrade
 puzzle upgrade --check
+
+# Print the CLI version (same as --version / -v)
+puzzle version
 
 # Install the Puzzle agent skill for your coding tools, or refresh it later
 puzzle add skills
@@ -710,34 +742,75 @@ puzzle upgrade skills
 
 Every command above is built and verified today. `puzzle build` compiles `.pzl` files and produces a working bundle; `puzzle dev` watches `app/`, rebuilds on change, and delivers full-page live reload over SSE (the reload client is injected into `index.html` at serve time). Both run the declared style pipeline automatically — `styles: { use: ['tailwindcss'] }` in `puzzle.config.js` (tailwindcss-only in v1) — so Tailwind output is included in the served/built stylesheet.
 
-By default a build emits one `dist/app.js`, and a dynamic `import()` is inlined
-into it. Set `build: { splitting: true }` in `puzzle.config.js` and each dynamic
+### Build configuration
+
+Public values that vary by environment belong in the top-level `env` object:
+
+```js
+// puzzle.config.js
+export default {
+  env: {
+    API_URL: process.env.API_URL ?? 'http://localhost:3000',
+    BETA: false,
+  },
+};
+
+// app code (including .pzl scripts)
+fetch(import.meta.env.API_URL + '/users');
+```
+
+Keys must be JavaScript identifiers; values must be strings, finite numbers or
+booleans. The compiler substitutes JSON literals in build, dev and prerender
+bundles; these values are written into the public bundle, so secrets do not
+belong in them. `import.meta.env` is always an object (empty without config),
+and undeclared keys read `undefined`; destructuring and computed reads work.
+Read `process.env` in the config itself: Puzzle adds no `.env` loading, modes
+or built-in keys. `puzzle dev` reads the config once; restart it after an edit.
+
+For TypeScript, reference `@magic-spells/puzzle/puzzle-env` and augment the global
+`ImportMetaEnv` interface with exact keys, for example
+`interface ImportMetaEnv { readonly API_URL: string; readonly BETA: boolean; }`.
+A view test under Vitest sees Vitest's own `import.meta.env`, not the values in
+`puzzle.config.js`; supply test values through Vitest's configuration.
+
+By default a build emits one entry bundle (`dist/app-<hash>.js` in production,
+see below), and a dynamic `import()` is inlined into it. Set `build: { splitting: true }` in `puzzle.config.js` and each dynamic
 `import()` becomes a lazy chunk under `dist/chunks/` that the browser fetches
 only when that code path runs — the way to keep a heavy on-demand dependency (a
 chart library, a diagram renderer, an editor) off the first page load.
-Production split builds name the entry `app-<hash>.js`, the stylesheet
-`styles-<hash>.css`, and any CSS imported by the entry `app-<hash>.css`. The build
-rewrites the shell's references and adds `modulepreload` links for the entry's
-transitive static-import chunks; lazy chunks stay on demand. esbuild's ESM
-splitting has no chunk-loader runtime, so it adds no runtime bytes. The build's
-size banner also names your largest dependencies and, in production builds,
-flags any single one over 200 KB (the threshold assumes minified bytes, so dev
-builds never warn).
+Lazy chunks are content-hashed, and the build adds `modulepreload` links to the
+shell for the entry's transitive static-import chunks; lazy chunks stay on
+demand. esbuild's ESM splitting has no chunk-loader runtime, so it adds no
+runtime bytes. The build's size banner also names your largest dependencies
+and, in production builds, flags any single one over 200 KB (the threshold
+assumes minified bytes, so dev builds never warn).
 
-`build.hashNames` defaults to `build.splitting`. Set
-`build: { splitting: true, hashNames: false }` to keep `app.js` and `styles.css`
-while retaining preloads, or `build: { hashNames: true }` to hash without
-splitting. Development builds always keep fixed names and add no preloads.
-Files copied from `public/` are never renamed. A hashed SPA or hybrid build
-requires the shell to reference `app.js` as `/app.js`, `./app.js` or `app.js`;
-use `hashNames: false` when another page needs the fixed URL.
+Production builds content-hash their output names, split or not: the entry is
+`app-<hash>.js`, the stylesheet `styles-<hash>.css`, and any CSS imported by the
+entry `app-<hash>.css`. The build rewrites the shell's references to follow
+them, so a deploy never leaves a browser holding a stale stylesheet or bundle.
+Set `build: { hashNames: false }` to keep the fixed `app.js` and `styles.css`
+(preloads stay on when splitting). Development builds always keep fixed names
+and add no preloads. Files copied from `public/` are never renamed.
+
+Hashing needs the shell to reference `app.js` as `/app.js`, `./app.js` or
+`app.js`, and `styles.css` the same way. With `hashNames` unset, a file the
+shell does not reference keeps its fixed name and the build prints one warning
+for it; a missing `public/index.html` falls back for both files. The same holds
+when another HTML page in `public/` (a hand-written `404.html`, an
+`embed.html`) names `app.js`, `app.css` or `styles.css`: that file keeps its
+fixed name, and the warning names the page. An app with no CSS gets no
+stylesheet warning. An explicit `hashNames: true` is strict instead: a shell
+with no entry reference, or one naming an output the build did not emit, fails
+the build; other public HTML pages are rewritten to the hashed names; and a
+stylesheet nothing links still ships as `styles-<hash>.css`. Use
+`hashNames: false` when a host rule or another site needs the fixed URL.
 
 `output: 'hybrid'` uses the same entry and stylesheet names as the SPA, with
 prerendered HTML under `dist/<path>/index.html`. `output: 'static'` ships no
-app entry: each page loads `dist/_puzzle/<slug>.js`, or
-`dist/_puzzle/<slug>-<hash>.js` when hashing is on, and preloads its shared
-`dist/_puzzle/chunks/`. A static build with no `splitting` or `hashNames` key
-keeps fixed page-module names and `styles.css`, with preloads in production.
+app entry: each page loads `dist/_puzzle/<slug>-<hash>.js` (or
+`dist/_puzzle/<slug>.js` with `hashNames: false`) and, in production, preloads
+its shared `dist/_puzzle/chunks/`.
 
 Splitting adds one deployment rule: chunk filenames are content-hashed, so a
 new deploy writes new ones, and a tab still holding the previous entry will
@@ -771,10 +844,28 @@ URLs and a real `404.html` rather than the shell — a folder's own `404.html`
 first, so a miss under `/es/` gets `dist/es/404.html`. It defaults to port 4000 so it
 runs alongside `puzzle dev`.
 
-`puzzle upgrade` updates the CLI you are running, resolved from the executable's
-own install context rather than the current directory — bumping a project's
-`@magic-spells/puzzle` dependency is npm's job, not the CLI's.
-`puzzle upgrade --check` only reports the current and latest versions.
+`puzzle upgrade` covers both places Puzzle lives: the global CLI, if you have
+one, and this project: the nearest `package.json` at or above the current
+folder (no higher than your home folder), when it declares
+`@magic-spells/puzzle`. It lists both with their versions before changing
+anything, then asks about each one that is behind:
+
+```
+  the global CLI  0.9.0 → 0.10.0  (npm)
+  this project    0.9.0 → 0.10.0  /Users/you/my-app (npm)
+```
+
+The row and the question name the project's folder, so you see where the
+package manager will run before it does.
+
+A project upgrade runs the package manager its lockfile names (in a workspace,
+the root's), so `package.json` and the lockfile both move. When the new
+version may have breaking changes (a new minor before 1.0), the question says
+so, and afterwards it points at "Upgrading across versions" in the installed
+CHANGELOG and at `npx puzzle check --fix`.
+`puzzle upgrade --check` only lists; `--yes` upgrades everything that is behind
+without asking. Without a terminal, only the install the command runs from is
+upgraded, and the other is printed as the command to run.
 
 ### Agent skill
 
@@ -792,39 +883,93 @@ is how you refresh it:
 - An older one asks before it is replaced. Declining leaves it alone but still
   installs anywhere that has no skill yet.
 - On a non-interactive terminal an older install is refused rather than asked
-  about, and needs `--overwrite`.
+  about, and needs `--force` (or `--yes` to accept the update).
 - A symlinked install (a dev checkout linked into your config dir) is reported
-  and left alone unless you pass `--overwrite`.
+  and left alone unless you pass `--force`.
 
 `puzzle upgrade skills` refreshes only the installs you already have, and
 `puzzle upgrade` offers the same refresh automatically after it installs a new
 version.
 
 `puzzle check` type-checks every `.pzl` file with the TypeScript the app itself
-has installed — Puzzle never installs one for you. A `lang="ts"` script is
-checked as written; every template expression is re-emitted as typed statements,
-so a typo in `{ user.nmae }` is a type error reported at its real `.pzl` line and
-column. A plain-JavaScript component gets its template expressions checked and
-its script body left alone.
+has installed (7 or later) — Puzzle never installs one for you — and reports each
+error at its real `.pzl` line and column. A `lang="ts"` script is checked as
+written. Every template expression is re-emitted as typed statements, but a value
+the template reads from `data()` is typed `any`: the template check catches an
+event handler missing from `events`, and a `lang="ts"` handler or a standard
+function called with the wrong number of arguments or an argument of a known type
+that does not fit — not a misspelled data field such as `{ user.nmae }`. A plain-JavaScript component
+gets its template expressions checked and its script body left alone.
+
+Before it type-checks, `puzzle check` looks for spellings Puzzle has renamed:
+`this.setData(` (now `setState(`), `data(params, props)` (now
+`data({ params, props })`), an unnamed `<Slot/>` (now `<Outlet/>` in a
+layout or view, `<Children/>` in a component), and the `formatters` config key
+and `app/formatters.js` (now `functions` and `app/functions.js`). It lists each
+one and stops with an error. `puzzle check --fix` rewrites them in `app/` and
+`tests/`, then type-checks. A site it cannot rewrite safely is listed for you
+to finish by hand.
 
 The full CLI surface (see [constellation/doc/DOC-SPEC.md](constellation/doc/DOC-SPEC.md) §13): `init`, `generate`, `add`, `check`, `doctor`, and `info` join `dev` and `build`.
 
 ```bash
-# Scaffold a project; omitting the name prompts only in an interactive terminal
-puzzle init my-app --template todos
-puzzle init my-app --template todos --typescript
+# Scaffold a project; omitting the name prompts only in an interactive terminal.
+# The argument may be a path: ../apps/my-app creates my-app inside ../apps.
+puzzle init my-site --template static
+puzzle init my-site -t static --typescript
+puzzle init ../apps/my-app -y
 
 # Generate a stub (component, view, layout, or model) — TypeScript stubs in an
 # app with a tsconfig.json
-puzzle generate component UserCard --path components/ui/
+puzzle generate component UserCard --path app/components/ui/
 
 # Wire up Tailwind, install a piece or a palette (see Puzzle Pieces above), or run diagnostics
 puzzle add tailwind
 puzzle add piece <name>
 puzzle add theme <name>
 puzzle add skills
+
+# Write a host config (vercel, netlify, cloudflare, nginx or apache) — see deploy/README.md
+puzzle add deploy netlify
 puzzle doctor
+
+# Machine-readable environment and health reports
+puzzle info --json
+puzzle doctor --json
 ```
+
+### Flag reference
+
+Every command takes `-h` / `--help` and the global `--no-color` (the same
+switch as `NO_COLOR=1`). Renamed spellings stay accepted: `add --overwrite`
+and `init --dir` still work as hidden compatibility aliases (no notice in
+0.10.x; they will be deprecated in a later release).
+
+| Command | Flags |
+| --- | --- |
+| `puzzle` | `-v, --version`, `--no-color` |
+| `version` | (none) |
+| `init [app-name]` (alias `create`) | `-t, --template <default\|static>`, `--typescript`, `-y, --yes` |
+| `dev [dir]` | `-p, --port <n>` (3000), `--strict-port`, `--host [ip]` / `--host=<addr>`, `-o, --open`, `--fixtures`, `--profile-build` |
+| `build [dir]` | `-m, --mode <production\|development>`, `--static`, `--hybrid`, `--fixtures`, `-q, --quiet`, `--profile-build` |
+| `preview [dir]` | `-p, --port <n>` (4000), `--strict-port`, `--host [ip]` / `--host=<addr>` |
+| `check [dir]` | `--fix` |
+| `generate <type> <Name>` (alias `g`) | `--path <dir>`, `--family <A,B>`, `-f, --force`, `--dir <app-root>` |
+| `add <integration\|piece\|theme\|deploy\|skills> [name…]` | `-f, --force`, `-y, --yes`, `--dir <app-root>`, `--registry <source>`, `--pieces-version <v>`, `--skill-root <dir>`, `--static`, `--hybrid` (deploy) |
+| `upgrade` | `--check`, `-y, --yes` |
+| `upgrade skills` | `-y, --yes` |
+| `doctor [dir]` | `--json` |
+| `info [dir]` | `--json` |
+
+`--host` alone listens on every interface and the banner adds a `Network:` URL
+per LAN address. `--host <ip>` (an IPv4 or IPv6 literal, or `localhost`, right
+after the flag) or `--host=<addr>` binds that address. Hostnames need the `=`
+form: `--host=my.lan`.
+`-y` takes every prompt's default without asking. `--json` keys are stable:
+`info` prints `puzzle`, `platform`, `node` (null when node is missing),
+`projectRoot`, `sourceDir`, `outputDir` and `styles`; `doctor` prints `dir`,
+`ok`, `failures` and `checks` (each `{name, status, detail}`, status `pass`,
+`fail` or `warn`).
 
 ## License
 

@@ -13,8 +13,8 @@
 
     <div slot="first" class="h-full flex flex-col min-h-0 overflow-hidden border-r border-line bg-surface">
       <header class="shrink-0 flex items-center gap-2 min-h-8 px-2 py-1.5 border-b border-line">
-        <span class="font-mono text-[10px] font-semibold uppercase tracking-wider text-faint">Tree</span>
-        <span class="font-mono text-[10px] tabular-nums text-faint">{ liveCount }</span>
+        <span class="font-mono text-10 font-semibold uppercase tracking-wider text-faint">Tree</span>
+        <span class="font-mono text-10 tabular-nums text-faint">{ liveCount }</span>
         <button
           type="button"
           data-reload-tree
@@ -24,24 +24,24 @@
       </header>
 
       {#if treeError}
-        <p class="m-0 px-2 py-1 font-mono text-[10px] text-danger break-all">{ treeError }</p>
+        <p class="m-0 px-2 py-1 font-mono text-10 text-danger break-all">{ treeError }</p>
       {/if}
 
       <div
-        class="flex-1 min-h-0 overflow-auto outline-none"
+        class="flex-1 min-h-0 overflow-auto outline-ring focus-visible:outline-2 focus-visible:-outline-offset-2"
         tabindex="0"
         aria-label="View tree"
         @keydown:up:prevent={ moveSelection(-1) }
         @keydown:down:prevent={ moveSelection(1) }>
         {#if rows.length === 0}
-          <p class="m-0 px-2 py-2 text-[11px] text-faint">No views mounted.</p>
+          <p class="m-0 px-2 py-2 text-11 text-faint">No views mounted.</p>
         {:else}
           <ul class="m-0 p-0 list-none" role="tree">
             {#for row in rows}
               <li key={ row.id } role="treeitem">
                 <div
                   data-view-id="{ row.id }"
-                  class="dt-tree-row group flex items-center gap-1.5 min-h-[22px] py-0.5 pr-1 cursor-default { row.rowClass } { row.pulseClass }"
+                  class="dt-tree-row group flex items-center gap-1.5 min-h-5.5 py-0.5 pr-1 cursor-default { row.rowClass } { row.pulseClass }"
                   style="padding-left:{ row.indent };background-size:{ row.guideWidth } 100%"
                   title="{ row.title }"
                   @click={ select(row.id) }
@@ -51,7 +51,7 @@
                     <button
                       type="button"
                       data-twisty="{ row.id }"
-                      class="shrink-0 flex size-4 items-center justify-center text-muted transition-transform duration-[120ms] ease-out hover:text-ink { row.twistyClass }"
+                      class="shrink-0 flex size-4 items-center justify-center text-muted transition-transform duration-120 ease-out hover:text-ink { row.twistyClass }"
                       title="Expand or collapse"
                       @click:stop={ toggle(row.id) }>{#svg 'icons/chevron-right.svg'}</button>
                   {:else}
@@ -63,17 +63,17 @@
                     class="shrink-0 size-1.5 rounded-full { row.kindClass }"
                     aria-hidden="true"></span>
 
-                  <span class="shrink-0 font-mono text-[12px] leading-none { row.nameClass }">{ row.name }</span>
+                  <span class="shrink-0 font-mono leading-none { row.nameClass }">{ row.name }</span>
 
                   {#if row.hasModuleLabel}
-                    <span class="min-w-0 truncate font-mono text-[10px] leading-none { row.moduleClass }">{ row.moduleLabel }</span>
+                    <span class="min-w-0 truncate font-mono text-10 leading-none { row.moduleClass }">{ row.moduleLabel }</span>
                   {/if}
 
                   <button
                     type="button"
                     data-log="{ row.id }"
                     title="log:view — binds the live instance to $p"
-                    class="ml-auto shrink-0 hidden group-hover:block rounded px-1 font-mono text-[9px] uppercase tracking-wide text-faint hover:bg-raised hover:text-accent"
+                    class="ml-auto shrink-0 hidden group-hover:block rounded px-1 font-mono text-9 uppercase tracking-wide text-faint hover:bg-raised hover:text-accent"
                     @click:stop={ logRow(row.id) }>log</button>
                 </div>
               </li>
@@ -83,7 +83,7 @@
       </div>
 
       {#if toast}
-        <p class="shrink-0 m-0 px-2 py-1 border-t border-line font-mono text-[10px] text-ok">{ toast }</p>
+        <p class="shrink-0 m-0 px-2 py-1 border-t border-line font-mono text-10 text-ok">{ toast }</p>
       {/if}
     </div>
 
@@ -94,43 +94,44 @@
           class="py-8! px-4!" />
       {:else}
         <header class="shrink-0 flex items-baseline gap-2 min-h-9 px-3 py-2 leading-relaxed border-b border-line bg-surface">
-          <span class="shrink-0 font-mono text-[12px] font-semibold text-ink">{ detailName }</span>
-          <span class="min-w-0 truncate font-mono text-[10px] text-faint" title="{ detailModule }">{ detailModule }</span>
-          <span class="ml-auto shrink-0 font-mono text-[10px] tabular-nums text-faint">#{ detailId }</span>
+          <span class="shrink-0 font-mono font-semibold text-ink">{ detailName }</span>
+          <span class="min-w-0 truncate font-mono text-10 text-faint" title="{ detailModule }">{ detailModule }</span>
+          <span class="ml-auto shrink-0 font-mono text-10 tabular-nums text-faint">#{ detailId }</span>
         </header>
 
         <div class="flex-1 min-h-0 overflow-auto">
         {#if inspectError}
-          <p class="m-3 mb-0 rounded border border-danger px-2 py-1 font-mono text-[11px] text-danger">{ inspectError }</p>
+          <p class="m-3 mb-0 rounded border border-danger px-2 py-1 font-mono text-11 text-danger">{ inspectError }</p>
         {/if}
 
         {#if hasInspect}
           <div class="p-3 grid gap-3">
-            <div class="grid gap-3 grid-cols-1 lg:grid-cols-2">
+            <div class="grid gap-3 grid-cols-1 lg:grid-cols-3">
               <StateGroup title="params" tone="plain" entries={ paramEntries } emptyLabel="no route params" />
               <StateGroup title="props" tone="plain" entries={ propEntries } emptyLabel="no props" />
+              <StateGroup title="shared" tone="plain" entries={ sharedEntries } emptyLabel="nothing shared" />
             </div>
 
             <section class="rounded border border-accent-soft">
-              <h2 class="m-0 px-2 py-1 text-[11px] font-semibold text-ink">
+              <h2 class="m-0 px-2 py-1 text-11 font-semibold text-ink">
                 State layers
-                <span class="ml-1 font-normal text-[10px] text-muted">
-                  a later setData() wins until the next data() commit replaces the model layer
+                <span class="ml-1 font-normal text-10 text-muted">
+                  a later setState() wins until the next data() commit replaces the derived layer
                 </span>
               </h2>
               <div class="p-2 pt-0 grid gap-2 grid-cols-1 lg:grid-cols-2">
                 <StateGroup
-                  title="data() model layer"
+                  title="data() derived layer"
                   tone="model"
                   hint="Replaced wholesale on every data() commit."
                   entries={ modelEntries }
                   emptyLabel="data() returned nothing" />
                 <StateGroup
-                  title="setData() local layer"
+                  title="setState() state layer"
                   tone="local"
                   hint="Persistent UI state; survives data() re-runs."
                   entries={ localEntries }
-                  emptyLabel="no setData() state" />
+                  emptyLabel="no setState() state" />
               </div>
             </section>
 
@@ -161,6 +162,7 @@ import {
   api,
   applyViewSnapshot,
   ensureSubscriptions,
+  isConnected,
   takeViewSelection,
 } from '../bridge.js';
 import { entriesOf, moduleLabel, moduleTitle, viewKind } from '../values.js';
@@ -186,10 +188,7 @@ const TREE_DEBOUNCE_MS = 120;
 const INSPECT_DEBOUNCE_MS = 150;
 const TOAST_MS = 2400;
 
-// Selection carries a 2px left accent bar (`dt-row-selected`, an inset shadow)
-// on top of the tint, so an active row still reads as active while the pulse
-// animation is repainting its background.
-const ROW_SELECTED = 'bg-accent-soft dt-row-selected';
+const ROW_SELECTED = 'bg-accent-soft';
 const ROW_IDLE = 'hover:bg-raised';
 
 /** Indent geometry, shared by the padding and the indent-guide gradient. */
@@ -209,7 +208,7 @@ const KIND_DOT = {
 
 export default class ViewsView extends PuzzleView {
   created() {
-    this.setData({
+    this.setState({
       // id -> true. Collapsed is the exception, so a view that appears while the
       // panel is open shows up expanded rather than hidden inside a closed node.
       closed: {},
@@ -237,7 +236,7 @@ export default class ViewsView extends PuzzleView {
   mounted() {
     // Tab activation. `data()` has already scheduled a debounced snapshot; this
     // collapses it into an immediate one so opening the panel is not laggy.
-    if (this.connected()) this.scheduleTree(0);
+    if (isConnected()) this.scheduleTree(0);
   }
 
   destroyed() {
@@ -276,7 +275,7 @@ export default class ViewsView extends PuzzleView {
     const selectedId = local.selectedId;
     const selectedRecord = selectedId == null ? null : store.findOne('pview', selectedId);
 
-    // The selected view was re-rendered by a flush — its model layer changed, so
+    // The selected view was re-rendered by a flush — its derived layer changed, so
     // the detail pane is showing stale values until we ask again.
     if (selectedRecord) {
       const pulseAt = selectedRecord.pulseAt ?? 0;
@@ -290,20 +289,14 @@ export default class ViewsView extends PuzzleView {
     this._rows = rows;
 
     const inspect = local.inspect;
-    const empty = disconnectedEmpty(state);
 
     return {
-      disconnected: !connected,
-      emptyTitle: empty.title,
-      emptyHint: empty.description,
+      ...disconnectedEmpty(state),
 
       rows,
       liveCount: views.filter((view) => view.live).length,
-      loadingTree: local.loadingTree,
       // The reload glyph IS the spinner while a snapshot is in flight.
       reloadClass: local.loadingTree ? 'animate-spin' : '',
-      treeError: local.treeError,
-      toast: local.toast,
 
       // The pane opens on SELECTION, not on a successful answer — a failed
       // inspect has to be able to say so somewhere.
@@ -312,10 +305,10 @@ export default class ViewsView extends PuzzleView {
       detailId: selectedId ?? '',
       detailName: inspect?.name ?? selectedRecord?.name ?? 'View',
       detailModule: inspect?.module ?? selectedRecord?.module ?? '—',
-      inspectError: local.inspectError,
 
       paramEntries: entriesOf(inspect?.params),
       propEntries: entriesOf(inspect?.props),
+      sharedEntries: entriesOf(inspect?.shared),
       modelEntries: entriesOf(inspect?.model),
       localEntries: entriesOf(inspect?.local),
       // From snapshot:subscriptions.byView, folded onto the pview record — the
@@ -346,7 +339,7 @@ export default class ViewsView extends PuzzleView {
     takeViewSelection();
     clearTimeout(this._inspectTimer);
     this._seenPulseAt = 0;
-    this.setData({ selectedId: id, inspect: null, inspectError: '' });
+    this.setState({ selectedId: id, inspect: null, inspectError: '' });
     this.loadInspect(id);
   }
 
@@ -415,12 +408,6 @@ export default class ViewsView extends PuzzleView {
     return rows;
   }
 
-  /** True once `hello` landed with a protocol version this build renders. */
-  connected() {
-    const connection = this.ctx.store.findOne('connection', CONNECTION_ID);
-    return connection?.state === CONNECTION_STATE.CONNECTED;
-  }
-
   /** Coalesce tree refreshes onto one timer; `delay` 0 is "as soon as possible". */
   scheduleTree(delay) {
     clearTimeout(this._treeTimer);
@@ -431,21 +418,16 @@ export default class ViewsView extends PuzzleView {
   }
 
   async loadTree() {
-    if (this.isDestroyed || !this.connected()) return;
-    this.setData({ loadingTree: true, treeError: '' });
-    this.refresh();
+    if (this.isDestroyed || !isConnected()) return;
+    this.setState({ loadingTree: true, treeError: '' });
     try {
       const result = await api.snapshotViews();
       if (this.isDestroyed) return;
       applyViewSnapshot(result?.roots);
     } catch (err) {
-      if (this.isDestroyed) return;
-      this.setData('treeError', err?.message ?? String(err));
+      this.setState('treeError', err?.message ?? String(err));
     } finally {
-      if (!this.isDestroyed) {
-        this.setData('loadingTree', false);
-        this.refresh();
-      }
+      this.setState('loadingTree', false);
     }
   }
 
@@ -474,26 +456,21 @@ export default class ViewsView extends PuzzleView {
       // A slow answer for a view the user already navigated away from must not
       // overwrite the pane.
       if (this.getData().selectedId !== id) return;
-      this.setData({ inspect: result ?? null, inspectError: '' });
+      this.setState({ inspect: result ?? null, inspectError: '' });
       const record = this.ctx.store.findOne('pview', id);
-      if (record) record.update({ inspected: result ?? null, inspectedAt: Date.now() });
+      if (record) record.update({ inspected: result ?? null });
     } catch (err) {
-      if (this.isDestroyed || this.getData().selectedId !== id) return;
-      this.setData({ inspect: null, inspectError: err?.message ?? String(err) });
-    } finally {
-      if (!this.isDestroyed) this.refresh();
+      if (this.getData().selectedId !== id) return;
+      this.setState({ inspect: null, inspectError: err?.message ?? String(err) });
     }
   }
 
   flash(message) {
     clearTimeout(this._toastTimer);
-    this.setData('toast', message);
-    this.refresh();
+    this.setState('toast', message);
     this._toastTimer = setTimeout(() => {
       this._toastTimer = null;
-      if (this.isDestroyed) return;
-      this.setData('toast', '');
-      this.refresh();
+      this.setState('toast', '');
     }, TOAST_MS);
   }
 
@@ -506,8 +483,7 @@ export default class ViewsView extends PuzzleView {
       if (previous != null) api.highlightView(previous, false).catch(noop);
       clearTimeout(this._inspectTimer);
       this._seenPulseAt = 0;
-      this.setData({ selectedId: id, inspect: null, inspectError: '' });
-      this.refresh();
+      this.setState({ selectedId: id, inspect: null, inspectError: '' });
       this.loadInspect(id);
     },
 
@@ -515,8 +491,7 @@ export default class ViewsView extends PuzzleView {
       const closed = { ...this.getData().closed };
       if (closed[id]) delete closed[id];
       else closed[id] = true;
-      this.setData('closed', closed);
-      this.refresh();
+      this.setState('closed', closed);
     },
 
     hoverOn: (id) => {

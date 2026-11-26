@@ -18,7 +18,7 @@ version stamps at release time.
 
 **Why pieces don't ship as npm imports:** a Puzzle app can import `.pzl` files from an
 installed package that lists `@magic-spells/puzzle` in `peerDependencies` (the usage scan
-reads them, framework D89), but the app's Tailwind `@source` scan only covers `app/`, so a
+reads them, framework D89), but the app's Tailwind scan skips `node_modules`, so a
 package-shipped piece would render unstyled, and an installed piece is not the app's to
 edit. So pieces land in the app's own `app/components/ui/`, where the consumer's
 `puzzle build` compiles them and their Tailwind scan picks up the classes. This is why the
@@ -50,9 +50,9 @@ Rules that follow from this:
 - **Edit a piece in `registry/` first, then sync the copy in `demo/app/components/ui/`**
   (and `demo/app/lib/` for lib files). The demo copies are strictly downstream; never let
   them drift from the registry source.
-- **`registry.json` is generated** by aggregating the `piece.json` manifests. When you add
-  or rename a piece, add its manifest and regenerate/extend the index (keep pieces
-  alphabetical; represent lib files the way `date-math.js` / `chart-math.js` are).
+- **`registry.json` is the aggregation of the `piece.json` manifests, kept by hand** (no
+  generator): mirror every manifest edit in its row, pieces alphabetical. `registry.json
+  mirrors every manifest` in `test/registry-deps.test.js` fails when the two drift.
 - A new piece's demo surface is: the copied file(s), a `*Doc.pzl` page under
   `app/views/components/`, a `nav.js` entry, and a `routes.js` entry. Untracked new files do
   NOT ride along in another session's refactor commits — re-check any new Doc page against
@@ -109,6 +109,16 @@ Rules that follow from this:
   `puzzle add theme <names…>` for the ones the app has neither on disk nor package-imported.
   Deliberately NOT `registryDependencies` — an older CLI would read the name as a piece.
   `test/registry-deps.test.js` checks every name is a shipped palette.
+- `styles` — the REQUIRED stylesheets of the web component a wrapper piece installs, in
+  load order, a peer's first (`sheet` → `@magic-spells/dialog-panel/css`,
+  `@magic-spells/sheet/css`). Print-only: `add piece` unions them over the resolved set
+  (first occurrence wins, never sorted) and prints an `@import "<spec>" layer(components);`
+  step for each, the first after `@import "tailwindcss";` and each later one after the
+  line before it. Only the piece that installs the package lists it (the
+  dropdown families get `dropdown-panel`'s through `registryDependencies`); an optional
+  sheet (`…/dropdown-panel/css/effects`) stays in the header comment. An older CLI ignores
+  the key, so the schema stays `version: 1`. `test/registry-deps.test.js` checks each
+  one's package is in the same manifest's `dependencies` and that the demo imports it.
 
 ## Versioning
 
@@ -149,7 +159,7 @@ CLI — it is unrelated and must not be bumped along with the release.
   `registry/lib/`: the markdown and rich-text document models, the chart and slider math,
   an InputOTP suite, static wiring guards for the wrapper pieces (`*-wrapper.test.js`), the
   theme suites (`themes`, `contrast`, `appearance`), the `registry-deps` floor check, and
-  parity suites that assert the demo copies are byte-identical to their `registry/` sources. These are
+  `registry-parity`, which walks `registry.json` and asserts every demo copy is byte-identical to its `registry/` source. These are
   repo-internal — nothing under `test/` or the root `package.json` is ever copied to a
   consumer. `test/puzzle-lang.test.js` loads highlight.js from `demo/node_modules`: it
   skips locally and THROWS under `CI` when the demo isn't installed, so run the demo's
@@ -163,6 +173,21 @@ CLI — it is unrelated and must not be bumped along with the release.
   `registry/theme/pieces.css` (`bg-surface`, `text-ink`, `border-border`, `bg-brand`,
   `text-danger`, …). **No hex colors** inside components. `pieces.css` is a registry file —
   editing token VALUES there changes every consumer.
+- **Local UI state: seed, derive, set.** Seed render-feeding state with `setState()` in
+  `created()`, read it back in `data()` through `this.getState()` / `this.getData()` and derive
+  the render model there, and have handlers call `setState()` only. `getData()` is the merged
+  model: if `data()` returns a different value under a state key's name, `getData()` can hand
+  that back, so read that key through `getState()`. A write to a key the last
+  `data()` run read re-runs `data()` with the next render (framework D23), so no `refresh()`
+  follows a `setState()`. Read a state key in `data()` only to derive from it. A key the
+  template shows as it is (an input's draft text) needs no read: the template gets it from
+  state, and the read re-runs `data()` on every write. Keep instance fields for bookkeeping
+  that never feeds `data()` (timers, listener flags, a pending-focus marker). Call
+  `refresh()` only on purpose: `data()` reads something the runtime cannot see (a module
+  store), or the next line needs the new model in the DOM now (focusing a just-opened row, a
+  FLIP measurement, a placement correction or a size measured in `afterUpdate()`, rAF or a
+  ResizeObserver callback that must paint this frame: a `setState()` render lands a frame
+  late). Say why in a comment beside it.
 
 ## Themes — four schemes × four styles
 
@@ -212,11 +237,13 @@ CLI — it is unrelated and must not be bumped along with the release.
   and `ring` are held to 3:1.
 - **Adding a palette:** copy `registry/theme/cool.css` → `x.css`, rename the selectors,
   retune every value, add `{ name, file, label, description }` to `registry.json.themes`,
-  add it to `SCHEMES` in `appearance.js` AND `pre-paint.js` (they must agree), to
-  `SCHEMES` in `test/lib/parse-theme.mjs` and `demo/app/lib/tokenNames.js`, export it in
-  `package.json`, import it in `demo/app/styles/styles.css`, sync
-  `demo/app/lib/appearance.js` + the inline pre-paint in `demo/app/public/index.html`
-  (byte-equal, tested), run `npm test`.
+  export it in `package.json`, add it to `SCHEMES` in `appearance.js` AND `pre-paint.js`
+  (they must agree), to `DEFAULT_SCHEMES` in
+  `registry/ui/appearance-picker/AppearancePicker.pzl` (tested equal to `appearance.js`),
+  to `SCHEMES` in `test/lib/parse-theme.mjs` and `demo/app/lib/tokenNames.js`, sync
+  `demo/app/lib/appearance.js` + the inline pre-paint in `demo/app/public/index.html` +
+  `demo/app/components/ui/AppearancePicker.pzl` (byte-equal, tested), import it in
+  `demo/app/styles/styles.css`, run `npm test`.
 - **Demo:** `demo/app/styles/styles.css` imports the four registry files directly (no
   copies to sync). `demo/app/lib/appearance.js` IS a byte-identical copy (tested) and the
   inline `<script data-key="puzzle:appearance">` in `public/index.html` must equal
@@ -232,14 +259,15 @@ CLI — it is unrelated and must not be bumped along with the release.
   wrapping genuinely can't work** (rule set 2026-08-19 as "wrap when simple", strengthened
   2026-08-22 — see `constellation/decision/DECISION-WRAP-WEB-COMPONENTS.md`; `scroll-stack`
   is the exemplar; `sheet` was the first conversion, 2026-08-22). A wrapper piece renders the
-  custom element's markup around `<Slot/>`, binds props to attributes, declares the npm
-  package in `piece.json.dependencies`, and upgrades it via **dynamic import in
-  `mounted()`** — never a top-level import, because the package's `class extends
-  HTMLElement` crashes Node prerendering. The component's stylesheet is imported at the
-  app entry in `layer(components)` (e.g. `@import "@magic-spells/scroll-stack/css"
-  layer(components)`) so utilities on the host still win; document it in the piece's
-  installation section. A package with a peer that ships its own CSS needs BOTH imports,
-  peer first (`sheet` → `@magic-spells/dialog-panel/css` then `@magic-spells/sheet/css`),
+  custom element's markup around `<Children/>`, binds props to attributes, declares the npm
+  package in `piece.json.dependencies` and its required stylesheets in `styles`, and
+  upgrades it via **dynamic import in `mounted()`** — never a top-level import, because
+  the package's `class extends HTMLElement` crashes Node prerendering. The component's
+  stylesheet is imported at the app entry in `layer(components)` (e.g. `@import
+  "@magic-spells/scroll-stack/css" layer(components)`) so utilities on the host still
+  win; document it in the piece's installation section. A package with a peer that
+  ships its own CSS needs BOTH imports, peer first (`sheet` →
+  `@magic-spells/dialog-panel/css` then `@magic-spells/sheet/css`),
   and a package may ship an optional second sheet (`dropdown-panel` →
   `@magic-spells/dropdown-panel/css`, required, then `…/css/effects` for the entrance
   effects and the arrow). Why wrap: a port is a fork — every upstream fix has to be
@@ -288,7 +316,9 @@ CLI — it is unrelated and must not be bumped along with the release.
   in Puzzle. Nested-config props (`items[].children[]`) are the anti-pattern; flat leaf
   lists (`options`, `steps`, `columns`) stay config (`DECISION-CONFIG-FIRST-API`).
 - **Controlled-component discipline everywhere.** The parent owns `value`/`open` state;
-  props in, callbacks out. Callbacks are **value-first** (`this.props.change(value)`).
+  props in, callbacks out. Callbacks are **value-first** and pass one argument
+  (`this.props.change(value)`). The parent's `@change` handler gets only the first argument,
+  so a piece that needs to send more sends one object (Kanban's `@move`).
   Standard vocabulary: `variant`, `size`, `disabled`, `value`, `label`, `placeholder`,
   `class` (merged onto root); callbacks `@change`, `@press`, `@show`, `@hide`, `@ready`.
 - **Native `<dialog>` overlays** (dialog, alert-dialog, command, sheet, bottom-sheet) all
@@ -310,7 +340,8 @@ CLI — it is unrelated and must not be bumped along with the release.
   `focus-visible:outline-2` reveal.
 - **Implicit two-way binding is ON (D147, puzzle ≥ 0.5.0) — pieces must stay handler-owned.**
   The compiler auto-binds a `value=`/`checked=` on a plain `<input>`/`<textarea>`/`<select>`
-  when the expression is exactly `ident` or `ident.ident` AND the element has no author
+  when the expression is a plain path (`ident`, `ident.ident`, `a.b.c`: any number of `.name`
+  steps, no `[k]` or `?.`) AND the element has no author
   `@input`/`@change`. Component tags never bind (props are props). Nearly every piece is
   already suppressed because it carries the `@change` that routes through its callback
   prop — that is the correct pattern, not legacy, and the handler must never be deleted to
@@ -324,8 +355,11 @@ CLI — it is unrelated and must not be bumped along with the release.
 - **Morph:** the ported picker overlays (DatePicker, EmojiPicker, EmojiPickerSimple) expose
   an opt-in `morph` prop. Morphable roots must not use
   transform positioning, stylesheet `opacity`, a changing dynamic `style={}` binding, or
-  `animations.in/out`. Trigger↔panel morph imports `@magic-spells/morph-engine` (declare it
-  in `dependencies`). `prefers-reduced-motion` is respected.
+  `animations.in/out`. A morph panel rests `invisible` (the engine's rule for targets; it
+  reveals the panel inline): `PANEL_MORPH` carries the class, so the frames before the
+  grow and after the shrink never paint it. Trigger↔panel morph imports
+  `@magic-spells/morph-engine` (declare it in `dependencies`). `prefers-reduced-motion` is
+  respected.
 - Per-piece specifics live in each `piece.json` description and the file's header comment —
   don't duplicate them here.
 
@@ -346,9 +380,10 @@ CLI — it is unrelated and must not be bumped along with the release.
   can't be routed to a slot (compile error: "ambiguous"). Make the condition internal —
   either a direct-child wrapper that carries the `slot` attribute with the control flow
   inside it, or branch the entire component call.
-- **Composition markers are capitalized (D134, puzzle 0.4.0).** `<Children/>` receives
-  untagged call-site content, `<Slot/>` is the router outlet, and `<Slot name="x"/>` is a
-  named slot. The `slot="x"` call-site attribute is unchanged. Lowercase
+- **Composition markers are capitalized (D134, puzzle 0.4.0; renamed D199, 0.10).**
+  `<Children/>` receives untagged call-site content (every piece uses this one),
+  `<Outlet/>` is the router outlet in layouts and views, and `<Slot name="x"/>` is a
+  named slot. A bare `<Slot/>` is a compile error since 0.10. The `slot="x"` call-site attribute is unchanged. Lowercase
   `<slot>`/`<children>` are compile errors in every form.
 - **Stock chrome goes in a marker's FALLBACK BODY (D141).** A paired marker's body is
   fallback content: it renders only when nothing fills that position, and call-site
@@ -380,8 +415,8 @@ CLI — it is unrelated and must not be bumped along with the release.
 
 ## The `add` CLI (shipped in the Puzzle Go CLI)
 
-`puzzle add piece <name…>` lives in the framework (`../puzzle/compiler/internal/pieces/`
-+ `add.go`) — there is NO npm package for the CLI itself; the default registry is the
+`puzzle add piece <name…>` lives in the framework (`../puzzle/compiler/internal/pieces/` and
+`../puzzle/compiler/cmd/puzzle/add.go`) — there is NO npm package for the CLI itself; the default registry is the
 `@magic-spells/puzzle-pieces` npm package. Contract this registry must stay compatible
 with:
 
@@ -393,7 +428,7 @@ with:
   the package is never installed. The old raw-GitHub default is gone as of 0.6.0.
 - Reads `registry.json`, resolves `registryDependencies` transitively (dedupe), copies each
   file to its manifest `targetDir` (`app/components/ui/` for pieces, `app/lib/` for lib
-  files). **Refuses to overwrite an existing target unless `--overwrite`** (all-or-nothing
+  files). **Refuses to overwrite an existing target unless `--force` (`-f`; `--overwrite` is a hidden alias)** (all-or-nothing
   pre-flight). PRINTS — never auto-runs — npm installs for accumulated `dependencies`.
 - The printed line is `npm install <name>@<range> …`, one entry per package, sorted by
   package name (D169). Specs merge by NAME across the resolved set, so a package two
@@ -414,7 +449,7 @@ with:
   one-line `@import './pieces.css';` wiring step is printed (styles.css is user-owned).
   When an app's pieces.css exists but differs from the registry's, `add piece` prints a
   stale-theme hint: `puzzle add theme default` for an unmodified older copy (it still
-  matches its `pieces.lock` hash), a hand merge or `--overwrite` for an edited one.
+  matches its `pieces.lock` hash), a hand merge or `--force` for an edited one.
   Detection keys on the `puzzle-pieces design tokens` header comment in `pieces.css` —
   **don't reword that comment without updating the CLI's marker.** `registry.json`'s
   `themes` array (`{ name, file, label, description }`) and `modes` list the palettes;

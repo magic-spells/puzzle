@@ -47,7 +47,7 @@ const SIZE = {
 };
 
 export default class Avatar extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     const src = props.src || '';
     const name = props.name || '';
     const hasName = name.trim().length > 0;
@@ -70,16 +70,16 @@ export default class Avatar extends PuzzleView {
       showImg,
       hasName,
       initials: hasName ? initials(name) : '',
-      fallbackStyle: hasName ? `background:hsl(${hue} 45% 45%)` : '',
+      fallbackStyle: hasName ? `background:hsl(${hue} 45% 32%)` : '',
       rootClass: [ROOT_BASE, SIZE[props.size] || SIZE.md, tone, props.class || ''].join(' '),
     };
   }
 
   events = {
     markFailed: () => {
-      // setData persists over the model layer, so the fallback sticks until the
+      // setState persists over the derived layer, so the fallback sticks until the
       // src prop changes (which resets `failed` back in data()).
-      this.setData({ failed: true, showImg: false });
+      this.setState({ failed: true, showImg: false });
     },
   };
 }

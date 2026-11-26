@@ -1,4 +1,14 @@
 
+
+
+
+
+
+
+
+
+
+        
 import { PuzzleView } from '@magic-spells/puzzle';
 
 // The record arm of implicit binding (D147): a loop variable as the ROOT of a
@@ -44,4 +54,3 @@ RecordForm.prototype.render = function () {
     , __L0)
   );
 };
-RecordForm.__pzlModule = 'RecordForm.pzl';

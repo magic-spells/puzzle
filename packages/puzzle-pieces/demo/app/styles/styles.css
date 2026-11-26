@@ -62,10 +62,10 @@
 @import "@magic-spells/collapsible-content/css" layer(components);
 
 /*
- * The Tabs family wraps @magic-spells/tab-group. This sheet is REQUIRED for one
- * rule above all: `tab-panel[hidden] { display: none }` is what actually hides
- * an inactive panel — without it every panel renders at once. It also sets the
- * strip's flex/overflow and the tab cursor. `layer(components)` for the usual
+ * The Tabs family wraps @magic-spells/tab-group. This sheet is REQUIRED: it
+ * makes <tab-list> the flex row the strip's gap and alignment depend on, gives
+ * the strip its horizontal scroll, and sets the tab cursor (inactive panels are
+ * hidden by Tailwind preflight's [hidden] rule). `layer(components)` for the usual
  * reason (plain element selectors), and it is load-bearing here: the pieces put
  * padding and colour utilities straight on <tab-list> and <tab-button>.
  */
@@ -145,27 +145,8 @@
  * arbitrary variant in the piece itself. The component needs no CSS to work.
  */
 
-/*
- * Tailwind v4 content detection: scan the app's .pzl components/views/layouts
- * and JS so the utility classes they use are generated. Paths are relative to
- * this stylesheet (app/styles/), so "../" is the app root.
- */
-@source "../**/*.pzl";
-@source "../**/*.js";
-@source "../public/**/*.html";
-
-/*
- * dist/ is COMMITTED (GitHub Pages serves it), so it is not gitignored — which
- * means v4's automatic content detection also scans the PREVIOUS build's own
- * output. A class deleted from source then keeps its rule for exactly one more
- * build, and a malformed class literal can look like it works because the older
- * bundle still carried the correct one. Exclude it so the generated CSS reflects
- * source alone. Requires Tailwind >= 4.1 (this project is on 4.3).
- */
-@source not "../../dist/**";
-
-/* Docs-site type scale — the four sizes the docs chrome uses below Tailwind's
-   `xs`, plus the shell's brand size, as tokens so no view reaches for a raw
+/* Docs-site type scale — the sizes the docs chrome uses below Tailwind's
+   `xs` (`text-code` comes from pieces.css), plus the shell's brand size, as tokens so no view reaches for a raw
    pixel value (test/demo-theme-guard.test.mjs bans `text-[…]` in the themes
    files). Component docs pages predate this and still carry `text-[13px]`. */
 @theme {
@@ -173,8 +154,6 @@
   --text-2xs--line-height: 0.875rem;
   --text-micro: 0.6875rem;           /* 11px — eyebrows, chip text */
   --text-micro--line-height: 1rem;
-  --text-code: 0.8125rem;            /* 13px — inline code, token names */
-  --text-code--line-height: 1.25rem;
   --text-wordmark: 0.9375rem;          /* 15px — the shell's wordmark */
   --text-wordmark--line-height: 1.25rem;
   /* A corner popover may never outgrow the window: viewport minus the corner
@@ -256,7 +235,7 @@
  * family — Dialog, AlertDialog, Sheet and the docs SearchDialog all paint their
  * scrim on it (BottomSheet is the one exception: its stylesheet hides the
  * element and paints the native ::backdrop instead). The colour and blur stay
- * where each piece puts them (`bg-black/50 backdrop-blur-sm`); this adds the
+ * where each piece puts them (`bg-scrim backdrop-blur-sm`); this adds the
  * site's texture on top, once, so every overlay on the docs site matches.
  *
  * Unlayered on purpose: sheet.css sets the scrim with the `background`

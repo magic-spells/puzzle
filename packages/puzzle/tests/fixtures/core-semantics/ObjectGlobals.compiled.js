@@ -1,4 +1,12 @@
 
+
+
+
+
+
+
+
+        
 import { PuzzleView } from '@magic-spells/puzzle';
 
 // D173 V4 through the Object globals: a missing argument is `{}`, so the count
@@ -37,4 +45,3 @@ ObjectGlobals.prototype.render = function () {
     ]),
   ]);
 };
-ObjectGlobals.__pzlModule = 'ObjectGlobals.pzl';

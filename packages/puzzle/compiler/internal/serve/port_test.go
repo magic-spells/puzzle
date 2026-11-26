@@ -28,7 +28,7 @@ func TestListenUsesRequestedPortWhenFree(t *testing.T) {
 	want, held := occupy(t)
 	held.Close()
 
-	ln, err := Listen(want, false)
+	ln, err := ListenHost("", want, false)
 	if err != nil {
 		t.Fatalf("Listen: %v", err)
 	}
@@ -42,7 +42,7 @@ func TestListenUsesRequestedPortWhenFree(t *testing.T) {
 func TestListenScansPastBusyPort(t *testing.T) {
 	busy, _ := occupy(t)
 
-	ln, err := Listen(busy, false)
+	ln, err := ListenHost("", busy, false)
 	if err != nil {
 		t.Fatalf("Listen should have scanned past a busy port: %v", err)
 	}
@@ -60,7 +60,7 @@ func TestListenScansPastBusyPort(t *testing.T) {
 func TestListenStrictPortFailsOnBusyPort(t *testing.T) {
 	busy, _ := occupy(t)
 
-	ln, err := Listen(busy, true)
+	ln, err := ListenHost("", busy, true)
 	if err == nil {
 		ln.Close()
 		t.Fatalf("strict mode bound port %d, want an error", BoundPort(ln, 0))
@@ -94,7 +94,7 @@ func TestListenExhaustedScanReportsRequestedPort(t *testing.T) {
 		}
 	}()
 
-	ln, err := Listen(first, false)
+	ln, err := ListenHost("", first, false)
 	if err == nil {
 		ln.Close()
 		t.Fatalf("exhausted scan bound port %d, want an error", BoundPort(ln, 0))
@@ -105,9 +105,9 @@ func TestListenExhaustedScanReportsRequestedPort(t *testing.T) {
 }
 
 func TestListenPortZeroTakesAnyFreePort(t *testing.T) {
-	ln, err := Listen(0, false)
+	ln, err := ListenHost("", 0, false)
 	if err != nil {
-		t.Fatalf("Listen(0): %v", err)
+		t.Fatalf("ListenHost(0): %v", err)
 	}
 	defer ln.Close()
 
@@ -119,17 +119,84 @@ func TestListenPortZeroTakesAnyFreePort(t *testing.T) {
 func TestListenRejectsOutOfRangePorts(t *testing.T) {
 	for _, port := range []int{-1, 70000} {
 		t.Run(fmt.Sprintf("%d", port), func(t *testing.T) {
-			ln, err := Listen(port, false)
+			ln, err := ListenHost("", port, false)
 			if ln != nil {
 				ln.Close()
-				t.Errorf("Listen(%d) returned a listener, want nil", port)
+				t.Errorf("ListenHost(%d) returned a listener, want nil", port)
 			}
 			if err == nil {
-				t.Fatalf("Listen(%d) returned nil error", port)
+				t.Fatalf("ListenHost(%d) returned nil error", port)
 			}
 			if !strings.Contains(err.Error(), fmt.Sprintf("%d", port)) {
 				t.Errorf("error should name invalid port %d, got: %v", port, err)
 			}
 		})
+	}
+}
+
+func TestBindHost(t *testing.T) {
+	for host, want := range map[string]string{
+		"":          "127.0.0.1",
+		"localhost": "127.0.0.1",
+		"LocalHost": "127.0.0.1",
+		"0.0.0.0":   "0.0.0.0",
+		"10.0.0.5":  "10.0.0.5",
+		"::":        "::",
+	} {
+		if got := BindHost(host); got != want {
+			t.Errorf("BindHost(%q) = %q, want %q", host, got, want)
+		}
+	}
+}
+
+func TestBannerURLs(t *testing.T) {
+	local, network := Banner("", 3000)
+	if local != "http://localhost:3000/" || network != nil {
+		t.Errorf("default banner = %q %v, want localhost only", local, network)
+	}
+	local, network = Banner("0.0.0.0", 3000)
+	if local != "http://localhost:3000/" {
+		t.Errorf("all-interfaces local = %q", local)
+	}
+	for _, u := range network {
+		if !strings.HasPrefix(u, "http://") || !strings.HasSuffix(u, ":3000/") || strings.Contains(u, "127.0.0.1") {
+			t.Errorf("bad network URL %q", u)
+		}
+	}
+	if local, network = Banner("10.1.2.3", 4000); local != "http://10.1.2.3:4000/" || network != nil {
+		t.Errorf("specific host banner = %q %v", local, network)
+	}
+	if local, _ = Banner("::1", 4000); local != "http://[::1]:4000/" {
+		t.Errorf("IPv6 banner must bracket the address, got %q", local)
+	}
+}
+
+// TestListenHostAllInterfaces binds every interface and is reachable over
+// loopback, the address a --host server is still opened at locally.
+func TestListenHostAllInterfaces(t *testing.T) {
+	ln, err := ListenHost(AllInterfacesHost, 0, false)
+	if err != nil {
+		t.Skipf("cannot bind 0.0.0.0 here: %v", err)
+	}
+	defer ln.Close()
+	addr := ln.Addr().(*net.TCPAddr)
+	if !addr.IP.IsUnspecified() {
+		t.Errorf("bound %v, want the unspecified address", addr.IP)
+	}
+	conn, err := net.Dial("tcp", fmt.Sprintf("127.0.0.1:%d", addr.Port))
+	if err != nil {
+		t.Fatalf("dial loopback: %v", err)
+	}
+	conn.Close()
+}
+
+func TestListenDefaultStaysOnLoopback(t *testing.T) {
+	ln, err := ListenHost("", 0, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+	if ip := ln.Addr().(*net.TCPAddr).IP; !ip.IsLoopback() {
+		t.Errorf("default bind %v is not loopback", ip)
 	}
 }

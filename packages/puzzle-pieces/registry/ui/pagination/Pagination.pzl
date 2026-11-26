@@ -9,7 +9,7 @@
               class={ item.class }
               aria-label="Previous page"
               disabled={ item.disabled }
-              @click={ go(item.page, event) }>
+              @click={ go(item.page) }>
               <svg class="size-4" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <path d="M10 3.5 5.5 8l4.5 4.5" />
               </svg>
@@ -21,7 +21,7 @@
               class={ item.class }
               aria-label="Next page"
               disabled={ item.disabled }
-              @click={ go(item.page, event) }>
+              @click={ go(item.page) }>
               <svg class="size-4" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <path d="M6 3.5 10.5 8 6 12.5" />
               </svg>
@@ -32,7 +32,7 @@
               type="button"
               class={ item.class }
               aria-current={ item.ariaCurrent }
-              @click={ go(item.page, event) }>
+              @click={ go(item.page) }>
               { item.page }
             </button>
           {/if}
@@ -62,14 +62,14 @@ import { PuzzleView } from '@magic-spells/puzzle';
 //   <Pagination page={ page } count={ 20 } @change={ setPage }/>
 //   <Pagination page={ page } count={ 5 } @change={ setPage } class="justify-center"/>
 //
-// The parent applies the new page:  setPage(p) { this.setData({ page: p }); }
+// The parent applies the new page:  setPage(p) { this.setState({ page: p }); }
 //
 // Props:
 //   page    1-based current page (controlled by the parent)
 //   count   total number of pages
 //   class   appended to the root <nav>
 // Callback:
-//   @change(page, event)  fired on a page/prev/next click; NEVER called with the
+//   @change(page)         fired on a page/prev/next click; NEVER called with the
 //                         current page or an out-of-range page (the click is
 //                         guarded and prev/next disable at the ends).
 //
@@ -151,19 +151,19 @@ const CELL_BASE =
   'inline-flex items-center justify-center size-9 rounded-lg text-sm font-medium select-none ' +
   'transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 outline-ring focus-visible:outline-ring';
 
-// Current page — solid brand treatment, matching Button's primary variant.
-const PAGE_ACTIVE = 'bg-brand text-brand-ink cursor-default';
+// Current page — solid ink, matching Button's primary variant.
+const PAGE_ACTIVE = 'bg-ink text-page cursor-default';
 // Other pages — ghost hover, matching Button's ghost variant.
-const PAGE_INACTIVE = 'text-body cursor-pointer hover:bg-surface-sunken hover:text-ink';
+const PAGE_INACTIVE = 'text-body cursor-pointer hover:bg-ink/6 hover:text-ink';
 // Prev/next icon buttons — ghost hover; disabled at the ends (real attr + styles).
 const NAV_BTN =
-  'text-body cursor-pointer hover:bg-surface-sunken hover:text-ink ' +
-  'disabled:opacity-50 disabled:pointer-events-none disabled:cursor-not-allowed';
+  'text-body cursor-pointer not-disabled:hover:bg-ink/6 not-disabled:hover:text-ink ' +
+  'disabled:opacity-50 disabled:cursor-not-allowed';
 
 const ELLIPSIS = 'inline-flex items-center justify-center size-9 text-muted';
 
 export default class Pagination extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     const count = Math.max(0, Math.floor(props.count) || 0);
     const page = Math.min(Math.max(Math.floor(props.page) || 1, 1), Math.max(count, 1));
 
@@ -205,11 +205,11 @@ export default class Pagination extends PuzzleView {
   events = {
     // Guarded so @change never fires with the current page or an out-of-range
     // page. Prev/next are disabled at the ends, but re-check here as a backstop.
-    go: (target, event) => {
+    go: (target) => {
       const { count, page } = this.getData();
       if (target < 1 || target > count || target === page) return;
       const { change } = this.props;
-      if (typeof change === 'function') change(target, event);
+      if (typeof change === 'function') change(target);
     },
   };
 }

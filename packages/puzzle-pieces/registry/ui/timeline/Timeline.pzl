@@ -116,7 +116,7 @@ const ICON_BASE = 'grid size-6 place-items-center rounded-full border bg-surface
 const NUMBER_BASE = ICON_BASE + ' text-xs font-medium tabular-nums leading-none';
 
 export default class Timeline extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     const src = props.items || [];
     const last = src.length - 1;
     const numbered = !!props.numbered;

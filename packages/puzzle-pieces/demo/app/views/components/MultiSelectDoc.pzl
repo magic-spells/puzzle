@@ -116,7 +116,7 @@
             <li><span class="font-medium text-ink">Enter</span> — add the active option (query clears, popup stays open)</li>
             <li><span class="font-medium text-ink">Backspace</span> — on an empty input, remove the last chip</li>
             <li><span class="font-medium text-ink">Escape</span> — close the list</li>
-            <li><span class="font-medium text-ink">Tab</span> — close and move focus on naturally</li>
+            <li><span class="font-medium text-ink">Tab</span> — close and move focus on naturally; Shift+Tab reaches each chip's remove button</li>
           </ul>
           <ExampleBox code={ codeKeyboard }>
             <div class="w-72">
@@ -157,16 +157,16 @@ const codeHero = `const frameworks = [
   { value: 'remix', label: 'Remix' },
   { value: 'astro', label: 'Astro' },
 ];
+// expose it to the template: data() { return { frameworks }; }
 
 // value is an ARRAY; @change fires with the NEXT array on add or remove.
 <MultiSelect options={ frameworks } value={ picks } @change={ setPicks } />`;
 
 const codeBasic = `// Selected options are hidden from the list — the chips carry them.
 // Remove a chip (× or Backspace on an empty input) to re-add it.
-setPicks(next) {
-  this.setData('picks', next);
-  this.refresh();
-}
+events = {
+  setPicks: (next) => this.setState('picks', next),
+};
 
 <MultiSelect
   label="Frameworks"
@@ -188,6 +188,7 @@ const techOptions = [
   { value: 'redis', label: 'Redis' },
   { value: 'mongo', label: 'MongoDB', disabled: true },
 ];
+// expose it to the template: data() { return { techOptions }; }
 
 <MultiSelect options={ techOptions } value={ tech } @change={ setTech } />`;
 
@@ -213,7 +214,7 @@ const codeKeyboard = `<MultiSelect options={ frameworks } value={ picks } @chang
 
 export default class MultiSelectDoc extends PuzzleView {
   created() {
-    this.setData({
+    this.setState({
       picks: ['svelte'],
       basicPicks: ['next', 'astro'],
       tech: ['ts'],
@@ -223,7 +224,7 @@ export default class MultiSelectDoc extends PuzzleView {
     });
   }
 
-  data(params, props) {
+  data() {
     return {
       ...this.getData(),
       installCmd,
@@ -268,32 +269,25 @@ export default class MultiSelectDoc extends PuzzleView {
 
   events = {
     setPicks: (v) => {
-      this.setData('picks', v);
-      this.refresh();
+      this.setState('picks', v);
     },
     setBasicPicks: (v) => {
-      this.setData('basicPicks', v);
-      this.refresh();
+      this.setState('basicPicks', v);
     },
     setTech: (v) => {
-      this.setData('tech', v);
-      this.refresh();
+      this.setState('tech', v);
     },
     setErrPicks: (v) => {
-      this.setData('errPicks', v);
-      this.refresh();
+      this.setState('errPicks', v);
     },
     setControlledPicks: (v) => {
-      this.setData('controlledPicks', v);
-      this.refresh();
+      this.setState('controlledPicks', v);
     },
     onShow: () => {
-      this.setData('msOpen', true);
-      this.refresh();
+      this.setState('msOpen', true);
     },
     onHide: () => {
-      this.setData('msOpen', false);
-      this.refresh();
+      this.setState('msOpen', false);
     },
   };
 }

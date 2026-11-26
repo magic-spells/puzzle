@@ -8,7 +8,7 @@
          clips itself and keeps the bottom corners rounded. -->
     <div class="rounded-xl border border-border">
       <div class={ previewClass }>
-        <Slot/>
+        <Children/>
       </div>
 
       {#if code}
@@ -50,7 +50,7 @@ import Code from '../ui/Code.pzl';
 //          for compact demos (e.g. a lone Kbd) to sit in a shorter box
 //   class  appended to the root <section>
 export default class ExampleBox extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     const tall = props.tall !== false;
     return {
       title: props.title || '',

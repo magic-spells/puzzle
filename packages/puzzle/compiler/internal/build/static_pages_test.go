@@ -168,7 +168,7 @@ func cannedSummary() staticSummary {
 		APIURL:               json.RawMessage(`"https://api.example.com"`),
 		RouterBase:           json.RawMessage(`"/docs"`),
 		HasModels:            true,
-		HasFormatters:        true,
+		HasFunctions:         true,
 		HasAdapter:           true,
 		AdapterConfigured:    false,
 		AdapterModuleMatches: nil,
@@ -192,7 +192,7 @@ func cannedSummary() staticSummary {
 }
 
 // TestStaticEntrySourceFull generates the entry for a page that has a layout and
-// whose app ships both a models registry and a formatters module.
+// whose app ships both a models registry and a functions module.
 func TestStaticEntrySourceFull(t *testing.T) {
 	root := "/abs/app-root"
 	s := cannedSummary()
@@ -202,7 +202,7 @@ func TestStaticEntrySourceFull(t *testing.T) {
 		s.Written[0],
 		s,
 		"app/models/index.ts",
-		"app/formatters.ts",
+		"app/functions.ts",
 		"",
 	)
 	if err != nil {
@@ -214,13 +214,13 @@ func TestStaticEntrySourceFull(t *testing.T) {
 		`import V0 from "/abs/app-root/app/views/Home.pzl";`,
 		`import L0 from "/abs/app-root/app/layouts/Default.pzl";`,
 		`import models from "/abs/app-root/app/models/index.ts";`,
-		`import formatters from "/abs/app-root/app/formatters.ts";`,
+		`import functions from "/abs/app-root/app/functions.ts";`,
 		`target: "#app",`,
 		`views: [V0],`,
 		`layout: L0,`,
 		`route: {"path":"/","params":{},"chain":[{"path":"/","name":"home"}]},`,
 		`models,`,
-		`formatters,`,
+		`functions,`,
 		`adapter,`,
 		`apiURL: "https://api.example.com",`,
 		`routerBase: "/docs",`,
@@ -437,7 +437,7 @@ func TestStaticPrerenderStdinImportsTheAdapterModule(t *testing.T) {
 }
 
 // TestStaticEntrySourceMinimal generates the entry for a layout-less, multi-view
-// page in an app with NO models and NO formatters files: those imports and the
+// page in an app with NO models and NO functions files: those imports and the
 // call shorthands must be omitted, layout is null, apiURL is null.
 func TestStaticEntrySourceMinimal(t *testing.T) {
 	root := "/abs/app-root"
@@ -462,14 +462,14 @@ func TestStaticEntrySourceMinimal(t *testing.T) {
 			t.Errorf("generated entry missing %q\n---\n%s", w, src)
 		}
 	}
-	// No layout import, and no models/formatters imports or shorthands.
+	// No layout import, and no models/functions imports or shorthands.
 	for _, absent := range []string{
 		"import L0",
 		"import models",
-		"import formatters",
+		"import functions",
 		"import { adapter }",
 		"\n  models,",
-		"\n  formatters,",
+		"\n  functions,",
 		"\n  adapter,",
 		"\n  storage:",
 		"\n  routerMode:",
@@ -694,16 +694,19 @@ func TestBuildStaticEmitsPages(t *testing.T) {
 }
 
 // The per-page pass always splits, so production pages preload their shared
-// chunks even when the app never opts into hashed output. Development keeps
-// fixed names and emits no preloads, including with hashNames on.
+// chunks whether or not names are hashed. Production hashes page entries and
+// the stylesheet by default and keeps fixed names with hashNames: false;
+// development keeps fixed names and emits no preloads, even with hashNames on.
 func TestBuildStaticProductionPreloads(t *testing.T) {
 	requireStaticRuntime(t)
 	for _, tc := range []struct {
 		name   string
 		config string
 		dev    bool
+		hashed bool
 	}{
-		{name: "production defaults"},
+		{name: "production defaults", hashed: true},
+		{name: "production opt out", config: "export default { build: { hashNames: false } };\n"},
 		{name: "development with hashing configured", config: "export default { build: { hashNames: true } };\n", dev: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -723,12 +726,21 @@ func TestBuildStaticProductionPreloads(t *testing.T) {
 				htmlPath := filepath.Join(dist, filepath.FromSlash(page.file))
 				html := readFile(t, htmlPath)
 				entry := emittedAsset(t, dist, htmlPath, "_puzzle/"+page.slug+".js")
-				if entry != filepath.Join(dist, staticPagesDir, page.slug+".js") {
-					t.Errorf("%s entry = %s, want its fixed name", page.file, entry)
+				fixedEntry := filepath.Join(dist, staticPagesDir, page.slug+".js")
+				if (entry != fixedEntry) != tc.hashed {
+					t.Errorf("%s entry = %s, hashed want %v", page.file, entry, tc.hashed)
 				}
 				style := emittedAsset(t, dist, htmlPath, "styles.css")
-				if style != filepath.Join(dist, "styles.css") {
-					t.Errorf("%s stylesheet = %s, want styles.css", page.file, style)
+				fixedStyle := filepath.Join(dist, "styles.css")
+				if (style != fixedStyle) != tc.hashed {
+					t.Errorf("%s stylesheet = %s, hashed want %v", page.file, style, tc.hashed)
+				}
+				if tc.hashed {
+					for _, fixed := range []string{fixedEntry, fixedStyle} {
+						if _, err := os.Stat(fixed); !os.IsNotExist(err) {
+							t.Errorf("hashed build still emits fixed %s: %v", fixed, err)
+						}
+					}
 				}
 				for _, asset := range []string{entry, style} {
 					if _, err := os.Stat(asset); err != nil {
@@ -755,6 +767,85 @@ func TestBuildStaticProductionPreloads(t *testing.T) {
 						t.Errorf("%s preload %s does not exist: %v", page.file, href, err)
 					}
 				}
+			}
+		})
+	}
+}
+
+// A script's CSS imports reach only its own page: each page links the sheet
+// esbuild wrote for its graph after the global stylesheet, under the same
+// naming as its module. CSS behind a dynamic import rides in the importing
+// page's sheet, so the lazy chunk's own copy and the unused app.css are gone.
+// Component <style> blocks are minified in production only.
+func TestBuildStaticLinksPageCSS(t *testing.T) {
+	requireStaticRuntime(t)
+	for _, tc := range []struct {
+		name string
+		dev  bool
+	}{{name: "production"}, {name: "development", dev: true}} {
+		t.Run(tc.name, func(t *testing.T) {
+			files := baseSSGFixture()
+			files["app/views/about.css"] = ".about-page { -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px); }\n"
+			files["app/views/lazy.css"] = ".lazy-part { color: green; }\n"
+			files["app/views/lazy.js"] = "import './lazy.css';\nexport const lazy = 1;\n"
+			files["app/views/About.pzl"] = `<puzzle-view>
+  <h1 class="about-page">About</h1>
+</puzzle-view>
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import './about.css';
+export default class About extends PuzzleView {
+  mounted() { import('./lazy.js'); }
+}
+</script>
+<style>
+/* component comment */
+.about-page { color: red; }
+</style>
+`
+			root := writeSSGFixture(t, files)
+			var err error
+			stderr := captureStderr(t, func() { err = Build(root, Options{Development: tc.dev, Output: "static"}) })
+			if err != nil {
+				t.Fatalf("static Build failed: %v", err)
+			}
+			if strings.Contains(stderr, "imported outside") {
+				t.Errorf("CSS every page loads drew a warning: %s", stderr)
+			}
+			dist := filepath.Join(root, "dist")
+			aboutPath := filepath.Join(dist, "about", "index.html")
+			about := readFile(t, aboutPath)
+			sheet := emittedAsset(t, dist, aboutPath, "_puzzle/about.css")
+			if (sheet == filepath.Join(dist, staticPagesDir, "about.css")) == !tc.dev {
+				t.Errorf("page stylesheet %s does not follow the module's naming", sheet)
+			}
+			css := readFile(t, sheet)
+			for _, want := range []string{"-webkit-backdrop-filter", ".lazy-part"} {
+				if !strings.Contains(css, want) {
+					t.Errorf("page stylesheet lacks %s:\n%s", want, css)
+				}
+			}
+			global := strings.Index(about, `rel="stylesheet">`)
+			own := strings.Index(about, `<link rel="stylesheet" href="/_puzzle/about`)
+			if global < 0 || own < global {
+				t.Errorf("page stylesheet must follow the global one:\n%s", about)
+			}
+			if home := readFile(t, filepath.Join(dist, "index.html")); strings.Contains(home, "/_puzzle/about") {
+				t.Errorf("another page links the about stylesheet:\n%s", home)
+			}
+			var sheets []string
+			_ = filepath.WalkDir(dist, func(p string, d fs.DirEntry, err error) error {
+				if err == nil && strings.HasSuffix(p, ".css") {
+					sheets = append(sheets, p)
+				}
+				return err
+			})
+			if len(sheets) != 2 {
+				t.Errorf("want only the global and the about stylesheet, got %v", sheets)
+			}
+			styles := readFile(t, emittedAsset(t, dist, aboutPath, "styles.css"))
+			if strings.Contains(styles, "component comment") != tc.dev {
+				t.Errorf("component <style> blocks minified = %v, want %v:\n%s", !tc.dev, !tc.dev, styles)
 			}
 		})
 	}

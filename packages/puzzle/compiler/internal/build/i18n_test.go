@@ -65,7 +65,7 @@ func TestBuildI18nEmitsOneFilePerLocale(t *testing.T) {
 	if len(names) != 2 {
 		t.Fatalf("dist/locales = %v, want exactly one file per locale", names)
 	}
-	appJS := readFile(t, filepath.Join(dist, "app.js"))
+	appJS := readFile(t, appBundle(t, dist))
 	for _, name := range names {
 		if !hashedLocale.MatchString(name) {
 			t.Errorf("%s is not <tag>.<hash>.json", name)
@@ -98,7 +98,7 @@ func TestBuildWithoutI18nShipsNoI18n(t *testing.T) {
 	if err := Build(root, Options{Config: &cfg}); err != nil {
 		t.Fatalf("Build: %v", err)
 	}
-	appJS := readFile(t, filepath.Join(root, "dist", "app.js"))
+	appJS := readFile(t, appBundle(t, filepath.Join(root, "dist")))
 	for _, marker := range i18nMarkers {
 		if strings.Contains(appJS, marker) {
 			t.Errorf("a bundle without i18n retained %q", marker)
@@ -117,13 +117,13 @@ func TestBuildI18nBadLocaleKeepsLastGoodDist(t *testing.T) {
 	if err := Build(root, Options{Config: &cfg}); err != nil {
 		t.Fatalf("Build: %v", err)
 	}
-	before := readFile(t, filepath.Join(root, "dist", "app.js"))
+	before := readFile(t, appBundle(t, filepath.Join(root, "dist")))
 	write(t, filepath.Join(root, "app", "locales", "es.json"), `{ "home": { "title": 3 } }`)
 	err := Build(root, Options{Config: &cfg})
 	if err == nil || !strings.Contains(err.Error(), `"home.title": a translation must be a string`) {
 		t.Fatalf("expected a positioned locale error, got %v", err)
 	}
-	if after := readFile(t, filepath.Join(root, "dist", "app.js")); after != before {
+	if after := readFile(t, appBundle(t, filepath.Join(root, "dist"))); after != before {
 		t.Fatal("a failed locale load must leave the last good dist/ in place")
 	}
 }
@@ -199,7 +199,7 @@ func TestI18nWarnings(t *testing.T) {
 
 	// Without i18n: `t` used, and an app/locales folder.
 	got := i18nWarnings(root, config.Config{}, usage, nil)
-	if len(got) != 1 || !strings.Contains(got[0], "configures no i18n") || !strings.Contains(got[0], "unless the app registers its own t formatter") {
+	if len(got) != 1 || !strings.Contains(got[0], "configures no i18n") || !strings.Contains(got[0], "unless the app registers its own t function") {
 		t.Fatalf("t without i18n: %q", got)
 	}
 	if err := os.MkdirAll(filepath.Join(root, "app", "locales"), 0o755); err != nil {

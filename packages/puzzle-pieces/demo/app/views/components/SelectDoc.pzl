@@ -230,7 +230,7 @@ const codeHero = `<Select value={ country } placeholder="Pick a country" @change
 
 // parent
 events = {
-  setCountry: (v) => this.setData('country', v),
+  setCountry: (v) => this.setState('country', v),
 };`;
 
 const codeGroups = `// Select.Label is role="presentation"; Select.Divider is role="separator".
@@ -270,8 +270,8 @@ const codeOpen = `// optional-controlled: omit open and the component owns it.
 
 // parent
 events = {
-  onSizeShow: () => this.setData('sizeOpen', true),
-  onSizeHide: () => this.setData('sizeOpen', false),
+  onSizeShow: () => this.setState('sizeOpen', true),
+  onSizeHide: () => this.setState('sizeOpen', false),
 };`;
 
 const codeDynamic = `// The component re-asserts the selected value across a list swap, so a
@@ -308,7 +308,7 @@ const FRUITS_B = [
 
 export default class SelectDoc extends PuzzleView {
   created() {
-    this.setData({
+    this.setState({
       country: '',
       city: '',
       plan: '',
@@ -320,7 +320,7 @@ export default class SelectDoc extends PuzzleView {
     });
   }
 
-  data(params, props) {
+  data() {
     const state = this.getData();
     return {
       ...state,
@@ -354,8 +354,7 @@ export default class SelectDoc extends PuzzleView {
   }
 
   #set(key, value) {
-    this.setData(key, value);
-    this.refresh();
+    this.setState(key, value);
   }
 
   events = {
@@ -368,7 +367,10 @@ export default class SelectDoc extends PuzzleView {
     onSizeHide: () => this.#set('sizeOpen', false),
     toggleSize: () => this.#set('sizeOpen', !this.getData().sizeOpen),
     setFruit: (v) => this.#set('fruit', v),
-    swapFruits: () => this.#set('swapped', !this.getData().swapped),
+    swapFruits: () => {
+      // fruits is derived from swapped in data(); writing swapped re-runs it
+      this.#set('swapped', !this.getData().swapped);
+    },
   };
 }
 </script>

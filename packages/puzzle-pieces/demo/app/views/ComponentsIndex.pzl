@@ -34,7 +34,7 @@ import { COMPONENTS } from '../docs/nav.js';
 // The /components index — a linked card per piece, driven by the same generated
 // nav.js config as the sidebar (descriptions come from each piece.json).
 export default class ComponentsIndex extends PuzzleView {
-  data(params, props) {
+  data() {
     return { components: COMPONENTS, pieceCount: COMPONENTS.length };
   }
 }

@@ -4,7 +4,7 @@
       <div class="mb-3 flex flex-wrap items-center gap-x-4 gap-y-1.5">
         {#for item in legend}
           <div class="flex items-center gap-1.5" key={ item.key }>
-            <span class="size-2 shrink-0 rounded-[2px] { item.swatchClass }"></span>
+            <span class="size-2 shrink-0 rounded-xs { item.swatchClass }"></span>
             <span class="text-sm text-body">{ item.label }</span>
           </div>
         {/for}
@@ -78,7 +78,7 @@
 
       {#if showTooltip}
         <div
-          class="pointer-events-none absolute z-10 min-w-[8rem] -translate-y-1/2 rounded-md border border-border bg-surface px-3 py-2 text-xs shadow-md"
+          class="pointer-events-none absolute z-10 min-w-32 -translate-y-1/2 rounded-md border border-border bg-surface px-3 py-2 text-xs shadow-md"
           style={ tooltipStyle }>
           <div class="mb-1 text-muted">{ tooltipX }</div>
           {#for row in tooltipRows}
@@ -201,9 +201,8 @@ function bandArea(top, bottom) {
 export default class AreaChart extends PuzzleView {
   created() {
     this._cxs = [];
-    this._width = DEFAULT_WIDTH;
     this._ro = null;
-    this.setData({ measuredWidth: 0, hover: null });
+    this.setState({ measuredWidth: 0, hover: null });
   }
 
   mounted() {
@@ -211,7 +210,8 @@ export default class AreaChart extends PuzzleView {
     this._ro = new ResizeObserver((entries) => {
       const w = Math.round(entries[0]?.contentRect?.width || this.element.clientWidth || 0);
       if (w > 0 && w !== this.getData().measuredWidth) {
-        this.setData({ measuredWidth: w });
+        this.setState({ measuredWidth: w });
+        // refresh() on purpose: a ResizeObserver measure has to paint this frame.
         this.refresh();
       }
     });
@@ -223,7 +223,7 @@ export default class AreaChart extends PuzzleView {
     this._ro = null;
   }
 
-  data(params, props) {
+  data({ props }) {
     const rows = Array.isArray(props.data) ? props.data : [];
     const xKey = props.xKey;
     const fmt = typeof props.formatValue === 'function' ? props.formatValue : formatTick;
@@ -241,7 +241,6 @@ export default class AreaChart extends PuzzleView {
     const measured = this.getData().measuredWidth;
     const width = measured > 0 ? measured : DEFAULT_WIDTH;
     const height = Number(props.height) > 0 ? Number(props.height) : 288;
-    this._width = width;
 
     const label = props.label || (series.length ? series.map((s) => s.label).join(', ') : 'Chart');
     const showLegend =
@@ -273,7 +272,7 @@ export default class AreaChart extends PuzzleView {
 
     const tickLabels = domain.ticks.map((t) => formatTick(t));
     const maxTickChars = tickLabels.reduce((m, s) => Math.max(m, s.length), 1);
-    const marginLeft = Math.max(32, maxTickChars * 7 + 10);
+    const marginLeft = showGrid ? Math.max(32, maxTickChars * 7 + 10) : 8;
 
     const plotLeft = marginLeft;
     const plotRight = width - MARGIN_RIGHT;
@@ -420,15 +419,13 @@ export default class AreaChart extends PuzzleView {
       }
       const h = this.getData().hover;
       if (!h || h.index !== best || h.x !== lx || h.y !== ly) {
-        this.setData({ hover: { index: best, x: lx, y: ly } });
-        this.refresh();
+        this.setState({ hover: { index: best, x: lx, y: ly } });
       }
     },
 
     onLeave: () => {
       if (this.getData().hover != null) {
-        this.setData({ hover: null });
-        this.refresh();
+        this.setState({ hover: null });
       }
     },
   };

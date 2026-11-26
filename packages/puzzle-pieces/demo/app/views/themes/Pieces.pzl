@@ -169,8 +169,8 @@ import Sidebar from '@/components/ui/Sidebar.pzl';
 import Toc from '@/components/docs/Toc.pzl';
 import { toast } from '@/components/ui/toast.js';
 
-// Pieces — the gallery page of the themes section. Unlike Compare and Shell it
-// renders NOTHING scoped: every piece below inherits the live data-scheme /
+// Pieces — the gallery page of the themes section. Unlike Compare and the scheme
+// panels it renders NOTHING scoped: every piece below inherits the live data-scheme /
 // data-theme from <html>, so the page itself is the demo. Switching the
 // appearance in the shell's switcher repaints it, which is why the view
 // subscribes rather than reading the appearance once.
@@ -204,7 +204,7 @@ const TOC = [
 
 export default class Pieces extends PuzzleView {
 	created() {
-		this.setData({
+		this.setState({
 			name: 'Acme',
 			email: 'ada@example.com',
 			notes: 'Adds the dim and mixed styles to every palette.',
@@ -214,7 +214,7 @@ export default class Pieces extends PuzzleView {
 		});
 	}
 
-	data(params, props) {
+	data() {
 		const live = current();
 		// A null mode follows the OS; resolve it so the line can name a mode.
 		// Guarded, because data() also runs under Node during prerender.
@@ -239,33 +239,26 @@ export default class Pieces extends PuzzleView {
 
 	events = {
 		setName: (value) => {
-			this.setData({ name: value });
-			this.refresh();
+			this.setState({ name: value });
 		},
 		setEmail: (value) => {
-			this.setData({ email: value });
-			this.refresh();
+			this.setState({ email: value });
 		},
 		setNotes: (value) => {
-			this.setData({ notes: value });
-			this.refresh();
+			this.setState({ notes: value });
 		},
 		setDigest: (value) => {
-			this.setData({ digest: value });
-			this.refresh();
+			this.setState({ digest: value });
 		},
 		setCalm: (value) => {
-			this.setData({ calm: value });
-			this.refresh();
+			this.setState({ calm: value });
 		},
 		fireToast: () => toast({ title: 'Published', message: 'The post is now live.', variant: 'success' }),
 		openDialog: () => {
-			this.setData({ dialogOpen: true });
-			this.refresh();
+			this.setState({ dialogOpen: true });
 		},
 		closeDialog: () => {
-			this.setData({ dialogOpen: false });
-			this.refresh();
+			this.setState({ dialogOpen: false });
 		},
 	};
 }

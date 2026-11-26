@@ -1,8 +1,7 @@
-
+        
 import { PuzzleView } from '@magic-spells/puzzle';
 import Card from './Card.pzl';
 export default class Conditional extends PuzzleView {
-  data(_params, props) { return props; }
 }
 
 import { ViewNode, dynamicComponent as __dc } from '@magic-spells/puzzle';
@@ -38,4 +37,3 @@ Conditional.prototype.render = function () {
     new ViewNode('input', { class: 'after' }, []),
   ]);
 };
-Conditional.__pzlModule = 'Conditional.pzl';

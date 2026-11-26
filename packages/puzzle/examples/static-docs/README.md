@@ -16,7 +16,7 @@ JavaScript runs. What makes this *static* (as of D81) is what the output does
   `<a>` full page load, exactly like a hand-written HTML site. `dist/` contains no
   `app.js`.
 - **Only the JavaScript each page needs.** Every page gets a small generated ES
-  module (`dist/_puzzle/<slug>.js`) that imports `mountStatic` from
+  module (`dist/_puzzle/<slug>-<hash>.js`) that imports `mountStatic` from
   `@magic-spells/puzzle/static` plus *that page's* view/layout classes. Shared
   components and the view-layer runtime are split into cached chunks under
   `dist/_puzzle/chunks/`. A page pays for its own components, nothing more.
@@ -28,7 +28,7 @@ JavaScript runs. What makes this *static* (as of D81) is what the output does
 
 The page still becomes interactive: `mountStatic` mounts the view tree over the
 prerendered markup (flash-free, since it re-renders identically), so event
-handlers, local `setData` state, and store mutations all work. It's an
+handlers, local `setState` state, and store mutations all work. It's an
 interactive *document*, not an SPA.
 
 ### `static` vs `hybrid`
@@ -65,9 +65,9 @@ live reload. A `hybrid` project still develops as the SPA.
 
 | Command | Output |
 | --- | --- |
-| `puzzle build` (no `output`) | A normal **SPA**: one `dist/index.html` shell + `app.js` + `styles.css`. |
-| `puzzle build --static` / `output: 'static'` | **True static pages**: per-route HTML + per-page modules, no `app.js`. |
-| `puzzle build --hybrid` / `output: 'hybrid'` | **Prerendered SPA**: per-route HTML + the shared `app.js`, router takeover. |
+| `puzzle build` (no `output`) | A normal **SPA**: one `dist/index.html` shell + `app-<hash>.js` + `styles-<hash>.css`. |
+| `puzzle build --static` / `output: 'static'` | **True static pages**: per-route HTML + per-page modules, no app bundle. |
+| `puzzle build --hybrid` / `output: 'hybrid'` | **Prerendered SPA**: per-route HTML + the shared `app-<hash>.js`, router takeover. |
 
 This example turns static output on via `output: 'static'` in
 [`puzzle.config.js`](./puzzle.config.js). The command-line equivalent is
@@ -88,16 +88,18 @@ dist/
 ├── about/index.html               # /about       → seeded records rendered in
 ├── guide/index.html               # /guide       → nested shell + index child
 ├── guide/templates/index.html     # /guide/templates → nested sibling child
+├── principles/p1/index.html       # /principles/:id → one page per staticPaths entry (p1, p2, p3)
 ├── playground/index.html          # /playground  → empty-target shell (client-rendered island)
 ├── 404.html                       # *            → catch-all, served for unknown URLs
-├── styles.css                     # compiled Tailwind
+├── styles-<hash>.css              # compiled Tailwind
 └── _puzzle/
-    ├── index.js                   # per-page entry: mountStatic + Home's classes
-    ├── about.js                   # per-page entry: mountStatic + About's classes
-    ├── guide.js
-    ├── guide--templates.js        # slug collisions get a '--' join
-    ├── playground.js
-    ├── 404.js
+    ├── index-<hash>.js            # per-page entry: mountStatic + Home's classes
+    ├── about-<hash>.js            # per-page entry: mountStatic + About's classes
+    ├── guide-<hash>.js
+    ├── guide--templates-<hash>.js # a nested path joins its segments with '--'
+    ├── principles--_id-<hash>.js  # one module for every principle page
+    ├── playground-<hash>.js
+    ├── 404-<hash>.js
     └── chunks/                    # shared components + the view-layer runtime
 ```
 
@@ -105,7 +107,7 @@ There is **no `app.js`** in `dist/`. Each prerendered page is the
 `public/index.html` shell with the route's markup injected into the `#app` element
 (stamped `data-puzzle-static`), the shell `<title>` replaced by the route's
 `meta.title`, the inline data island added, and the `/app.js` script tag swapped
-for the page's own `/_puzzle/<slug>.js` module. Pages link absolute paths, so they
+for the page's own `/_puzzle/<slug>-<hash>.js` module. Pages link absolute paths, so they
 work at any depth.
 
 ### Things this example exercises
@@ -120,9 +122,10 @@ work at any depth.
   child at `dist/guide/index.html`, while the templates sibling sets
   `description: null` — explicit suppression — so
   `dist/guide/templates/index.html` ships no description tags at all. Values
-  are static strings only; the same fields stay synced across SPA navigation in
-  hybrid/SPA builds.
-- **Nested routes + the title walk.** `/guide` is a shell view with a `<Slot/>`,
+  are static strings only. In hybrid/SPA builds only `title` follows client-side
+  navigation; the description and social tags are written into each prerendered
+  page at build time.
+- **Nested routes + the title walk.** `/guide` is a shell view with an `<Outlet/>`,
   an **index child** (`path: ''`, no `meta.title` → inherits the shell's *"Guide ·
   …"*) and a **sibling child** (`path: 'templates'`, its own title wins at
   `/guide/templates/`). Open the two pages and watch the browser tab.
@@ -133,33 +136,37 @@ work at any depth.
   rehydrates it before re-rendering — the browser sees the same records with no
   fetch and no re-run of `beforeMount`.
 - **App functions that work at build time *and* client-side.** `titlecase` and
-  `plural` live in [`app/formatters.js`](./app/formatters.js). The static build
-  reads the `formatters` map from that file so they exist in each page's module and
+  `plural` live in [`app/functions.js`](./app/functions.js). The static build
+  reads the `functions` map from that file so they exist in each page's module and
   re-render identically after mount. Functions registered **only** in the
   `app.js` config would render at build time but be missing client-side — the
-  build warns about that; keeping them in `app/formatters.js` is the fix. Models
+  build warns about that; keeping them in `app/functions.js` is the fix. Models
   come from [`app/models/index.js`](./app/models/index.js) the same way.
 - **Static, then interactive.** The Home page's counter is prerendered showing
-  *"Clicked 0 times"*. Load `dist/index.html`, then **click the button** — the
+  *"Clicked 0 times"*. Serve `dist/` (see *Serving `dist/`* below), open `/`,
+  then **click the button** — the
   page's module has mounted the view over the very same DOM, flash-free, and the
   counter (and its `plural` function) is now live. No router involved.
 
-### Dynamic routes are skipped (conceptual)
+### Dynamic routes need `staticPaths`
 
-A dynamic route (`/tags/:tag` and the like) carries a `:param` the static build
-can't enumerate, so it is **skipped with a warning** and writes no file — the
-static build renders concrete paths only. A `staticPaths()` enumeration hook is
-the planned follow-up. This example has no dynamic route, but if you added one
-you'd see it in the build output:
+The build can't guess which values a `:param` takes, so a dynamic route lists
+them. `/principles/:id` in [`routes.js`](./app/routes.js) sets
+`staticPaths: 'principle'`: one page per `principle` record that `beforeMount`
+seeds, written to `dist/principles/<id>/index.html`. All three pages share one
+module. `staticPaths` can also be an array of params objects, or a build-time
+function `({ store, config }) => [...]`.
+
+A `:param` route without `staticPaths` is **skipped with a warning** and writes
+no file:
 
 ```
-! [puzzle] skipped dynamic route "/tags/:tag" — SSG v1 renders static paths only …
-! skipped /tags/:tag (dynamic)
+! [puzzle] skipped dynamic route "/tags/:tag" — a :param route is prerendered only when it lists its values in a `staticPaths` route field
 ```
 
-Because there is no router in the output, a dynamic route would have no way to run
-client-side either — dynamic content in static mode belongs behind `staticPaths()`
-(future) or a `prerender: false` island that fetches at runtime.
+There is no router in the output, so a skipped route can't run client-side
+either. List its values with `staticPaths`, or load the content at runtime in
+a `prerender: false` island.
 
 ### The `prerender: false` island (escape hatch)
 
@@ -182,7 +189,8 @@ not emitted*.) In `hybrid` mode the same route also serves the live router's 404
 for unmatched client paths; in static mode there is no client router, so the file
 is what does the work.
 
-Open `dist/404.html` directly to see it.
+Serve `dist/` and open `/404.html` to see it; under `puzzle preview` any path
+that maps to no file gets it, with a 404 status.
 
 ## Serving `dist/`
 
@@ -196,7 +204,7 @@ python3 -m http.server -d dist 8080
 
 Because the pages are directory-style (`dist/guide/index.html`), the live URLs are
 **directory URLs** (`/guide/`, `/guide/templates/`), and navigation between them is
-ordinary `<a href="/guide/">` page loads. No history-API fallback is required —
+ordinary `<a href="/guide">` page loads. No history-API fallback is required —
 every URL maps to a real file on disk.
 
 ## Files
@@ -206,22 +214,23 @@ static-docs/
 ├── puzzle.config.js               # output: 'static'
 ├── app/
 │   ├── app.js                     # export default app + build-time beforeMount seed
-│   ├── routes.js                  # static + nested + prerender:false + catch-all
-│   ├── formatters.js              # titlecase + plural (available build-time AND client-side)
+│   ├── routes.js                  # static + nested + staticPaths + prerender:false + catch-all
+│   ├── functions.js               # titlecase + plural (available build-time AND client-side)
 │   ├── models/
 │   │   ├── index.js
 │   │   └── principle.js           # trivial build-time model
 │   ├── styles/styles.css          # Tailwind v4, "warm paper" theme
 │   ├── public/index.html          # the shell (empty #app; /app.js tag stripped in static mode)
-│   ├── components/ContentCard.pzl # card chrome the layout forwards <Slot/> through (D69)
-│   ├── layouts/Default.pzl        # nav + footer chrome around <Slot/>
+│   ├── components/ContentCard.pzl # card chrome the layout forwards <Outlet/> through (D71)
+│   ├── layouts/Default.pzl        # nav + footer chrome around <Outlet/>
 │   └── views/
 │       ├── Home.pzl               # interactive counter (client-mount demo)
 │       ├── About.pzl              # reads seeded records in data()
+│       ├── Principle.pzl          # /principles/:id, one page per record (staticPaths)
 │       ├── Playground.pzl         # prerender:false client-rendered island
 │       ├── NotFound.pzl           # catch-all '*' → dist/404.html
 │       └── guide/
-│           ├── GuideShell.pzl     # nested shell with <Slot/>
+│           ├── GuideShell.pzl     # nested shell with <Outlet/>
 │           ├── GuideIndex.pzl     # index child (path: '')
 │           └── GuideTemplates.pzl # sibling child (path: 'templates')
 ```

@@ -10,7 +10,7 @@ import (
 )
 
 // lexer.go is the HTML-aware template lexer
-// (packages/puzzle/constellation/doc/DOC-COMPILER-DESIGN.md §c). It tokenizes the
+// (packages/puzzle/constellation/doc/DOC-COMPILER-DESIGN.md, "The lane" step 1). It tokenizes the
 // <puzzle-view> CONTENT only — <script>/<style> bodies are never scanned for
 // template syntax (that split happens in sections.go).
 //
@@ -161,9 +161,9 @@ func (l *lexer) errf(line, col int, format string, args ...any) error {
 }
 
 // Next returns the next token.
-func (l *lexer) Next() (Token, error) {
+func (l *lexer) Next(opts ...Options) (Token, error) {
 	if l.mode == modeTag {
-		return l.nextTag()
+		return l.nextTag(pickOptions(opts))
 	}
 	return l.nextText()
 }
@@ -201,7 +201,7 @@ func (l *lexer) lexRawText() (Token, error) {
 }
 
 // lexText scans literal text until the next '<' or unescaped '{'. \{ and \}
-// become literal braces (packages/puzzle/constellation/doc/DOC-COMPILER-DESIGN.md §c).
+// become literal braces (packages/puzzle/constellation/doc/DOC-SPEC.md §6).
 func (l *lexer) lexText() (Token, error) {
 	line, col, off := l.line, l.col, l.baseOffset+l.pos
 	var sb strings.Builder
@@ -364,7 +364,7 @@ func (l *lexer) lexBrace() (Token, error) {
 
 // nextTag tokenizes inside an open tag: attribute names, '=', values, and the
 // tag terminators.
-func (l *lexer) nextTag() (Token, error) {
+func (l *lexer) nextTag(opts Options) (Token, error) {
 	for l.pos < len(l.input) && isSpaceByte(l.cur()) {
 		l.step()
 	}
@@ -422,7 +422,7 @@ func (l *lexer) nextTag() (Token, error) {
 			l.expectValue = false
 			return Token{Type: TokAttrBare, Value: val, Raw: raw, Line: line, Col: col, Offset: off}, nil
 		}
-		if c == '@' || isNameStart(c) || attrStartRuneLen(l.input[l.pos:]) > 0 {
+		if c == ':' || c == '@' || isNameStart(c) || attrStartRuneLen(l.input[l.pos:]) > 0 {
 			j := l.pos
 			if c == '@' {
 				j++
@@ -437,6 +437,16 @@ func (l *lexer) nextTag() (Token, error) {
 				}
 			}
 			name := l.input[l.pos:j]
+			// A leading colon stays a lexical error, with the same name-based
+			// steer as other foreign attributes, on elements and components.
+			if c == ':' {
+				if !raw {
+					if e := checkAttrName(name, Position{Line: line, Col: col, Offset: off}, l.file, false, opts); e != nil {
+						return Token{}, e
+					}
+				}
+				return Token{}, l.errf(line, col, "unexpected character %q in tag", ":")
+			}
 			l.jumpTo(j)
 			return Token{Type: TokAttrName, Value: name, Raw: raw, Line: line, Col: col, Offset: off}, nil
 		}

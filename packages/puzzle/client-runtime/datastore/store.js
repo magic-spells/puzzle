@@ -1,5 +1,5 @@
 /**
- * Store — the reactive datastore (constellation/doc/DOC-SPEC.md §8, constellation/doc/DOC-RUNTIME-KERNEL.md).
+ * Store — the reactive datastore (constellation/doc/DOC-SPEC.md §8, constellation/component/COMPONENT-STORE.md).
  *
  * Records ARE instances of the registered model classes (PuzzleModel
  * subclasses). Queries made inside a tracking scope (a component's data()
@@ -47,7 +47,7 @@ const RELS_INSTALLED = Symbol('puzzleRelationshipsInstalled');
 /**
  * D161 tracked-read attribution. A subscriber that reads the store through its
  * own HANDLE (a Proxy minted by `_handleFor`, adapter-side) carries that
- * handle's context here: `{ requests, dead }`. `withTracking` installs the
+ * handle's context here: `{ requests }`. `withTracking` installs the
  * evaluation's request map on the SUBSCRIBER'S context rather than on the
  * Store, so faulting is attributed by object identity — only reads made through
  * that handle, by that subscriber, during that evaluation can queue a fetch.
@@ -79,6 +79,24 @@ export const HANDLE_CTX = Symbol('puzzleStoreHandleCtx');
  */
 
 /** @typedef {import('../model.js').RelationshipDef} RelationshipDef */
+
+// D193 dev nudge: a findMany `query` is a server param, so without the adapter
+// capability it can only be ignored. Once per type, so a list that renders on
+// every frame does not flood the console.
+/** @type {Set<string> | undefined} */
+let warnedQueryTypes;
+
+/**
+ * @param {string} type
+ */
+function warnQueryWithoutAdapter(type) {
+	warnedQueryTypes ??= new Set();
+	if (warnedQueryTypes.has(type)) return;
+	warnedQueryTypes.add(type);
+	console.warn(
+		`[puzzle] findMany('${type}', { query }) needs the adapter capability — pass \`adapter\` from '@magic-spells/puzzle/adapter' to PuzzleApp. Without it the query is ignored and every local '${type}' record is returned.`
+	);
+}
 
 /**
  * Dev-only registration guards, run once from the constructor.
@@ -123,19 +141,18 @@ function assertModelSchemas(models) {
 export class Store {
 	/**
 	 * @param {object} models   type name → model class (from PuzzleApp config)
-	 * @param {{ storage?: Pick<Storage, 'getItem' | 'setItem'> | null, storageKey?: string, apiURL?: string,
+	 * @param {{ storage?: Pick<Storage, 'getItem' | 'setItem'> | null, apiURL?: string,
 	 *   adapter?: import('../capabilities.js').AdapterCapability, beforeRequest?: Function }} [options]
-	 *   { storage, storageKey, apiURL, adapter, beforeRequest } —
+	 *   { storage, apiURL, adapter, beforeRequest } —
 	 *   storage is any Storage-like object (getItem/setItem); pass
-	 *   window.localStorage to persist. apiURL is the base for the D21 server read
-	 *   path. adapter is the opaque app capability retained for the optional module;
+	 *   window.localStorage to persist under the key 'puzzle-store'. apiURL is
+	 *   the base for the D21 server read path. adapter is the opaque app capability retained for the optional module;
 	 *   core never imports or interprets it. beforeRequest is the adapter request
 	 *   hook (v1.55, D91) — see _fetch.
 	 */
 	constructor(models = {}, options = {}) {
 		this.models = /** @type {Record<string, typeof PuzzleModel>} */ (models);
 		this.storage = options.storage || null;
-		this.storageKey = options.storageKey || 'puzzle-store';
 		this.apiURL = options.apiURL || '';
 		this._a = options.adapter;
 		// Adapter request hook (v1.55, D91). Stored ONLY when it is a function, so
@@ -173,15 +190,6 @@ export class Store {
 		// one that postdates it — see _deliverNotifications and D161.
 		this._pendingKeys = new Map();
 		this._notifySeq = 0;
-		// The highest sequence in the batch currently being DELIVERED, or 0 outside
-		// delivery (D170, flush-sequence dedupe). A refresh started while this is
-		// non-zero — a parent's applyParentUpdate reaching a child that also
-		// subscribes to the same record — commits a model that already reflects
-		// every mutation in the batch, so it stamps this onto its own
-		// `_settleMark` and the child's own onStoreChange(seq) for that batch
-		// takes the existing `seq <= _settleMark` early return. One flush, one
-		// data() run.
-		this._flushSeq = 0;
 		this._flushScheduled = false;
 		this._persistPending = false; // dirty flag: storage write is batched into flush()
 		// Both authoring guards run BEFORE _installRelationships so a relationship
@@ -333,7 +341,7 @@ export class Store {
 	 * @returns {StoreRecord}
 	 */
 	createRecord(type, data = {}) {
-		const record = this._instantiate(type, data, 'throw', true);
+		const record = this._instantiate(type, data, true);
 		this._notify(type, record[this.modelFor(type).primaryKey()]);
 		this._persist();
 		return record;
@@ -342,11 +350,6 @@ export class Store {
 	/**
 	 * @param {string} type
 	 * @param {Record<string, any>} data
-	 * @param {'throw'|'skip'} [onDuplicate='throw'] how to handle an explicit
-	 *   primary key that already indexes a live record. createRecord/_upsert
-	 *   throw (a duplicate id is a programming error); _load skips (keep the
-	 *   first hydrated record, warn) so a corrupt storage blob can't crash
-	 *   startup. Generated ids never collide (_genId probes the map).
 	 * @param {boolean} [validate=false] enforce schema validation rules
 	 *   (constellation/doc/DOC-SPEC.md §20, D48). Only createRecord passes true;
 	 *   hydration (_load) and server upserts (_upsert) leave it false — the
@@ -354,7 +357,7 @@ export class Store {
 	 *   read path may crash on data that would fail local validation.
 	 * @returns {StoreRecord}
 	 */
-	_instantiate(type, data, onDuplicate = 'throw', validate = false) {
+	_instantiate(type, data, validate = false) {
 		const Model = this.modelFor(type);
 		const map = this._typeMap(type);
 		const pk = Model.primaryKey();
@@ -377,13 +380,10 @@ export class Store {
 			if (errors.length) throw new PuzzleValidationError(errors);
 		}
 
+		// A duplicate id is a programming error; hydration resolves its own
+		// duplicates before it calls here. Generated ids never collide (_genId
+		// probes the map).
 		if (map.has(recordKey(withDefaults[pk]))) {
-			if (onDuplicate === 'skip') {
-				console.warn(
-					`[puzzle] duplicate primary key ${JSON.stringify(withDefaults[pk])} for model "${type}" during hydration — keeping the first record, skipping the rest`
-				);
-				return map.get(recordKey(withDefaults[pk]));
-			}
 			throw new Error(
 				`[puzzle] duplicate primary key ${JSON.stringify(withDefaults[pk])} for model "${type}" — a record with that ${pk} already exists`
 			);
@@ -433,10 +433,17 @@ export class Store {
 	}
 
 	/**
+	 * Query a collection. `filter` is a local predicate. `query` holds server
+	 * params (D193) and only means something once the adapter capability is
+	 * installed — the adapter replaces this method with one that reads a query's
+	 * cached rows. On an adapter-free store it is ignored, with a dev warning.
 	 * @param {string} type
-	 * @param {import('../../types/index.js').FindManyOptions} [options] { filter: (record) => boolean }
+	 * @param {import('../../types/index.js').FindManyOptions} [options] { filter, query }
 	 */
 	findMany(type, options = {}) {
+		if ((typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) && options.query != null) {
+			warnQueryWithoutAdapter(type);
+		}
 		return this._findManyLocal(type, options);
 	}
 
@@ -972,12 +979,7 @@ export class Store {
 		// The key that carried that sequence rides along for the membership
 		// re-check below.
 		const targets = new Map();
-		// The batch's highest sequence, tracked in the pass that already walks it
-		// (one comparison per key, no allocation). Published as `_flushSeq` for the
-		// duration of delivery — see the field's note and D170 (flush-sequence dedupe).
-		let flushSeq = 0;
 		for (const [key, seq] of pending) {
-			if (seq > flushSeq) flushSeq = seq;
 			const subs = this.subscribersByKey.get(key);
 			if (!subs) continue;
 			for (const sub of subs) {
@@ -995,54 +997,38 @@ export class Store {
 			keys = pending.map(([key]) => key);
 			notified = new Set();
 		}
-		// Publish the delivering sequence around the loop ONLY (D170,
-		// flush-sequence dedupe): a refresh started from inside delivery — a
-		// parent's applyParentUpdate, a subscriber calling refresh() on someone
-		// else — is what reads it, and a refresh outside delivery must read 0 and
-		// stamp nothing. Reset in a
-		// `finally` because a subscriber's synchronous throw is caught per
-		// subscriber INSIDE the loop, but the devperf/devtools tail below and every
-		// later flush still have to see a clean slot. A re-entrant flush() (a
-		// subscriber calling store.flush() synchronously) leaves 0 behind for the
-		// outer loop's remaining subscribers, which only loses the dedupe — it can
-		// never suppress a notification that should have been delivered.
-		this._flushSeq = flushSeq;
-		try {
-			for (const [sub, [seq, key]] of targets) {
-				// Membership is re-checked at CALL time, not just at gather time: an
-				// earlier subscriber in this same batch may have unsubscribed this one
-				// (a parent's data() destroying a child, an app callback removing
-				// another). Delivering to a subscriber that asked to stop is a bug the
-				// gather pass cannot see — a `store.observe()` callback has no
-				// destroyed-guard of its own, so this is its only protection. The test
-				// is the set this subscriber was GATHERED from, which is what
-				// unsubscribe() empties, rather than the keysBySubscriber side index.
-				if (!this.subscribersByKey.get(key)?.has(sub)) continue;
-				if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) notified.add(sub);
-				// Each subscriber is isolated: a synchronous throw is logged and
-				// delivery CONTINUES to the remaining subscribers. Without this a
-				// single throwing subscriber would both skip every later subscriber
-				// AND lose those notifications for good — _pendingKeys was already
-				// cleared above, so they never come back. Function subscribers may
-				// also return a thenable; a rejection is logged the same way. Object
-				// subscribers route through onStoreChange(), which catches its own
-				// async failures and returns undefined, so only the function path
-				// needs the thenable guard (no double-logging).
-				try {
-					if (typeof sub === 'function') {
-						const result = sub();
-						if (result && typeof result.then === 'function') {
-							/** @type {Promise<unknown>} */ (result).catch((err) => console.error('[puzzle] store subscriber failed:', err));
-						}
-					} else {
-						sub.onStoreChange?.(seq);
+		for (const [sub, [seq, key]] of targets) {
+			// Membership is re-checked at CALL time, not just at gather time: an
+			// earlier subscriber in this same batch may have unsubscribed this one
+			// (a parent's data() destroying a child, an app callback removing
+			// another). Delivering to a subscriber that asked to stop is a bug the
+			// gather pass cannot see — a `store.observe()` callback has no
+			// destroyed-guard of its own, so this is its only protection. The test
+			// is the set this subscriber was GATHERED from, which is what
+			// unsubscribe() empties, rather than the keysBySubscriber side index.
+			if (!this.subscribersByKey.get(key)?.has(sub)) continue;
+			if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) notified.add(sub);
+			// Each subscriber is isolated: a synchronous throw is logged and
+			// delivery CONTINUES to the remaining subscribers. Without this a
+			// single throwing subscriber would both skip every later subscriber
+			// AND lose those notifications for good — _pendingKeys was already
+			// cleared above, so they never come back. Function subscribers may
+			// also return a thenable; a rejection is logged the same way. Object
+			// subscribers route through onStoreChange(), which catches its own
+			// async failures and returns undefined, so only the function path
+			// needs the thenable guard (no double-logging).
+			try {
+				if (typeof sub === 'function') {
+					const result = sub();
+					if (result && typeof result.then === 'function') {
+						/** @type {Promise<unknown>} */ (result).catch((err) => console.error('[puzzle] store subscriber failed:', err));
 					}
-				} catch (err) {
-					console.error('[puzzle] store subscriber failed:', err);
+				} else {
+					sub.onStoreChange?.(seq);
 				}
+			} catch (err) {
+				console.error('[puzzle] store subscriber failed:', err);
 			}
-		} finally {
-			this._flushSeq = 0;
 		}
 
 		// DevTools bridge (constellation/doc/DOC-SPEC.md §27, D100): report the batch
@@ -1098,37 +1084,25 @@ export class Store {
 	_persistNow() {
 		if (!this.storage) return;
 		try {
-			this.storage.setItem(this.storageKey, JSON.stringify(this._serializeAll()));
+			this.storage.setItem('puzzle-store', JSON.stringify(this._serializeAll()));
 		} catch {
 			// storage full / unavailable — persistence is best-effort
 		}
 	}
 
+	/**
+	 * Fail-soft end to end: _load() runs from the constructor, so anything it
+	 * throws — an unavailable storage, an unparseable blob, a hydration shape
+	 * _hydrateAll cannot recognise — would escape PuzzleApp construction and leave
+	 * a permanently blank page, with the bad blob still in storage so a reload
+	 * crashes again. Whatever hydrated before a failure is kept; the rest is
+	 * dropped with a warning. The HMR restore path calls _hydrateAll directly and
+	 * still propagates — that one is developer-facing.
+	 */
 	_load() {
-		let raw;
 		try {
-			raw = this.storage.getItem(this.storageKey);
-		} catch {
-			return;
-		}
-		if (!raw) return;
-
-		let data;
-		try {
-			data = JSON.parse(raw);
-		} catch {
-			return;
-		}
-		// Hydration is inside the guard too: _load() runs from the constructor, so
-		// anything it throws escapes PuzzleApp construction and leaves a permanently
-		// blank page — the bad blob is still in storage, so a reload crashes again.
-		// _hydrateAll's own fail-soft guards only cover shapes it can recognise
-		// (non-object data, per-record garbage); this catches the rest. Whatever
-		// hydrated before the failure is kept; the rest of the blob is dropped.
-		// The HMR restore path calls _hydrateAll directly and still propagates —
-		// that one is developer-facing.
-		try {
-			this._hydrateAll(data);
+			const raw = this.storage.getItem('puzzle-store');
+			if (raw) this._hydrateAll(JSON.parse(raw));
 		} catch (err) {
 			console.warn('[puzzle] ignoring corrupt persisted store:', err);
 		}
@@ -1181,18 +1155,19 @@ export class Store {
 
 				const id = fields[pk];
 				const existing = id != null ? this._typeMap(type).get(recordKey(id)) : null;
-				if (existing && replace) {
-					// Overwrite in place — preserve identity (mirror _upsert's update
-					// branch), silent, no dup warning (replacing is the intent here).
-					safeMerge(existing, fields);
+				if (existing) {
+					// Replace overwrites in place, preserving identity (mirror _upsert's
+					// update branch); skip keeps the first record and warns.
+					if (replace) safeMerge(existing, fields);
+					else {
+						console.warn(
+							`[puzzle] duplicate primary key ${JSON.stringify(id)} for model "${type}" during hydration — keeping the first record, skipping the rest`
+						);
+					}
 					existing._synced = syncedTo;
 					continue;
 				}
-				// Skip-dup path (default), OR replace mode with no existing record:
-				// instantiate, keeping the first on a duplicate pk (warns in that case).
-				const record = this._instantiate(type, fields, 'skip'); // silent: no notify
-				// Guard the skip-dup case where _instantiate hands back an existing record.
-				if (record) record._synced = syncedTo;
+				this._instantiate(type, fields)._synced = syncedTo; // silent: no notify
 			}
 		}
 	}

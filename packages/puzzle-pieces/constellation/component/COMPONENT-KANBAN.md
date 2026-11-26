@@ -1,6 +1,6 @@
 ---
 name: Kanban
-status: built
+status: verified
 framework: puzzle
 props:
   - name: columns
@@ -27,11 +27,24 @@ connections:
 notes:
   - kind: gotcha
     text: >-
-      The `_refocusGrabbed` marker for a keyboard cross-column move must be set AFTER the
-      announcement setData/refresh(), not before: refresh() runs afterUpdate() synchronously, and
-      afterUpdate() consumes and clears the marker — so a marker set first was eaten by the
-      announcement render and focus fell to <body> on the parent's real re-render. Fixed 2026-09-04
-      (Astra review F6) by moving the assignment to just before `_emitMove()`.
+      The keyboard cross-column move keeps its `this.refresh()` on purpose and sets the
+      `_refocusGrabbed` marker after it. refresh() runs afterUpdate() synchronously and
+      afterUpdate() consumes the marker; a marker set first, or a setState() render alone, is eaten
+      before the parent's re-render and focus falls to <body>.
+  - kind: state
+    text: >-
+      Keyboard Escape on a held card drops it where it is, like Space/Enter, and announces "Dropped
+      …": each arrow press already emitted a committed @move, so there is nothing to revert. A
+      pointer drag still cancels on Escape with no @move. KanbanCard is content-only: a `display:
+      contents` root and one `card` prop. The card surface, ghost chrome and drag handlers live in
+      Kanban.pzl.
+  - kind: state
+    text: >-
+      KanbanCard's assignee initials disc is `hsl(hue 45% 32%)`, the same formula as Avatar and
+      ChatMessage. L32 is the highest lightness at S45 where white initials pass WCAG AA on every
+      hue. Keep the three copies in step.
+verified_at: '2026-11-24T18:13:21.786Z'
+verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
 ---
 
 # Kanban

@@ -28,7 +28,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 //   class  merged onto the group
 
 export default class Group extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     return {
       groupLabel: props.label != null ? String(props.label) : false,
       groupClass: props.class || false,

@@ -4,35 +4,6 @@
 // here instead. tests/release-checks.test.js is the suite.
 
 /**
- * The compatibility-fallback notice `puzzle add piece` prints on stderr when no
- * pieces release exists on the CLI's own major.minor line and it silently drops
- * to an older one (compiler/internal/pieces/npm.go, resolve()).
- *
- * That fallback is CORRECT behaviour for a user on a fresh install — the CLI can
- * ship before the matching pieces minor exists — and a RELEASE DEFECT for us: it
- * means we published the framework without publishing the pieces release the
- * D32 version lock promises. So the notice is exactly the string a post-publish
- * check has to treat as a failure.
- *
- * The match is deliberately loose on the parts that carry data (package name,
- * versions) and tight on the two fragments that identify the message, so a
- * reworded parenthetical does not silently turn this check into a no-op.
- *
- * @param {string} output combined stdout+stderr of an `add piece` run
- * @returns {string|null} the offending line, or null when no fallback happened
- */
-export function piecesFallbackNotice(output) {
-	for (const raw of String(output ?? '').split('\n')) {
-		const line = raw.trim();
-		if (!line.startsWith('note:')) continue;
-		if (!/\brelease matches puzzle\b/.test(line)) continue;
-		if (!/\bnewest compatible release\b/.test(line)) continue;
-		return line;
-	}
-	return null;
-}
-
-/**
  * Assert an `npm pack --dry-run --json` report for one platform package actually
  * carries its CLI binary.
  *

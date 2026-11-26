@@ -9,8 +9,12 @@ summary: >-
 connections:
   - COMPONENT-SSG
   - DECISION-D81-STATIC-PAGES-MODE
-verified_at: '2026-08-24T21:11:50.859Z'
-verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
+verified_at: '2026-11-24T18:02:16.140Z'
+verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
 ---
 
-Source binding for the owning component card. Behavioral intent stays in the connected component ([[COMPONENT-SSG]]); this card anchors that plan to `client-runtime/ssg/assemble.js`. The single source of chain assembly for both the build-time prerenderer and the browser `mountStatic` kernel ([[DECISION-D81-STATIC-PAGES-MODE]]), so a prerendered page and its client render cannot diverge.
+# ssg/assemble.js
+
+The single chain assembly for both the build-time prerenderer (`ssg/index.js`) and the browser `mountStatic` kernel ([[FILE-STATIC-MOUNT]], [[DECISION-D81-STATIC-PAGES-MODE]]), so a prerendered page and its client render build the same nested ViewNode tree. `assembleChain` preloads each chain level (`created()` plus awaited `data()`, no DOM), builds the nested keyed component vnodes the way the Router's navigation does with each `.instance` pinned, and freezes the route snapshot. It also owns the static router facade: `makeRouterStub` (`url()` and a read-only `current`; every navigation method throws) and `localizeRouterStub` for D177 locale prefixes. The stub's `url()` resolves a named target through its `names` table and marks the stub `named`, which tells the prerender the page needs a names island ([[FILE-ROUTE-NAMES]]).
+
+Must stay DOM-free: it imports only `ViewNode`, the Router's pure URL helpers, `routePath.js` and `routeNames.js`, because it runs under Node and in the browser.

@@ -7,21 +7,16 @@ import (
 	"strings"
 	"time"
 
+	"github.com/magic-spells/puzzle/compiler/internal/fsutil"
 	"github.com/magic-spells/puzzle/compiler/internal/version"
 )
 
 // defaultRegistry is the published pieces registry on npm. It is the last
 // resort after --registry and PUZZLE_PIECES_REGISTRY, and it is VERSIONED: the
-// fetcher prefers the newest release whose major.minor matches this CLI's own
+// fetcher uses the newest release whose major.minor matches this CLI's own
 // version, so a zero-config `puzzle add piece button` gets pieces authored for
-// the compiler running it.
-//
-// That preference is not a requirement, because the two packages are published
-// separately and the compiler normally goes first: when this CLI's own minor has
-// no pieces release yet, the fetcher falls back to the newest published release
-// on a LOWER major.minor and says so (selectFallbackVersion). Only when nothing
-// older exists either — a registry that has never published anything this
-// compiler can use — is it a hard error. --pieces-version overrides all of it.
+// the compiler running it. When there is none it is a hard error;
+// --pieces-version overrides it.
 const defaultRegistry = npmScheme + defaultNpmPackage
 
 // httpTimeout bounds a single registry-file request off an http(s) mirror, and
@@ -109,7 +104,7 @@ func (d *dirFetcher) Fetch(rel string) ([]byte, error) {
 }
 
 // contains reports whether p, after symlink resolution, stays under the
-// registry root. It resolves the nearest existing ancestor (evalSymlinksAllowMissing)
+// registry root. It resolves the nearest existing ancestor (fsutil.EvalSymlinksAllowMissing)
 // so a not-yet-existing target still has its `..` traversal caught, and a
 // dangling symlink fails closed.
 func (d *dirFetcher) contains(p string) (bool, error) {
@@ -117,7 +112,7 @@ func (d *dirFetcher) contains(p string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	root, err = evalSymlinksAllowMissing(root)
+	root, err = fsutil.EvalSymlinksAllowMissing(root)
 	if err != nil {
 		return false, err
 	}
@@ -125,7 +120,7 @@ func (d *dirFetcher) contains(p string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	abs, err = evalSymlinksAllowMissing(abs)
+	abs, err = fsutil.EvalSymlinksAllowMissing(abs)
 	if err != nil {
 		return false, err
 	}

@@ -5,8 +5,9 @@
     @pointerleave={ onPointerLeave }
     @focusin={ onFocusIn }
     @focusout={ onFocusOut(event) }
-    @keydown:escape={ onEscape(event) }>
-    <Slot/>
+    @keydown:escape={ onEscape }
+    @keydown:escape:outside={ onEscape }>
+    <Children/>
     {#if visible}
       <span class={ panelClass } id={ tipId } role="tooltip" data-tooltip-panel>
         { text }
@@ -19,7 +20,7 @@
 <script>
 import { PuzzleView } from '@magic-spells/puzzle';
 
-// Tooltip — a hover/focus text hint that WRAPS its target (the default <Slot/>,
+// Tooltip — a hover/focus text hint that WRAPS its target (its <Children/>,
 // usually a caller-provided button). It is text-only BY DESIGN: the `text` prop
 // is required, and there is no content slot for the hint — a tooltip that can hold
 // arbitrary interactive markup is a popover, use Popover for that.
@@ -40,8 +41,8 @@ import { PuzzleView } from '@magic-spells/puzzle';
 // the overwhelmingly common case and this covers it.
 //
 // Timing: pointerenter starts a `delay` timer (cleared if the pointer leaves
-// before it fires); focusin shows immediately (keyboard users shouldn't wait);
-// hide is always immediate. Escape hides while visible.
+// before it fires); keyboard focus (:focus-visible) shows immediately, a click
+// focus does not; hide is always immediate. Escape hides it wherever focus is.
 
 // Per-instance id seed so each tooltip's id is unique across instances.
 let uid = 0;
@@ -69,7 +70,7 @@ const ARROW = {
   right: 'right-full top-1/2 -translate-y-1/2 translate-x-1/2',
 };
 
-const ARROW_BASE = 'pointer-events-none absolute size-2 rotate-45 rounded-[1px] bg-ink';
+const ARROW_BASE = 'pointer-events-none absolute size-2 rotate-45 bg-ink';
 
 export default class Tooltip extends PuzzleView {
   created() {
@@ -77,7 +78,7 @@ export default class Tooltip extends PuzzleView {
     this._timer = null; // pending show timer (pointerenter → delay → show)
     // Seed local UI state so the first data() run can read it back. `placement`
     // is the effective (possibly flipped) side; null while hidden = "use `side`".
-    this.setData({ visible: false, placement: null });
+    this.setState({ visible: false, placement: null });
   }
 
   // Wire aria-describedby onto the slotted target (see the file comment). The
@@ -104,7 +105,7 @@ export default class Tooltip extends PuzzleView {
     }
   }
 
-  data(params, props) {
+  data({ props }) {
     const prev = this.getData();
     const visible = !!prev.visible;
     const side = PLACEMENT[props.side] ? props.side : 'top';
@@ -138,8 +139,7 @@ export default class Tooltip extends PuzzleView {
     }
     if (this.getData().visible) return;
     const side = this._side();
-    this.setData({ visible: true, placement: side });
-    this.refresh();
+    this.setState({ visible: true, placement: side });
 
     // Cheap top<->bottom flip: after the chip renders, if it overflows the
     // viewport on the requested edge and the opposite edge has room, flip. Left
@@ -149,8 +149,7 @@ export default class Tooltip extends PuzzleView {
       if (!this.getData().visible || !this.element) return;
       const next = this._measureFlip(side);
       if (next !== this.getData().placement) {
-        this.setData({ placement: next });
-        this.refresh();
+        this.setState({ placement: next });
       }
     });
   }
@@ -161,8 +160,7 @@ export default class Tooltip extends PuzzleView {
       this._timer = null;
     }
     if (!this.getData().visible) return;
-    this.setData({ visible: false, placement: null });
-    this.refresh();
+    this.setState({ visible: false, placement: null });
   }
 
   _measureFlip(side) {
@@ -189,12 +187,12 @@ export default class Tooltip extends PuzzleView {
 
     // Keyboard focus: show immediately — no hover delay for keyboard users.
     onFocusIn: (event) => {
-      this._show();
+      if (event.target.matches(':focus-visible')) this._show();
     },
 
     onPointerLeave: () => {
       // Keyboard focus keeps the description visible (WCAG 1.4.13).
-      if (this.element && this.element.contains(document.activeElement)) return;
+      if (this.element?.querySelector(':focus-visible')) return;
       this._hide();
     },
 
@@ -204,9 +202,7 @@ export default class Tooltip extends PuzzleView {
       this._hide();
     },
 
-    onEscape: (event) => {
-      if (!this.getData().visible) return;
-      event.preventDefault();
+    onEscape: () => {
       this._hide();
     },
   };

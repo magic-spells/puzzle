@@ -122,20 +122,20 @@ const codeHero = `<Button variant="outline" @press={ openCommand }>Open command 
 // items: { value, label, group?, keywords?, hint?, disabled? }
 // @select does NOT auto-close — the parent decides what to do next.
 events = {
-  openCommand: () => this.setData('commandOpen', true),
-  closeCommand: () => this.setData('commandOpen', false),
+  openCommand: () => this.setState('commandOpen', true),
+  closeCommand: () => this.setState('commandOpen', false),
   runCommand: (value) => {
-    this.setData('commandOpen', false);
+    this.setState('commandOpen', false);
     run(value);
   },
 };`;
 
 export default class CommandDoc extends PuzzleView {
   created() {
-    this.setData({ commandOpen: false });
+    this.setState({ commandOpen: false });
   }
 
-  data(params, props) {
+  data() {
     return {
       ...this.getData(),
       installCmd,
@@ -166,10 +166,10 @@ export default class CommandDoc extends PuzzleView {
   }
 
   events = {
-    openCommand: () => this.setData('commandOpen', true),
-    closeCommand: () => this.setData('commandOpen', false),
+    openCommand: () => this.setState('commandOpen', true),
+    closeCommand: () => this.setState('commandOpen', false),
     runCommand: (value) => {
-      this.setData('commandOpen', false);
+      this.setState('commandOpen', false);
       toast({ message: 'Ran command: ' + value, variant: 'success' });
     },
   };

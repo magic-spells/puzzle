@@ -21,4 +21,3 @@ RangeFor.prototype.render = function () {
     )
   );
 };
-RangeFor.__pzlModule = 'range_for.pzl';

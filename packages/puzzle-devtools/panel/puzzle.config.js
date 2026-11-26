@@ -12,5 +12,9 @@ export default {
 	build: {
 		// This IS the debugging tool — keep its own console calls in the bundle.
 		dropConsole: false,
+		// Fixed names: extension/panel.html loads panel/app.js and
+		// panel/styles.css by name, and a packaged extension has no HTTP cache
+		// for hashed names to bust.
+		hashNames: false,
 	},
 };

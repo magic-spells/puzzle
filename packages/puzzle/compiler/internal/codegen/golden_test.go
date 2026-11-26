@@ -153,12 +153,6 @@ func normalizeFixture(s string) string {
 		if trimmed == "" || strings.HasPrefix(trimmed, "//") {
 			continue
 		}
-		// The D81 module stamp (Class.__pzlModule = '…') is build-time metadata
-		// orthogonal to render structure — the hand-written render-structure
-		// anchors (golden #1) predate it, so drop it from the structural compare.
-		if strings.Contains(trimmed, ".__pzlModule = ") {
-			continue
-		}
 		kept = append(kept, line)
 	}
 	return strings.Join(kept, "\n")
@@ -189,6 +183,19 @@ func TestGoldenDefault(t *testing.T) {
 	g, w := normalizeFixture(got), normalizeFixture(string(want))
 	if g != w {
 		t.Errorf("Default golden mismatch\n%s", firstDiff(w, g))
+	}
+}
+
+// TestGoldenTodoItem pins the component-mode fixture the Home fixture imports.
+func TestGoldenTodoItem(t *testing.T) {
+	got := compileFile(t, "../../../examples/todos/app/components/TodoItem.pzl", ModeComponent)
+	want, err := os.ReadFile("../../../tests/fixtures/todos/TodoItem.compiled.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	g, w := normalizeFixture(got), normalizeFixture(string(want))
+	if g != w {
+		t.Errorf("TodoItem golden mismatch\n%s", firstDiff(w, g))
 	}
 }
 

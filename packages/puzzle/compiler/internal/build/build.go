@@ -1,4 +1,4 @@
-// Package build drives a full `puzzle build` (constellation/doc/DOC-COMPILER-DESIGN.md §b): one
+// Package build drives a full `puzzle build` (constellation/doc/DOC-COMPILER-DESIGN.md, "The lane"): one
 // esbuild api.Build pass over the app entry (app/app.ts or app/app.js) with the .pzl plugin registered, then
 // the collected global CSS and the static public/ assets are written next to
 // the bundle. It replaces the Phase 1 prototype orchestrator (internal/compiler,
@@ -19,7 +19,6 @@ import (
 	"github.com/magic-spells/puzzle/compiler/internal/fsutil"
 	"github.com/magic-spells/puzzle/compiler/internal/locales"
 	"github.com/magic-spells/puzzle/compiler/internal/styles"
-	"github.com/magic-spells/puzzle/compiler/internal/ui"
 )
 
 // Options configure a build.
@@ -71,6 +70,10 @@ type Options struct {
 	// phase call is a nil check.
 	Profile bool
 
+	// Quiet suppresses the success report of the --static/--hybrid prerender
+	// passes (`puzzle build -q`); warnings and errors still print.
+	Quiet bool
+
 	// Profiler folds phases into a caller-owned table instead of printing a
 	// separate `puzzle build` report. The dev server uses this only for its
 	// non-incremental fallback so startup/rebuild still emits exactly one table.
@@ -83,8 +86,8 @@ type Options struct {
 func Build(root string, opts Options) error {
 	prof := opts.Profiler
 	if prof == nil {
-		prof = newBuildProfile(profileEnabled(opts.Profile))
-		defer prof.report(os.Stderr)
+		prof = NewPhaseProfile(ProfileEnabled(opts.Profile), "puzzle build")
+		defer prof.Report(os.Stderr)
 	}
 
 	absRoot, err := filepath.Abs(root)
@@ -116,7 +119,7 @@ func Build(root string, opts Options) error {
 	if opts.Config != nil {
 		cfg = *opts.Config
 	} else {
-		endConfig := prof.phase("config load")
+		endConfig := prof.Phase("config load")
 		loaded, err := config.LoadConfig(absRoot)
 		endConfig()
 		if err != nil {
@@ -160,6 +163,42 @@ func Build(root string, opts Options) error {
 	splitting := cfg.Splitting() && mode != "static"
 	hash := !opts.Development && cfg.HashNames()
 	hashEntry := hash && mode != "static"
+	hashStyles := hash
+	// Hashing on by default (build.hashNames unset) must never fail a build, or
+	// ship a dangling link, that the app's public HTML cannot follow: when
+	// public/index.html does not reference a file in a rewritable tag, or another
+	// public page names it by its fixed name, that file keeps its fixed name with
+	// one warning. An explicit hashNames: true is strict instead: rewriteShell
+	// errors on a missing entry reference and rewrites the other pages.
+	strictHash := hash && cfg.Build.HashNames != nil
+	var stylesFallback string
+	linkedCSS := func() bool { return shellHashSupport(absRoot).appCSS }
+	if hash && !strictHash {
+		plan := shellHashSupport(absRoot)
+		linkedCSS = func() bool { return plan.appCSS }
+		if hashEntry {
+			reason := ""
+			switch {
+			case !plan.entry:
+				reason = "public/index.html has no <script src> loading app.js"
+			case len(plan.entryPages) > 0:
+				reason = strings.Join(plan.entryPages, ", ") + " names app.js or app.css by its fixed name"
+			}
+			if reason != "" {
+				hashEntry = false
+				fmt.Fprint(os.Stderr, hashFallbackWarning("app.js", reason))
+			}
+		}
+		switch {
+		case !plan.styles:
+			stylesFallback = "public/index.html has no <link> or <script> referencing styles.css"
+		case len(plan.stylesPages) > 0:
+			stylesFallback = strings.Join(plan.stylesPages, ", ") + " names styles.css by its fixed name"
+		}
+		if stylesFallback != "" {
+			hashStyles = false
+		}
+	}
 	preloadShell := !opts.Development && splitting
 
 	// Translations (D175): read, validate, flatten, and fill every locale up
@@ -167,7 +206,7 @@ func Build(root string, opts Options) error {
 	// every esbuild pass below serves the same manifest. nil without i18n.
 	var localeRes *locales.Result
 	if cfg.I18nEnabled() {
-		endLocales := prof.phase("locales")
+		endLocales := prof.Phase("locales")
 		localeRes, err = loadLocales(absRoot, cfg)
 		endLocales()
 		if err != nil {
@@ -227,14 +266,16 @@ func Build(root string, opts Options) error {
 	// each used to redo it over identical bytes. passContext computes it once and
 	// hands the same immutable result to every pass's plugin, so the profiler
 	// reports a single "usage scan" row and the three passes cannot disagree.
-	endScan := prof.phase("usage scan")
+	endScan := prof.Phase("usage scan")
 	pc, scanErr := newPassContext(absRoot)
 	endScan()
 	if scanErr != nil {
 		return scanErr
 	}
+	pc.env = cfg.Env
 	pc.i18n = cfg.I18n
 	pc.locales = localeRes
+	pc.stripStamps = !opts.Development && mode == ""
 	printI18nWarnings(os.Stderr, i18nWarnings(absRoot, cfg, pc.usage, localeRes))
 	// The hashed locale files go into staging before any pass runs: the prerender
 	// (both output modes) reads the default table from staging/locales/.
@@ -251,12 +292,13 @@ func Build(root string, opts Options) error {
 	// static page — the per-page mountStatic bundles are) can never reach those
 	// branches, so the define folds them — and ssg/preload.js — away.
 	buildOpts := newBundleOptions(absRoot, entry, staging, pl, bundleFlags{
+		Env:       cfg.Env,
 		Dev:       opts.Development,
 		Takeover:  mode == "hybrid",
 		Splitting: splitting,
 		HashEntry: hashEntry,
 	})
-	buildOpts.Metafile = opts.Metafile != nil || !opts.Development
+	buildOpts.Metafile = true
 	if opts.Fixtures {
 		buildOpts.Plugins = append(buildOpts.Plugins, fixtures.Plugin())
 	}
@@ -286,14 +328,14 @@ func Build(root string, opts Options) error {
 	// esbuild, a runner-owned temporary file for Tailwind). Run them together when
 	// Tailwind is enabled, then join BOTH before inspecting either result so no
 	// worker can outlive Build and race staging cleanup on an error path.
-	endBundle := prof.phase("browser bundle")
+	endBundle := prof.Phase("browser bundle")
 	browser := func() api.BuildResult {
 		defer endBundle()
 		return api.Build(buildOpts)
 	}
 	var tailwind func() (string, error)
 	if cfg.TailwindEnabled() {
-		endTailwind := prof.phase("tailwind")
+		endTailwind := prof.Phase("tailwind")
 		tailwind = func() (string, error) {
 			defer endTailwind()
 			return runTailwind(absRoot, cfg, opts)
@@ -304,12 +346,7 @@ func Build(root string, opts Options) error {
 		*opts.Metafile = result.Metafile
 	}
 	if len(result.Errors) > 0 {
-		lines := api.FormatMessages(result.Errors, api.FormatMessagesOptions{
-			Kind:          api.ErrorMessage,
-			Color:         ui.New(os.Stderr).Enabled(),
-			TerminalWidth: 0,
-		})
-		return fmt.Errorf("puzzle build failed:\n%s", strings.Join(lines, "\n"))
+		return formatBuildErrors("puzzle build failed", result.Errors)
 	}
 	// Preserve the historical failure priority: if both concurrent lanes fail,
 	// the browser compile error above wins; Tailwind is surfaced only after the
@@ -318,16 +355,32 @@ func Build(root string, opts Options) error {
 		return tailwindErr
 	}
 
+	// Static pages link their own CSS, so only the other modes need the shell to.
+	if mode != "static" {
+		warnUnlinkedCSS(result.Metafile, staging, entry, linkedCSS)
+	}
+
 	// Styles → one global stylesheet (the shell follows its emitted name): the
 	// Tailwind layer (when puzzle.config.js declares it) followed by the
 	// collected <style> blocks. A declared-but-unrunnable Tailwind fails the
 	// build — the pipeline is never silently skipped. Written into staging, not
 	// dist/, so a Tailwind failure above never touches the last good build.
-	endStyles := prof.phase("styles compose")
-	final := styles.Compose(tailwindCSS, pl.CSS())
+	endStyles := prof.Phase("styles compose")
+	collected := pl.CSS()
+	if !opts.Development {
+		if collected, err = styles.Minify(collected); err != nil {
+			endStyles()
+			return err
+		}
+	}
+	final := styles.Compose(tailwindCSS, collected)
 	stylesheet := "styles.css"
-	if hash {
+	if hashStyles {
 		stylesheet = "styles-" + fsutil.ContentHash([]byte(final)) + ".css"
+	} else if stylesFallback != "" && final != "" {
+		// An app with no CSS at all (an empty stylesheet nothing links) has
+		// nothing to warn about.
+		fmt.Fprint(os.Stderr, hashFallbackWarning("styles.css", stylesFallback))
 	}
 	writeErr := os.WriteFile(filepath.Join(staging, stylesheet), []byte(final), 0o644)
 	endStyles()
@@ -338,7 +391,7 @@ func Build(root string, opts Options) error {
 	// Static assets: index.html and anything else under the app's public/ dir,
 	// copied into staging. Keep the copied set so prerender modes can distinguish
 	// public-owned files from generated output before writing the final dist tree.
-	endPublic := prof.phase("public copy")
+	endPublic := prof.Phase("public copy")
 	publicFiles, err := copyPublic(absRoot, staging, copyIntoStaging)
 	endPublic()
 	if err != nil {
@@ -346,7 +399,7 @@ func Build(root string, opts Options) error {
 	}
 
 	if hash || preloadShell {
-		if err := rewriteShell(staging, result.Metafile, stylesheet, entry, hashEntry, preloadShell, publicFiles); err != nil {
+		if err := rewriteShell(staging, result.Metafile, stylesheet, entry, hashEntry, preloadShell, strictHash, publicFiles); err != nil {
 			return err
 		}
 	}
@@ -358,8 +411,8 @@ func Build(root string, opts Options) error {
 	// compile failure). mode was resolved up front, before any work.
 	switch mode {
 	case "hybrid":
-		endHybrid := prof.phase("prerender (hybrid)")
-		hybridErr := prerenderHybrid(absRoot, entry, staging, cfg.Site, publicFiles, pc)
+		endHybrid := prof.Phase("prerender (hybrid)")
+		hybridErr := prerenderHybrid(absRoot, entry, staging, cfg.Site, publicFiles, opts.Quiet, pc)
 		endHybrid()
 		if hybridErr != nil {
 			return hybridErr
@@ -367,19 +420,15 @@ func Build(root string, opts Options) error {
 	case "static":
 		// The per-page pass decides its own source-map mode from cfg + dev
 		// (staticPagesSourcemap), so there is no generate-then-delete pass here.
-		if err := prerenderStaticPages(absRoot, entry, staging, publicFiles, cfg, opts.Development, prof, pc); err != nil {
+		if err := prerenderStaticPages(absRoot, entry, staging, result.Metafile, publicFiles, cfg, opts.Development, opts.Quiet, linkedCSS(), prof, pc); err != nil {
 			return err
 		}
 	}
 
-	// Everything succeeded — swap staging in for dist/. Guard the replace so only
-	// the computed absRoot/dist path is ever moved, never the app root or an
-	// unexpected location. The previous dist is renamed aside first; if installing
-	// staging fails, swapOutput restores it instead of leaving the app buildless.
-	if filepath.Dir(outdir) != absRoot || filepath.Base(outdir) != "dist" {
-		return fmt.Errorf("refusing to replace unexpected dist path: %s", outdir)
-	}
-	endSwap := prof.phase("staging swap")
+	// Everything succeeded — swap staging in for dist/. The previous dist is
+	// renamed aside first; if installing staging fails, swapOutput restores it
+	// instead of leaving the app buildless.
+	endSwap := prof.Phase("staging swap")
 	swapErr := swapOutput(staging, outdir, workTmpDir)
 	endSwap()
 	if swapErr != nil {
@@ -555,19 +604,11 @@ var reservedOutputNames = map[string]bool{
 // listing the name in reservedOutputNames.
 const chunksDirName = "chunks"
 
-// PublicDir returns the resolved static-assets source directory (app/public,
-// else a root-level public/), or "" if neither exists. Exported so `puzzle dev`
-// can watch a root-level public/ tree that lies OUTSIDE the watched app/ dir
-// (app/public is already inside it). It delegates to the same resolver the
-// copier uses, so the watched dir and the copied dir never diverge.
-func PublicDir(root string) string {
-	return publicDir(root)
-}
-
-// publicDir returns the app's static-assets source directory, or "" if none.
+// PublicDir returns the app's static-assets source directory, or "" if none.
 // The examples keep assets under app/public/; a flat public/ at the root is also
-// honored (app/public/ wins when both exist).
-func publicDir(root string) string {
+// honored (app/public/ wins when both exist). Exported so `puzzle dev` watches,
+// and `puzzle add deploy` writes into, the same folder the copier reads.
+func PublicDir(root string) string {
 	src := filepath.Join(root, "app", "public")
 	if dirExists(src) {
 		return src
@@ -598,7 +639,7 @@ func publicDir(root string) string {
 // dist/<tag>/, so a public/<tag> folder or file would be merged into or
 // clobbered by them.
 func ValidatePublic(root string, splitting bool, i18n *config.I18n) error {
-	src := publicDir(root)
+	src := PublicDir(root)
 	if src == "" {
 		return nil
 	}
@@ -682,7 +723,7 @@ const (
 // mirror built from it can never delete a build output.
 func copyPublic(root, outdir string, mode publicCopyMode) (map[string]bool, error) {
 	copied := make(map[string]bool)
-	src := publicDir(root)
+	src := PublicDir(root)
 	if src == "" {
 		return copied, nil // nothing to copy is not an error
 	}
@@ -768,21 +809,7 @@ func FindRuntime(start string) string {
 // FindInstalledRuntime walks up from start for an installed Puzzle runtime and
 // returns the absolute path to its client-runtime/index.js, or "" if absent.
 func FindInstalledRuntime(start string) string {
-	dir, err := filepath.Abs(start)
-	if err != nil {
-		dir = start
-	}
-	for {
-		idx := filepath.Join(dir, "node_modules", "@magic-spells", "puzzle", "client-runtime", "index.js")
-		if fsutil.FileExists(idx) {
-			return idx
-		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			return ""
-		}
-		dir = parent
-	}
+	return fsutil.FindUp(start, filepath.Join("node_modules", "@magic-spells", "puzzle", "client-runtime", "index.js"))
 }
 
 // PkgIsPuzzle reports whether pkgPath is a package.json for
@@ -799,12 +826,6 @@ func PkgIsPuzzle(pkgPath string) bool {
 		return false
 	}
 	return pkg.Name == "@magic-spells/puzzle"
-}
-
-// FileExists exposes the build package's historical file probe while sharing
-// its implementation with the rest of the compiler.
-func FileExists(path string) bool {
-	return fsutil.FileExists(path)
 }
 
 func dirExists(path string) bool {

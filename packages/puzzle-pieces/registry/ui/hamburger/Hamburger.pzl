@@ -52,7 +52,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 //   disabled  boolean — dims the button and blocks the callback
 //   class     merged onto the root <button>
 // Callback
-//   @change(nextOpen, event)  the NEXT open value (value-first); optional
+//   @change(nextOpen)         the NEXT open value (value-first); optional
 //
 // COLOR. The bars paint in currentColor, inherited from the parent like
 // Spinner's currentColor variants, so the icon matches a header's text colour
@@ -82,10 +82,9 @@ const BASE =
 
 export default class Hamburger extends PuzzleView {
   created() {
-    // Uncontrolled open state — an instance field, not view data: the render
-    // model is derived from it in data(), so a toggle must refresh() to re-run
-    // data() (setData alone would not).
-    this._uncontrolledOpen = false;
+    // uncontrolled open state lives in the state layer. data() reads it through
+    // getState(), so a setState() toggle re-runs data() on its own.
+    this.setState({ uncontrolledOpen: false });
   }
 
   _controlled() {
@@ -93,10 +92,10 @@ export default class Hamburger extends PuzzleView {
   }
 
   _open() {
-    return this._controlled() ? !!this.props.open : this._uncontrolledOpen;
+    return this._controlled() ? !!this.props.open : !!this.getState().uncontrolledOpen;
   }
 
-  data(params, props) {
+  data({ props }) {
     const size = SIZE[props.size] ? props.size : 'md';
     const open = this._open();
     return {
@@ -112,15 +111,12 @@ export default class Hamburger extends PuzzleView {
   }
 
   events = {
-    handleClick: (event) => {
+    handleClick: () => {
       if (this.props.disabled) return;
       const next = !this._open();
-      if (!this._controlled()) {
-        this._uncontrolledOpen = next;
-        this.refresh();
-      }
+      if (!this._controlled()) this.setState({ uncontrolledOpen: next });
       const { change } = this.props;
-      if (typeof change === 'function') change(next, event);
+      if (typeof change === 'function') change(next);
     },
   };
 }

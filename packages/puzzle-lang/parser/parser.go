@@ -10,11 +10,11 @@ import (
 )
 
 // parser.go is the recursive-descent parser over the lexer's token stream
-// (packages/puzzle/constellation/doc/DOC-COMPILER-DESIGN.md §c). It produces the
+// (packages/puzzle/constellation/doc/DOC-COMPILER-DESIGN.md, "The lane" step 1). It produces the
 // AST in ast.go. Blocks and elements are cross-checked so a {/if} closing
 // across an unclosed <div> (or vice versa) is a positioned error naming BOTH the
 // opener and the offender
-// (packages/puzzle/constellation/doc/DOC-COMPILER-DESIGN.md §e).
+// (packages/puzzle/constellation/doc/DOC-COMPILER-DESIGN.md, "No partial output").
 
 type parser struct {
 	lex  *lexer
@@ -54,7 +54,7 @@ func newParser(lex *lexer, file string, opts Options) (*parser, error) {
 }
 
 func (p *parser) advance() error {
-	t, err := p.lex.Next()
+	t, err := p.lex.Next(p.opts)
 	if err != nil {
 		return toPE(err)
 	}
@@ -472,7 +472,7 @@ var voidElements = map[string]bool{
 }
 
 // parseElement parses an element, component, or composition marker
-// (<Children>, <Slot>, <Slot name="x">, or <Snippet>) starting at the
+// (<Children>, <Outlet>, <Slot name="x">, or <Snippet>) starting at the
 // current TokTagOpen.
 func (p *parser) parseElement() (Node, *ParseError) {
 	open := p.cur
@@ -481,7 +481,7 @@ func (p *parser) parseElement() (Node, *ParseError) {
 	if err := p.advance(); err != nil {
 		return nil, toPE(err)
 	}
-	attrs, selfClose, perr := p.parseAttrs()
+	attrs, selfClose, perr := p.parseAttrs(name)
 	if perr != nil {
 		return nil, perr
 	}
@@ -524,7 +524,10 @@ func (p *parser) parseElement() (Node, *ParseError) {
 					return nil, errAt(p.file, pos, `named slots are spelled <Slot name="…"/> (D134)`)
 				}
 			}
-			return nil, errAt(p.file, pos, "bare <slot> is not a marker — use <Children/> for call-site content or <Slot/> for the router outlet (D134)")
+			return nil, errAt(p.file, pos, "bare <slot> is not a marker — use <Children/> for call-site content or <Outlet/> for the router outlet (D134/D199)")
+		}
+		if name == "outlet" {
+			return nil, errAt(p.file, pos, "the router outlet is spelled <Outlet/> (D199)")
 		}
 		if name == "portal" {
 			return nil, errAt(p.file, pos, "the portal marker is spelled <Portal>…</Portal> (D134/D144)")
@@ -553,6 +556,13 @@ func (p *parser) parseElement() (Node, *ParseError) {
 			}
 			if selfClose {
 				return nil, errAt(p.file, pos, "<Portal/> is paired-only — a portal carries the children it teleports: write <Portal>…</Portal>")
+			}
+		}
+		if name == "Outlet" {
+			// the router outlet (D199) takes no attributes: the router fills it
+			// with the current page, so there is nothing to name or hand over.
+			if perr := outletMarkerAttrs(attrs, p.file); perr != nil {
+				return nil, perr
 			}
 		}
 		if name == "Children" || name == "Slot" {
@@ -598,10 +608,15 @@ func (p *parser) parseElement() (Node, *ParseError) {
 
 	if !p.raw {
 		if name == "Children" {
-			return &Slot{Args: slotArgs, Children: children, Pos: pos}, nil
+			return &Slot{Marker: "Children", Args: slotArgs, Children: children, Pos: pos}, nil
+		}
+		if name == "Outlet" {
+			return &Slot{Marker: "Outlet", Children: children, Pos: pos}, nil
 		}
 		if name == "Slot" {
-			return &Slot{Name: slotName, Args: slotArgs, Children: children, Pos: pos}, nil
+			// a <Slot> without a name parses (a host that runs its own slot rules
+			// may still use it), and the composition check rejects it (D199).
+			return &Slot{Name: slotName, Marker: "Slot", Args: slotArgs, Children: children, Pos: pos}, nil
 		}
 		if name == "Snippet" {
 			return &Snippet{Fits: snippetFits, Params: snippetParams, Body: children, Pos: pos}, nil
@@ -618,7 +633,8 @@ func (p *parser) parseElement() (Node, *ParseError) {
 
 // parseAttrs reads attributes until the tag terminator, which it consumes.
 // selfClose reports whether the tag ended with "/>".
-func (p *parser) parseAttrs() (attrs []Attr, selfClose bool, perr *ParseError) {
+func (p *parser) parseAttrs(tag string) (attrs []Attr, selfClose bool, perr *ParseError) {
+	dom := !isComponentName(tag)
 	for {
 		t := p.cur
 		switch t.Type {
@@ -663,7 +679,7 @@ func (p *parser) parseAttrs() (attrs []Attr, selfClose bool, perr *ParseError) {
 			literalName := t.Raw
 			npos := tokPos(t)
 			if !literalName {
-				if e := checkAttrNamespace(name, npos, p.file); e != nil {
+				if e := checkAttrName(name, npos, p.file, dom, p.opts); e != nil {
 					return nil, false, e
 				}
 			}
@@ -674,7 +690,7 @@ func (p *parser) parseAttrs() (attrs []Attr, selfClose bool, perr *ParseError) {
 				if err := p.advance(); err != nil {
 					return nil, false, toPE(err)
 				}
-				a, e := buildAttr(name, npos, p.cur, p.file, p.scope())
+				a, e := p.buildAttr(name, npos, p.cur, tag)
 				if e != nil {
 					return nil, false, e
 				}
@@ -696,22 +712,54 @@ func (p *parser) parseAttrs() (attrs []Attr, selfClose bool, perr *ParseError) {
 	}
 }
 
-// checkAttrNamespace rejects a reserved `prefix:name` attribute (D147 reserves the
-// directive-namespace space the grammar deliberately never opened). Event attrs own
-// the colon for their modifier channel (`@click:prevent`), so they are exempt and
-// validated by parseEventModifiers instead.
-//
-// Callers run this at the attribute NAME, before branching on `=`, because the two
-// forms must agree: validating inside buildAttr — which only runs once a value
-// follows — let the VALUELESS spelling `<input bind:value>` through as an ordinary
-// boolean attribute, so the one syntax the reservation exists to reject compiled
-// silently to `{ 'bind:value': true }`.
-func checkAttrNamespace(name string, npos Position, file string) *ParseError {
+// checkAttrName rejects foreign spellings and reserved namespaces at the name,
+// before lexing a value. Plain-name steers are DOM-only; colon steers apply to
+// components too. Events own their modifier colons.
+func checkAttrName(name string, npos Position, file string, dom bool, opts Options) *ParseError {
 	if strings.HasPrefix(name, "@") {
 		return nil
 	}
+	if !opts.SkipForeignSyntaxCheck {
+		var steer string
+		if dom {
+			switch name {
+			case "className":
+				steer = "write class"
+			case "htmlFor":
+				steer = "write for"
+			case "v-if":
+				steer = "wrap the element in {#if condition}…{/if}"
+			case "v-else-if":
+				steer = "use {:else if condition} inside {#if}…{/if}"
+			case "v-else":
+				steer = "use {:else} inside {#if}…{/if}"
+			case "v-show":
+				steer = "use {#if condition}…{/if} to conditionally render the element"
+			case "v-for":
+				steer = "wrap the element in {#for item in items}…{/for}"
+			case "v-model":
+				steer = "write value={ expr } (or checked={ expr }) on <input>, <textarea>, or <select> for two-way binding"
+			case "v-html":
+				steer = "put { raw(expr) } inside the element"
+			}
+		}
+		prefix, local, _ := strings.Cut(name, ":")
+		if local != "" {
+			switch prefix {
+			case "v-bind", "":
+				steer = "write " + local + "={ expr }"
+			case "v-on", "on":
+				steer = "write @" + local + "={ handler }"
+			case "class":
+				steer = `write class="{#if cond}` + local + `{/if}"`
+			}
+		}
+		if steer != "" {
+			return errAt(file, npos, "%s is not supported — %s", name, steer)
+		}
+	}
 	i := strings.IndexByte(name, ':')
-	if i < 0 {
+	if i <= 0 {
 		return nil
 	}
 	switch name[:i] {
@@ -726,7 +774,7 @@ func checkAttrNamespace(name string, npos Position, file string) *ParseError {
 	prefix, local := name[:i], name[i+1:]
 	if isDirectiveWord(prefix) || isDirectiveWord(local) {
 		return errAt(file, npos,
-			"attribute namespace %q is reserved — two-way binding needs no prefix. Write `value={ expr }` (or `checked={ expr }`) on a plain <input>/<textarea>/<select> and the compiler synthesizes the write-back; see template SPEC §6",
+			"attribute namespace %q is reserved — two-way binding needs no prefix. Write `value={ expr }` (or `checked={ expr }`) on a plain <input>/<textarea>/<select> and the compiler synthesizes the write-back",
 			prefix+":")
 	}
 	return errAt(file, npos,
@@ -745,9 +793,11 @@ func isDirectiveWord(s string) bool {
 	return false
 }
 
-// buildAttr classifies an attribute given its name and value token, parsing
-// every expression it carries in scope sc.
-func buildAttr(name string, npos Position, v Token, file string, sc exprScope) (Attr, *ParseError) {
+// buildAttr classifies an attribute's value and parses its expressions in the
+// current scope. tag distinguishes component props and custom-element attrs
+// from inline handlers on standard DOM elements.
+func (p *parser) buildAttr(name string, npos Position, v Token, tag string) (Attr, *ParseError) {
+	file, sc := p.file, p.scope()
 	vpos := tokPos(v)
 	if v.Raw {
 		// Inside {#raw} the value bytes are literal AND so is the name (D150) — see
@@ -785,6 +835,13 @@ func buildAttr(name string, npos Position, v Token, file string, sc exprScope) (
 	}
 	switch v.Type {
 	case TokAttrBrace:
+		if event := strings.ToLower(name); len(event) > 2 && strings.HasPrefix(event, "on") && !isComponentName(tag) && !strings.ContainsRune(tag, '-') && !p.opts.SkipForeignSyntaxCheck {
+			event = event[2:]
+			if event == "doubleclick" {
+				event = "dblclick"
+			}
+			return nil, errAt(file, npos, "%s is not supported — write @%s={ %s }", name, event, strings.TrimSpace(v.Value))
+		}
 		if strings.TrimSpace(v.Value) == "" {
 			return nil, errAt(file, vpos, "empty attribute expression for %q", name)
 		}
@@ -1466,6 +1523,9 @@ func parseInterpolationExpr(raw string, pos Position, file string, sc exprScope)
 	if text == "" {
 		return nil, errAt(file, pos, "empty interpolation")
 	}
+	if strings.HasPrefix(text, "@html") && (len(text) == 5 || isSpaceByte(text[5])) {
+		return nil, errAt(file, pos, "{@html expr} is not supported — write { raw(expr) }")
+	}
 	ast, perr := parseExprAt(raw, pos.advance("{"), file, sc.valueOpts())
 	if perr != nil {
 		return nil, perr
@@ -1492,12 +1552,12 @@ func isComponentName(s string) bool {
 }
 
 // isCompositionMarker reports whether name is one of the reserved capitalized
-// composition markers (D134/D141/D144/D166). Markers are exact-match: a dotted
+// composition markers (D134/D141/D144/D166/D199). Markers are exact-match: a dotted
 // name is never a marker, which is why checkComponentName rejects a marker root
 // rather than routing it here.
 func isCompositionMarker(name string) bool {
 	switch name {
-	case "Children", "Slot", "Snippet", "Portal":
+	case "Children", "Outlet", "Slot", "Snippet", "Portal":
 		return true
 	}
 	return false

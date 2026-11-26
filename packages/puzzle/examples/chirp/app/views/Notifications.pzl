@@ -29,7 +29,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 import NotificationRow from '../components/NotificationRow.pzl';
 
 export default class NotificationsView extends PuzzleView {
-  data(params, props) {
+  data() {
     const store = this.ctx.store;
     // Newest first; unread count drives the header button's visibility.
     const notifications = store

@@ -11,7 +11,7 @@
       </div>
     {/if}
     <div class={ bodyClass }>
-      <Slot/>
+      <Children/>
     </div>
     <div class="flex items-center gap-2 p-6 pt-0 empty:hidden">
       <Slot name="footer"/>
@@ -27,7 +27,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 // `title` and `description` render an optional header; both are optional and the
 // header block is conditionally rendered so it never leaves a gap when absent
 // (the same discipline Dialog's footer uses via empty:hidden). The default
-// <Slot/> is the body; the named footer slot holds actions and collapses with
+// <Children/> is the body; the named footer slot holds actions and collapses with
 // empty:hidden when nothing is slotted. A `class` prop is appended to the root.
 //
 // Padding stays on p-6 density throughout: the header pads p-6 pb-0, the body
@@ -48,7 +48,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 const BASE = 'rounded-xl border border-border bg-surface text-body';
 
 export default class Card extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     const title = props.title || '';
     const description = props.description || '';
     const hasHeader = !!(title || description);

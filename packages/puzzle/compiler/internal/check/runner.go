@@ -3,15 +3,20 @@ package check
 import (
 	"errors"
 	"fmt"
-	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/magic-spells/puzzle/compiler/internal/fsutil"
 )
 
 const missingTypeScriptMessage = "puzzle check needs TypeScript: npm install -D typescript"
+
+const minTypeScriptMajor = 7
+
+const oldTypeScriptMessage = "puzzle check needs TypeScript 7 or later, found %s: npm install -D typescript@latest"
 
 const missingNodeMessage = "puzzle check needs Node.js on PATH: it runs the app's TypeScript compiler"
 
@@ -36,11 +41,10 @@ func Run(appRoot string) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	typescriptVersion, err := readTypeScriptVersion(tool)
-	if err != nil {
+	if err := requireTypeScript7(tool); err != nil {
 		return 0, err
 	}
-	result, err := Generate(root, typescriptVersion)
+	result, err := Generate(root)
 	if err != nil {
 		return 0, err
 	}
@@ -70,34 +74,29 @@ func Run(appRoot string) (int, error) {
 	return result.Files, errors.New(formatted)
 }
 
-// TypeScriptVersion is the app's TypeScript compiler version, major.minor —
-// what decides the tsconfig puzzle check writes and the lib files its shim
-// references.
-type TypeScriptVersion struct {
-	Major, Minor int
-}
-
-// AtLeast reports whether v is min or later.
-func (v TypeScriptVersion) AtLeast(min TypeScriptVersion) bool {
-	return v.Major > min.Major || v.Major == min.Major && v.Minor >= min.Minor
-}
-
-func readTypeScriptVersion(tool tscTool) (TypeScriptVersion, error) {
+// requireTypeScript7 enforces the floor: puzzle check writes a config only
+// TypeScript 7 and later accept (no baseUrl, no node10 resolution), so an
+// older compiler is stopped before it reports that config as broken.
+func requireTypeScript7(tool tscTool) error {
 	output, err := tool.command("--version").CombinedOutput()
 	if err != nil {
-		return TypeScriptVersion{}, fmt.Errorf("read TypeScript version: %w", err)
+		return fmt.Errorf("read TypeScript version: %w", err)
 	}
-	return parseTypeScriptVersion(string(output))
+	return checkTypeScriptVersion(string(output))
 }
 
-// parseTypeScriptVersion reads `tsc --version` output, `Version 5.2.2` (a
-// prerelease suffix such as `5.3.0-beta` included).
-func parseTypeScriptVersion(output string) (TypeScriptVersion, error) {
-	var v TypeScriptVersion
-	if _, err := fmt.Sscanf(strings.TrimSpace(output), "Version %d.%d", &v.Major, &v.Minor); err != nil || v.Major < 1 || v.Minor < 0 {
-		return TypeScriptVersion{}, fmt.Errorf("read TypeScript version: unexpected output %q", strings.TrimSpace(output))
+// checkTypeScriptVersion reads `tsc --version` output, `Version 7.0.2` (a
+// prerelease suffix such as `7.1.0-beta` included), and rejects a major below 7.
+func checkTypeScriptVersion(output string) error {
+	output = strings.TrimSpace(output)
+	var major, minor int
+	if _, err := fmt.Sscanf(output, "Version %d.%d", &major, &minor); err != nil {
+		return fmt.Errorf("read TypeScript version: unexpected output %q", output)
 	}
-	return v, nil
+	if major < minTypeScriptMajor {
+		return fmt.Errorf(oldTypeScriptMessage, strings.TrimPrefix(output, "Version "))
+	}
+	return nil
 }
 
 // tscTool is the app's TypeScript compiler entry point plus the node binary that
@@ -122,14 +121,14 @@ func emitDiagnosticsError(result *Result) error {
 	return errors.New(strings.Join(result.Diagnostics, "\n"))
 }
 
-// resolveTSC finds the app's own TypeScript compiler. It targets the package's
-// own `bin/tsc` entry — what every `.bin` shim points at, under npm, pnpm, and
-// yarn layouts alike — rather than the shim, so the command never depends on a
-// platform shell.
+// resolveTSC finds the app's own TypeScript compiler, walking up lexically
+// from the app directory, so a workspace root's hoisted install is found. It
+// targets the package's own `bin/tsc` entry — what every `.bin` shim points
+// at, under npm, pnpm, and yarn layouts alike — rather than the shim, so the
+// command never depends on a platform shell.
 func resolveTSC(appRoot string) (tscTool, error) {
-	entry := filepath.Join(appRoot, "node_modules", "typescript", "bin", "tsc")
-	info, err := os.Stat(entry)
-	if err != nil || info.IsDir() {
+	entry := fsutil.FindUp(appRoot, filepath.Join("node_modules", "typescript", "bin", "tsc"))
+	if entry == "" {
 		return tscTool{}, errors.New(missingTypeScriptMessage)
 	}
 	node, err := exec.LookPath("node")
@@ -179,4 +178,16 @@ func remapTSCOutput(appRoot, output string, tables map[string]*SegmentTable) str
 		formatted += "\n"
 	}
 	return formatted
+}
+
+// HasTypeScript reports whether the app under appRoot has its own TypeScript
+// compiler installed, without running it. `puzzle check --fix` asks first so
+// an app with nothing to type-check with still gets its upgrade (D199).
+func HasTypeScript(appRoot string) bool {
+	root, err := filepath.Abs(appRoot)
+	if err != nil {
+		return false
+	}
+	_, err = resolveTSC(root)
+	return err == nil
 }

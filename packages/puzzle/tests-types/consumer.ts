@@ -1,8 +1,10 @@
+/// <reference path="../puzzle-env.d.ts" />
+
 /**
  * Type-only consumer fixture (`npm run test:types`).
  *
  * Imports from the PUBLIC package root ('@magic-spells/puzzle') and the
- * '@magic-spells/puzzle/morph', '/ssg', '/static' and '/fixtures' subpaths
+ * '@magic-spells/puzzle/morph', '/ssg', '/static', '/fixtures', '/testing' and '/vitest' subpaths
  * exactly as an app authored with `<script lang="ts">` would. The package is
  * NOT installed in this repo, so the fixture tsconfig maps the specifiers at
  * ../types via `paths` — this still type-checks the real exported declaration
@@ -25,6 +27,7 @@ import {
 	lazy,
 } from '@magic-spells/puzzle';
 import type {
+	DataInput,
 	PuzzleAppConfig,
 	Route,
 	RouteSnapshot,
@@ -53,8 +56,12 @@ import type {
 	StaticPathsEntry,
 	StaticPathsFn,
 	NavigationResult,
+	NamedRouteTarget,
+	RouteTarget,
 	RouteView,
 	RouteAgent,
+	PrevViewState,
+	FindManyResult,
 } from '@magic-spells/puzzle';
 import { adapter, PuzzleAdapterError } from '@magic-spells/puzzle/adapter';
 import type {
@@ -63,12 +70,17 @@ import type {
 	AdapterDefaultContext,
 	AdapterDefaults,
 	AdapterFetch,
+	AdapterLoadManyResult,
 	AdapterRecord,
+	SyncStatus,
+	WritePromise,
 } from '@magic-spells/puzzle/adapter';
 import { installFixtures, DEFAULT_FIXTURE_SEED } from '@magic-spells/puzzle/fixtures';
 import type { FixturesConfig } from '@magic-spells/puzzle/fixtures';
 import { hashRouter, memoryRouter } from '@magic-spells/puzzle/router-modes';
 import type { RouterMode } from '@magic-spells/puzzle/router-modes';
+import { createForm } from '@magic-spells/puzzle/forms';
+import type { PuzzleForm, FormOptions } from '@magic-spells/puzzle/forms';
 import { enableMorph } from '@magic-spells/puzzle/morph';
 import type { MorphEngine } from '@magic-spells/puzzle/morph';
 import {
@@ -88,6 +100,9 @@ import { mountStatic } from '@magic-spells/puzzle/static';
 import type { MountStaticOptions, StaticRoute } from '@magic-spells/puzzle/static';
 import { createTestApp, measureRenders, mountView, type } from '@magic-spells/puzzle/testing';
 import type { RenderProfile } from '@magic-spells/puzzle/testing';
+import { puzzle } from '@magic-spells/puzzle/vitest';
+import type { PuzzleVitePlugin } from '@magic-spells/puzzle/vitest';
+import ImportedView from './views/Imported.pzl';
 
 const renderedNull: string = displayValue(null);
 const renderedNamedValue: string = displayValue(0, 'count');
@@ -226,15 +241,19 @@ class TodoListView extends PuzzleView {
 			const title = this.getData<{ draft: string }>().draft;
 			// store is reachable via ctx; createRecord returns a record (any).
 			this.ctx.store.createRecord('todo', { title });
-			this.setData('draft', '');
+			this.setState('draft', '');
 		},
-		selectAll: () => this.setData({ filter: 'all', selectedId: null }),
+		selectAll: () => this.setState({ filter: 'all', selectedId: null }),
+		// getState() reads the state layer alone, typed by the caller like getData().
+		clearIfAll: () => {
+			if (this.getState<{ filter: string }>().filter === 'all') this.setState('draft', '');
+		},
 		// `@click={ rename(todo.id, draft) }`: a handler takes the call's arguments.
 		rename: (id: string, title: string) => this.ctx.store.findOne('todo', id)?.update({ title }),
 	};
 
-	async data(params?: Record<string, string>, props?: any): Promise<object> {
-		const id = params?.id ?? props?.id;
+	async data({ params, props }: DataInput): Promise<object> {
+		const id = params.id ?? props?.id;
 		const todo = await this.ctx.store.findOne('todo', id);
 		const todos = this.ctx.store.findMany('todo', { filter: (t) => !t.done });
 
@@ -281,6 +300,24 @@ class TodoListView extends PuzzleView {
 		this.ctx.router.push('/todos');
 		this.ctx.router.replace('/todos?tab=2'); // v1.49, D83
 		this.ctx.router.go(-1);
+		// prefetch loads a lazy route's code and resolves a boolean (D195).
+		void this.ctx.router.prefetch('/settings').then((loaded: boolean) => loaded);
+		// @ts-expect-error prefetch takes a path or a named target
+		void this.ctx.router.prefetch(42);
+		// named targets (D196): push, replace, url and prefetch take { name, params?, query?, hash? }.
+		const albumTarget: NamedRouteTarget = { name: 'album', params: { id: 7 }, query: { tab: 'tracks', tag: ['a', 'b'] }, hash: 'credits' };
+		const anyTarget: RouteTarget = albumTarget;
+		this.ctx.router.push(albumTarget);
+		this.ctx.router.replace({ name: 'settings' });
+		void this.ctx.router.prefetch({ name: 'settings' });
+		const albumHref: string = this.ctx.router.url(anyTarget, { locale: 'es' });
+		void albumHref;
+		// @ts-expect-error a named target needs its name.
+		this.ctx.router.push({ params: { id: 7 } });
+		// @ts-expect-error params are strings or numbers.
+		this.ctx.router.push({ name: 'album', params: { id: { nested: true } } });
+		// @ts-expect-error the key is params, not param.
+		this.ctx.router.push({ name: 'album', param: { id: 7 } });
 		// push/replace resolve a NavigationResult (D182), narrowed on `ok`.
 		void this.ctx.router.push('/about').then((result: NavigationResult) => {
 			if (result.ok) {
@@ -319,6 +356,10 @@ const requireAuth: GuardFn = ({ to, from, ctx }) => {
 	if (from?.pathname === '/login' || sessions.length > 0) return true;
 	return '/login?redirect=' + encodeURIComponent(to.path);
 };
+
+// a guard may redirect to a named target (D196).
+const requireAccount: GuardFn = ({ to }) => ({ name: 'login', query: { redirect: to.path } });
+void requireAccount;
 
 const requireAdmin: GuardFn = async ({ ctx }) => {
 	await Promise.resolve();
@@ -482,9 +523,9 @@ const configuredAdapter: AdapterCapability = adapter.defaults(appDefaults);
 adapter.defaults({ publish: (_fetch: AdapterFetch) => Promise.resolve() });
 
 class AppErrorView extends PuzzleView {
-	data(_params?: Record<string, string>, props?: PuzzleErrorViewProps) {
-		props?.retry();
-		return { message: String(props?.error), phase: props?.info.phase };
+	data({ props }: DataInput<PuzzleErrorViewProps>) {
+		props.retry();
+		return { message: String(props.error), phase: props.info.phase };
 	}
 }
 
@@ -493,13 +534,15 @@ const config: PuzzleAppConfig = {
 	routes,
 	models: { todo: Todo },
 	adapter,
-	formatters: { upcase },
+	functions: { upcase },
 	apiURL: '',
 	beforeRequest: attachAuth,
 	// Path routing is the default and needs no `routerMode`; the opt-in modes
 	// are imported factories (D159), and the handle they produce is opaque.
 	routerBase: '/app',
 	transitionMode: 'sequential',
+	// link prefetch of lazy route code is on by default (D195).
+	prefetch: false,
 	scrollBehavior,
 	focusBehavior,
 	errorView: AppErrorView,
@@ -533,6 +576,7 @@ const config: PuzzleAppConfig = {
 			'refresh',
 			'render',
 			'bind',
+			'submit',
 			'enter',
 			'leave',
 			'unmount',
@@ -566,6 +610,25 @@ const noEndpointAdapter = app.store.adapter<typeof FullyCustomPost.adapter>('pos
 void noEndpointAdapter.loadMany?.();
 void app.store.loadMany('todo', { page: 2, limit: 20 });
 void [restLoad, publishResult];
+
+// D193: server queries, invalidation and write status
+const page: FindManyResult = app.store.findMany('todo', { query: { page: 2, tags: ['a', 'b'], q: null } });
+const nextPage: unknown = page.meta?.nextPage;
+// @ts-expect-error a query value is a string, number, boolean or an array of those
+app.store.findMany('todo', { query: { since: new Date() } });
+app.store.invalidate('todo');
+app.store.invalidate('todo', 7);
+app.store.invalidate('todo', { query: { page: 2 } });
+// @ts-expect-error invalidate takes an id or { query }
+app.store.invalidate('todo', true);
+const firstTodo = app.store.findOne('todo', 1) as Todo;
+const status: SyncStatus = app.store.syncStatus(firstTodo);
+const pendingVerb: 'save' | 'delete' | null = status.pending;
+const saving: WritePromise<Todo> = firstTodo.save();
+const savingPending: boolean = saving.pending;
+const deleting: WritePromise<PuzzleModel> = app.store.deleteRecord(firstTodo);
+const loadManyResult: AdapterLoadManyResult = { records: [{ id: 1 }], meta: { nextCursor: 'x' } };
+void [nextPage, pendingVerb, savingPending, deleting, loadManyResult];
 
 // ---------------------------------------------------------------------------
 // router-modes subpath: the two opt-in mode factories (D159)
@@ -675,8 +738,8 @@ app.setMorphHandler(handler);
 app.setMorphHandler(null);
 
 // ---------------------------------------------------------------------------
-// ssg subpath: prerendered pages carry the resolved head beside the
-// compatibility title (v1.50, D84); injectShell accepts it.
+// ssg subpath: prerendered pages carry the resolved head (v1.50, D84);
+// injectShell accepts it.
 // ---------------------------------------------------------------------------
 
 prerender(config).then((result: PrerenderResult) => {
@@ -689,11 +752,10 @@ prerender(config).then((result: PrerenderResult) => {
 		void description;
 		void canonical;
 	}
-	// title kept beside head for compatibility; head is optional on injectShell.
+	// head is optional on injectShell.
 	return injectShell('<html><head></head><body><div id="app"></div></body></html>', {
 		targetId: 'app',
 		content: page.html ?? '',
-		title: page.title,
 		head,
 		// The build's locale island (D175), inserted before `</body>`.
 		island: '',
@@ -732,7 +794,6 @@ prerender(config, { mode: 'static' }).then((result: PrerenderResult) => {
 	return injectStaticShell(shell, {
 		targetId: 'app',
 		content: page.html,
-		title: page.title,
 		head: page.head,
 		slug: 'index',
 		data: islandData ?? {},
@@ -761,7 +822,7 @@ const staticOptions: MountStaticOptions = {
 	layout: null,
 	route: staticRoute,
 	models: { todo: Todo },
-	formatters: { upcase },
+	functions: { upcase },
 	apiURL: '',
 	adapter,
 	// The three options the kernel destructures beyond the summary basics. (A static
@@ -819,6 +880,88 @@ async function profileRenders(): Promise<void> {
 void profileRenders;
 
 // ---------------------------------------------------------------------------
+// Typed props: PuzzleView<Props> types this.props, data()'s props, afterUpdate's
+// prev.props and the testing helpers' props; the default stays `any`.
+// ---------------------------------------------------------------------------
+
+interface CardProps {
+	title: string;
+	open: (event: Event) => void;
+}
+
+class Card extends PuzzleView<CardProps> {
+	events = {
+		open: (event: Event) => this.props.open(event),
+		// handlers read what ancestors share through this.shared
+		pick: () => this.shared.picker?.set('a'),
+	};
+
+	data({ props, shared }: DataInput<CardProps>) {
+		// shared is always an object, so a missing sharer destructures to the default
+		const { theme = {} } = shared;
+		return { heading: props.title, tone: theme.tone };
+	}
+
+	// share() takes the same object and returns values and callbacks for nested views
+	share({ props }: DataInput<CardProps>) {
+		return { title: props.title, open: (event: Event) => props.open(event) };
+	}
+
+	afterUpdate(prev: PrevViewState<CardProps>): void {
+		// @ts-expect-error prev.props is CardProps, not any
+		void prev.props.titel;
+	}
+
+	mounted(): void {
+		const title: string = this.props.title;
+		// @ts-expect-error this.props is CardProps, not any
+		void this.props.titel;
+		void title;
+	}
+}
+
+class MismatchedCard extends PuzzleView<CardProps> {
+	// @ts-expect-error data()'s props parameter is the view's Props
+	data({ props }: DataInput<{ count: number }>) {
+		return props;
+	}
+
+	// @ts-expect-error afterUpdate's prev.props is the view's Props
+	afterUpdate(_prev: PrevViewState<{ count: number }>): void {}
+}
+void MismatchedCard;
+
+// An untyped view keeps `any` props, and a typed one fills every view position.
+class PlainView extends PuzzleView {
+	mounted(): void {
+		const anything: number = this.props.whatever;
+		void anything;
+	}
+}
+const typedConstructor: PuzzleViewConstructor = Card;
+const plainPzl: typeof PuzzleView = PlainView;
+void [typedConstructor, plainPzl];
+routes.push({ path: '/card', view: Card, layout: PlainView });
+
+// puzzle-env.d.ts types a `.pzl` import as an untyped view: its props are `any`.
+declare const imported: InstanceType<typeof ImportedView>;
+const importedProp: number = imported.props.anything;
+void importedProp;
+routes.push({ path: '/imported', view: ImportedView });
+
+async function typedPropsTests(open: (event: Event) => void): Promise<void> {
+	const card = await mountView(Card, { props: { title: 'Hi', open } });
+	await card.setProps({ title: 'Bye', open });
+	// @ts-expect-error setProps takes the view's Props
+	await card.setProps({ title: 1, open });
+	// @ts-expect-error mountView's props are the view's Props
+	await mountView(Card, { props: { title: 'Hi' } });
+	const plain = await mountView(PlainView, { props: { anything: true } });
+	await plain.setProps({ whatever: 1 });
+}
+void typedPropsTests;
+
+// ---------------------------------------------------------------------------
 // Translations (D175)
 // ---------------------------------------------------------------------------
 
@@ -874,6 +1017,9 @@ function libraryCalls(lib: LibraryFunctions, price: number, when: Date, tags: st
 		// Locale prefix routing (D177): force a locale, or skip the prefix.
 		lib.link('/about', { locale: 'es' }),
 		lib.link('/files/cv.pdf', { locale: false }),
+		// a named route target (D196), alone or with options.
+		lib.link({ name: 'album', params: { id: 7 } }),
+		lib.link({ name: 'album', params: { id: 7 } }, { locale: 'es' }),
 		lib.t('cart.title'),
 		lib.t('cart.items', { count: tags.length }),
 		lib.t(404, null),
@@ -980,3 +1126,53 @@ void okFlag;
 void errShape;
 void partialResult;
 void upcase;
+
+// Config env remains usable without generated types; exact keys are augmentable.
+declare global {
+	interface ImportMetaEnv {
+		readonly API_URL: string;
+		readonly BETA: boolean;
+		readonly LIMIT: number;
+	}
+}
+const publicAPI: string = import.meta.env.API_URL;
+const publicBeta: boolean = import.meta.env.BETA;
+const publicLimit: number = import.meta.env.LIMIT;
+const undeclaredEnv: string | number | boolean | undefined = import.meta.env.UNDECLARED;
+// @ts-expect-error config values are readonly
+import.meta.env.API_URL = 'changed';
+// @ts-expect-error the env object is readonly
+import.meta.env = {};
+// @ts-expect-error augmented keys keep their exact types
+const wrongEnv: number = import.meta.env.API_URL;
+
+// ---- `@magic-spells/puzzle/forms` (D192) -----------------------------------
+class FormPost extends PuzzleModel {
+	static schema = { id: Puzzle.string().primary(), title: Puzzle.string().required() };
+}
+class EditFormPost extends PuzzleView {
+	form!: PuzzleForm<{ title: string }>;
+	created() {
+		const options: FormOptions<{ title: string }> = { fields: ['title'], key: 'post' };
+		this.form = createForm<{ title: string }>(this, FormPost, options);
+		const title: string = this.form.values.title;
+		const message: string | null = this.form.errors.title;
+		const flags: boolean[] = [this.form.touched.title, this.form.changed.title, this.form.dirty, this.form.valid, this.form.submitting];
+		this.form.set('title', 'next');
+		this.form.touch('title');
+		// @ts-expect-error a field the form does not declare
+		this.form.set('nope', 1);
+		const done: Promise<boolean> = this.form.submit(null, (values) => values.title.length);
+		const done2: Promise<boolean> = this.form.submit((values) => values.title);
+		this.form.reset();
+		this.form.reset({ title: 'seed' });
+		void [title, message, flags, done, done2];
+	}
+}
+void EditFormPost;
+// vitest subpath (D194): the plugin factory takes an optional executable path
+const vitestPlugin: PuzzleVitePlugin = puzzle();
+const vitestPluginFromSource: PuzzleVitePlugin = puzzle({ bin: '/usr/local/bin/puzzle' });
+const vitestPluginName: string = vitestPlugin.name;
+// @ts-expect-error bin is a path string
+puzzle({ bin: 1 });

@@ -108,7 +108,7 @@ const codeHero = `<QuantityInput value={ qty } min={ 1 } max={ 10 } @change={ se
 
 // parent
 events = {
-  setQty: (v) => this.setData('qty', v),
+  setQty: (v) => this.setState('qty', v),
 };`;
 
 const codeBounds = `// buttons disable at the bounds; typing past them clamps on commit
@@ -125,10 +125,10 @@ const codeDisabled = `// disables both buttons and the field
 
 export default class QuantityInputDoc extends PuzzleView {
   created() {
-    this.setData({ qty: 1, boxes: 2, cart: 1, pack: 10 });
+    this.setState({ qty: 1, boxes: 2, cart: 1, pack: 10 });
   }
 
-  data(params, props) {
+  data() {
     return {
       ...this.getData(),
       installCmd,
@@ -154,20 +154,16 @@ export default class QuantityInputDoc extends PuzzleView {
 
   events = {
     setQty: (v) => {
-      this.setData('qty', v);
-      this.refresh();
+      this.setState('qty', v);
     },
     setBoxes: (v) => {
-      this.setData('boxes', v);
-      this.refresh();
+      this.setState('boxes', v);
     },
     setCart: (v) => {
-      this.setData('cart', v);
-      this.refresh();
+      this.setState('cart', v);
     },
     setPack: (v) => {
-      this.setData('pack', v);
-      this.refresh();
+      this.setState('pack', v);
     },
   };
 }

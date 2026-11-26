@@ -39,8 +39,10 @@
         </p>
         <CodeBlock code={ morphInstall } class="mt-4"/>
         <p class="mt-3 text-sm text-muted">
-          Only needed for the morph prop — DatePicker imports @magic-spells/morph-engine lazily and degrades
-          to a plain popover without it (or under reduced motion).
+          DatePicker imports @magic-spells/morph-engine at the top of its script, so the package is required
+          whether or not you use the morph prop (puzzle add piece date-picker prints it as
+          @magic-spells/morph-engine@^0.4.2). With morph off, or under reduced motion, the panel opens as a
+          plain popover.
         </p>
       </section>
 
@@ -135,7 +137,7 @@ const installCmd = 'puzzle add piece date-picker';
 const usageImport = `import DatePicker from '@/components/ui/DatePicker.pzl';`;
 const usageMarkup = `<DatePicker label="Ship date" hint="We deliver Monday through Friday." value={ shipDate } @change={ setShipDate } />`;
 
-const morphInstall = 'npm install @magic-spells/morph-engine';
+const morphInstall = 'npm install @magic-spells/morph-engine@^0.4.2';
 
 const codeHero = `<DatePicker
   label="Ship date"
@@ -145,7 +147,7 @@ const codeHero = `<DatePicker
 
 // parent
 events = {
-  setShipDate: (iso) => this.setData('shipDate', iso),
+  setShipDate: (iso) => this.setState('shipDate', iso),
 };`;
 
 const codeError = `<DatePicker
@@ -195,7 +197,7 @@ const codeFormats = `<!-- format: short | medium (default) | long | full -->
 
 export default class DatePickerDoc extends PuzzleView {
   created() {
-    this.setData({
+    this.setState({
       shipDate: '',
       errorDate: '',
       morphDate: '2026-08-01',
@@ -205,7 +207,7 @@ export default class DatePickerDoc extends PuzzleView {
     });
   }
 
-  data(params, props) {
+  data() {
     return {
       ...this.getData(),
       installCmd,
@@ -232,12 +234,12 @@ export default class DatePickerDoc extends PuzzleView {
   }
 
   events = {
-    setShipDate: (iso) => this.setData('shipDate', iso),
-    setErrorDate: (iso) => this.setData('errorDate', iso),
-    setMorphDate: (iso) => this.setData('morphDate', iso),
-    setBoundedDate: (iso) => this.setData('boundedDate', iso),
-    setEventDate: (iso) => this.setData('eventDate', iso),
-    setFmtDate: (iso) => this.setData('fmtDate', iso),
+    setShipDate: (iso) => this.setState('shipDate', iso),
+    setErrorDate: (iso) => this.setState('errorDate', iso),
+    setMorphDate: (iso) => this.setState('morphDate', iso),
+    setBoundedDate: (iso) => this.setState('boundedDate', iso),
+    setEventDate: (iso) => this.setState('eventDate', iso),
+    setFmtDate: (iso) => this.setState('fmtDate', iso),
   };
 }
 </script>

@@ -4,5 +4,6 @@
   "files": ["ScrollStack.pzl"],
   "registryDependencies": [],
   "dependencies": ["@magic-spells/scroll-stack@^0.1.0"],
+  "styles": ["@magic-spells/scroll-stack/css"],
   "targetDir": "app/components/ui"
 }

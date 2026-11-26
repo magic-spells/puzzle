@@ -10,7 +10,7 @@
       <p class="mt-1.5 max-w-sm text-sm text-muted">{ description }</p>
     {/if}
     <div class="mt-6 flex flex-wrap items-center justify-center gap-2 empty:hidden">
-      <Slot/>
+      <Children/>
     </div>
   </div>
 </puzzle-view>
@@ -29,7 +29,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 // wrapper tints it `text-muted` (the SVG should stroke/fill `currentColor`)
 // and sizes a bare `<svg>` to size-10 as a sensible default. When no icon is
 // slotted the wrapper is `:empty` and disappears, taking its margin with it.
-// The default `<Slot/>` holds action buttons; leave it empty for a static
+// The `<Children/>` marker holds action buttons; leave it empty for a static
 // empty-state. `class` is appended to the root last, so callers can widen the
 // column, change padding, or add a border.
 //
@@ -48,7 +48,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 const BASE = 'flex flex-col items-center justify-center px-6 py-12 text-center';
 
 export default class Empty extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     return {
       classes: [BASE, props.class || ''].join(' '),
       title: props.title || '',

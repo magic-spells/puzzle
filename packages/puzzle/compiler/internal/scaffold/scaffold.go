@@ -1,17 +1,16 @@
-// Package scaffold generates a new Puzzle application from an embedded template
-// tree (see templates/). It backs `puzzle init`: it validates the requested app
-// name (it becomes an npm package name) and template, refuses to write into a
-// non-empty directory, and copies the template's files with the __APP_NAME__
+// Package scaffold generates a new Puzzle application from an embedded starter
+// (packages/puzzle/starters). It backs `puzzle init`: it validates the requested
+// app name (it becomes an npm package name) and template, refuses to write into
+// a non-empty directory, and copies the starter's files with the __APP_NAME__
 // placeholder substituted.
 //
-// Templates are real files under templates/<name>/ embedded with go:embed
-// (all: so dotfiles like .gitignore are included). Adding a template is a matter
-// of dropping a new subtree in; no Go changes are needed beyond registering its
-// name in Templates.
+// Starters are real files under starters/<name>/, embedded by that package.
+// Adding one is a matter of dropping a new folder in, adding it to the embed
+// list, and registering its name in Templates.
 //
-// templates/<name>/ is the plain-JavaScript app, written as-is. Its TypeScript
+// starters/<name>/ is the plain-JavaScript app, written as-is. Its TypeScript
 // variant (`puzzle init --typescript`, D54) is that same tree with the overlay
-// templates/<name>-ts/ laid over it: an overlay file replaces the base file at
+// starters/<name>-ts/ laid over it: an overlay file replaces the base file at
 // the same path, and an overlay `x.ts` also drops the base `x.js` it ports.
 // The overlay holds only what a TypeScript app writes differently — every
 // script, package.json, README — so styles, public/ and puzzle.config.js stay
@@ -19,35 +18,44 @@
 package scaffold
 
 import (
-	"embed"
 	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 
 	"github.com/magic-spells/puzzle/compiler/internal/fsutil"
+	"github.com/magic-spells/puzzle/starters"
 )
-
-//go:embed all:templates
-var templatesFS embed.FS
 
 // placeholder is the literal token replaced by the app name on write. It is
 // deliberately unlikely to appear in template source for any other reason, so a
 // global string replace over each file is safe.
 const placeholder = "__APP_NAME__"
 
-// Templates lists the template names `puzzle init` accepts, in menu order. The
-// first entry is the default.
-var Templates = []string{"default", "todos"}
+// Template is one starter `puzzle init` can write.
+type Template struct {
+	// Name is what --template takes, and the starter's folder in starters/.
+	Name string
+	// About is the one line the interactive menu shows beside the name.
+	About string
+}
+
+// Templates lists the starters `puzzle init` accepts, in menu order. The first
+// entry is the default.
+var Templates = []Template{
+	{Name: "default", About: "a single-page app with a counter"},
+	{Name: "static", About: "a static site: an HTML page for each route, with Home and About"},
+}
 
 // DefaultTemplate is used when --template is not given.
 const DefaultTemplate = "default"
 
 // typeScriptOverlaySuffix names a template's TypeScript overlay directory,
-// templates/<name>-ts/. It is never a template name of its own: Templates, not
+// starters/<name>-ts/. It is never a template name of its own: Templates, not
 // the directory listing, decides what --template accepts.
 const typeScriptOverlaySuffix = "-ts"
 
@@ -77,14 +85,18 @@ func ValidateName(name string) error {
 	return nil
 }
 
+// TemplateNames lists the template names, in menu order.
+func TemplateNames() []string {
+	names := make([]string, len(Templates))
+	for i, t := range Templates {
+		names[i] = t.Name
+	}
+	return names
+}
+
 // ValidTemplate reports whether name is a known template.
 func ValidTemplate(name string) bool {
-	for _, t := range Templates {
-		if t == name {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(TemplateNames(), name)
 }
 
 // Create scaffolds template into parentDir/appName and returns what it wrote.
@@ -94,7 +106,7 @@ func ValidTemplate(name string) bool {
 //     is refused.
 //   - appName is validated (npm package name); template must be known.
 //   - typescript writes the template's TypeScript variant (its -ts overlay);
-//     false writes templates/<name>/ exactly.
+//     false writes starters/<name>/ exactly.
 func Create(parentDir, appName, template string, typescript bool) (*Result, error) {
 	if err := ValidateName(appName); err != nil {
 		return nil, err
@@ -103,7 +115,7 @@ func Create(parentDir, appName, template string, typescript bool) (*Result, erro
 		template = DefaultTemplate
 	}
 	if !ValidTemplate(template) {
-		return nil, fmt.Errorf("unknown template %q (available: %s)", template, strings.Join(Templates, ", "))
+		return nil, fmt.Errorf("unknown template %q (available: %s)", template, strings.Join(TemplateNames(), ", "))
 	}
 
 	if parentDir == "" {
@@ -119,12 +131,12 @@ func Create(parentDir, appName, template string, typescript bool) (*Result, erro
 		return nil, err
 	}
 
-	files, err := readTree("templates/" + template)
+	files, err := readTree(template)
 	if err != nil {
 		return nil, fmt.Errorf("loading template %q: %w", template, err)
 	}
 	if typescript {
-		overlay, err := readTree("templates/" + template + typeScriptOverlaySuffix)
+		overlay, err := readTree(template + typeScriptOverlaySuffix)
 		if err != nil {
 			return nil, fmt.Errorf("loading the TypeScript variant of template %q: %w", template, err)
 		}
@@ -157,10 +169,10 @@ func Create(parentDir, appName, template string, typescript bool) (*Result, erro
 	return &Result{Dir: target, Files: written}, nil
 }
 
-// readTree reads every file under root in the embedded templates, keyed by its
+// readTree reads every file under root in the embedded starters, keyed by its
 // slash path relative to root.
 func readTree(root string) (map[string][]byte, error) {
-	sub, err := fs.Sub(templatesFS, root)
+	sub, err := fs.Sub(starters.FS, root)
 	if err != nil {
 		return nil, err
 	}
@@ -184,9 +196,9 @@ func readTree(root string) (map[string][]byte, error) {
 
 // tsconfigJSON is the strict, noEmit tsconfig written by --typescript (D54).
 // The Puzzle build never runs tsc; this config serves two readers. An editor's
-// TypeScript reads it directly for the app's .ts/.js files, where `include`
-// picks up the package's shipped `puzzle-env.d.ts` shim so `import X from
-// './views/X.pzl'` resolves to a PuzzleView subclass. `puzzle check` (the
+// TypeScript reads it directly for the app's .ts/.js files and its tests/
+// (D194), where `include` picks up the package's shipped `puzzle-env.d.ts`
+// shim so `import X from './views/X.pzl'` resolves to a PuzzleView subclass. `puzzle check` (the
 // scaffold's `npm run check`, D165) extends it, so its strictness is what the
 // .pzl scripts, template expressions and .ts modules are checked against.
 // `paths` mirrors the build's '@' app alias (SPEC §40, D75) so
@@ -210,6 +222,7 @@ const tsconfigJSON = `{
   "include": [
     "app/**/*.ts",
     "app/**/*.js",
+    "tests/**/*.ts",
     "node_modules/@magic-spells/puzzle/puzzle-env.d.ts"
   ]
 }

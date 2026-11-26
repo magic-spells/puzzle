@@ -1,15 +1,6 @@
 @import "tailwindcss";
 
 /*
- * Tailwind v4 content detection. Paths are relative to this stylesheet
- * (app/styles/), so "../" is the app root. The .js glob matters here: several
- * class strings are computed in `data()` rather than written in markup.
- */
-@source "../**/*.pzl";
-@source "../**/*.js";
-@source "../public/**/*.html";
-
-/*
  * "Instrument panel" theme — flat, dark, high-contrast, numerals in mono. A
  * measurement UI should be legible at a glance and cost nothing to render:
  * there are no gradients, shadows, blurs or transitions on any element that

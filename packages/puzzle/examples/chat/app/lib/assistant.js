@@ -41,12 +41,12 @@ const KNOWLEDGE = [
   {
     keywords: ['nested', 'child route', 'slot', 'children'],
     answer:
-      "Nested routes let a route carry children: [...] with paths relative to the parent, and the parent view renders its matched child at <Slot />. A path: '' entry is the index child that matches the bare URL. Params merge down the whole chain, so every level's data(params) sees the full merged params. This sidebar-plus-thread layout is exactly that: a Shell parent hosts a Welcome index child and a Thread child at c/:id.",
+      "Nested routes let a route carry children: [...] with paths relative to the parent, and the parent view renders its matched child at <Outlet />. A path: '' entry is the index child that matches the bare URL. Params merge down the whole chain, so every level's data({ params }) sees the full merged params. This sidebar-plus-thread layout is exactly that: a Shell parent hosts a Welcome index child and a Thread child at c/:id.",
   },
   {
     keywords: ['route', 'router', 'navigation', 'push', 'url', 'link'],
     answer:
-      "Routing is client-side and SPA-only. Routes map a path to a view (and an optional top-level layout); :id segments arrive as params in data(params). You navigate with this.ctx.router.push('/c/123'). The URL commits atomically — only after the new view's data() resolves — so a failed navigation changes nothing. There's a '*' catch-all for 404s, opt-in hash mode for static hosts, and the router owns scroll restoration across back/forward.",
+      "Routing is client-side and SPA-only. Routes map a path to a view (and an optional top-level layout); :id segments arrive as params in data({ params }). You navigate with this.ctx.router.push('/c/123'). The URL commits atomically — only after the new view's data() resolves — so a failed navigation changes nothing. There's a '*' catch-all for 404s, opt-in hash mode for static hosts, and the router owns scroll restoration across back/forward.",
   },
   {
     keywords: ['pzl', 'single-file', 'anatomy', 'component file', 'structure'],
@@ -61,7 +61,7 @@ const KNOWLEDGE = [
   {
     keywords: ['store', 'reactive', 'reactivity', 'data', 'record', 'model', 'subscribe'],
     answer:
-      "The store is a reactive datastore. Any query you run inside data() — findOne, findMany — auto-subscribes the component, so when a matching record changes the component's data() re-runs and the view patches. That's how a streamed token lands: the assistant message record is update()'d through the store on every word, which re-renders this thread AND bumps the conversation to the top of the sidebar. Local UI state that shouldn't trigger a re-query uses setData() instead.",
+      "The store is a reactive datastore. Any query you run inside data() — findOne, findMany — auto-subscribes the component, so when a matching record changes the component's data() re-runs and the view patches. That's how a streamed token lands: the assistant message record is update()'d through the store on every word, which re-renders this thread AND bumps the conversation to the top of the sidebar. Local UI state uses setState() instead; it re-runs data() only when data() read the key you wrote.",
   },
   {
     keywords: ['event', 'modifier', 'prevent', 'stop', 'keydown', 'submit', 'handler'],

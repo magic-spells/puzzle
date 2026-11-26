@@ -1,14 +1,6 @@
 @import "tailwindcss";
 
 /*
- * Tailwind v4 content detection. Paths are relative to this stylesheet
- * (app/styles/), so "../" is the app root.
- */
-@source "../**/*.pzl";
-@source "../**/*.js";
-@source "../public/**/*.html";
-
-/*
  * Theming: every semantic token is an `inline` theme entry pointing at a plain
  * custom property, so the generated utilities emit `var(--dt-…)` rather than a
  * baked value. Flipping `<html data-theme>` therefore re-themes the whole panel
@@ -70,6 +62,24 @@
 
 	--font-sans: var(--dt-font-sans);
 	--font-mono: var(--dt-font-mono);
+
+	/*
+	 * Type scale at DevTools density, in px like the 12px body. A size sets
+	 * font-size only, so a row keeps the line-height it inherits or names; the
+	 * Performance headline number carries its own.
+	 */
+	--text-8: 8px;
+	--text-9: 9px;
+	--text-10: 10px;
+	--text-11: 11px;
+	--text-13: 13px;
+	--text-15: 15px;
+	--text-26: 26px;
+	--text-26--line-height: 1.15;
+
+	/* Key/value rows: the inspector rows' leading and the Connection panel's grid. */
+	--leading-kv: 1.35;
+	--grid-template-columns-kv: 8rem 1fr;
 }
 
 :root {
@@ -221,31 +231,27 @@
 }
 
 /*
- * The re-render pulse (Views panel). A `flush` naming a view in its `notified`
- * list sets the row's `dt-pulse` class for ~600ms — the one thing in the panel
- * that says "this view just re-rendered because of that store write".
+ * The re-render pulse (Views and Subscriptions panels). A `flush` sets the
+ * `dt-pulse` class for ~600ms on the tree row of each view in its `notified`
+ * list and on the Subscriptions row of each key it wrote — the one thing in the
+ * panel that says "this re-rendered because of that store write".
  *
  * Deliberately UNLAYERED: Tailwind puts its utilities in a cascade layer, and
  * unlayered author styles win over every layered one, so a row that also
  * carries `hover:bg-raised` still flashes. (An animation would out-rank a
  * normal declaration anyway; being unlayered means the class works the same way
  * if it ever grows non-animated properties.)
+ *
+ * No end keyframe: the fade lands on the row's own background, so it never
+ * snaps back at the end. A selected row is already `accent-soft`, so it shows
+ * no pulse.
  */
 @keyframes dt-pulse {
 	0% {
 		background-color: var(--dt-accent-soft);
 	}
-	100% {
-		background-color: transparent;
-	}
 }
 
-/*
- * The pulse animates BACKGROUND-COLOR ONLY. It used to also animate an inset
- * left shadow, which is now how SELECTION is drawn (`dt-row-selected`) — and a
- * selected row that re-renders must show both at once, so the two effects were
- * split onto different properties rather than fighting over one.
- */
 .dt-pulse {
 	animation: dt-pulse 600ms ease-out;
 }
@@ -255,15 +261,6 @@
 		animation-duration: 1ms;
 		background-color: var(--dt-accent-soft);
 	}
-}
-
-/*
- * The active tree row's 2px left bar (VS Code's active-item convention). An
- * inset box-shadow rather than a border so it costs no layout width and cannot
- * shift the row's text by a pixel when selection moves.
- */
-.dt-row-selected {
-	box-shadow: inset 2px 0 0 var(--dt-accent);
 }
 
 /*

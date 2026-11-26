@@ -169,5 +169,3 @@ function disarm(rootMargin, el, callback) {
 		registry.delete(rootMargin);
 	}
 }
-
-export default observeVisible;

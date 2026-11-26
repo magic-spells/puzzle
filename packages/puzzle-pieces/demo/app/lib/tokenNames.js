@@ -138,6 +138,7 @@ export const TOKEN_GROUPS = [
 			{ name: 'shadow-panel', role: 'The work panel', prop: '--shadow-panel', shadow: true },
 			{ name: 'shadow-card', role: 'A card', prop: '--shadow-card', shadow: true },
 			{ name: 'shadow-popover', role: 'A popover', prop: '--shadow-popover', shadow: true },
+			{ name: 'shadow-kbd', role: 'A keycap', prop: '--shadow-kbd', shadow: true },
 		],
 	},
 ].map((group) => ({

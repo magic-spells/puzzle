@@ -217,10 +217,10 @@ const codeColor = `<!-- ticks, dots, snap and heartbeat paint in currentColor --
 
 export default class SpinnerDoc extends PuzzleView {
   created() {
-    this.setData({ loading: false });
+    this.setState({ loading: false });
   }
 
-  data(params, props) {
+  data() {
     return {
       ...this.getData(),
       installCmd,
@@ -248,8 +248,7 @@ export default class SpinnerDoc extends PuzzleView {
 
   events = {
     toggleLoading: () => {
-      this.setData({ loading: !this.getData().loading });
-      this.refresh();
+      this.setState({ loading: !this.getData().loading });
     },
   };
 }

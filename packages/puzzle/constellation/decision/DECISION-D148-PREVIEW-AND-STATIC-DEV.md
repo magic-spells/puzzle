@@ -10,8 +10,8 @@ connections:
   - COMPONENT-DEV-SERVER
   - COMPONENT-COMPILER-CLI
   - DOC-SPEC-BUILD
-verified_at: '2026-08-24T19:03:32.784Z'
-verified_sha: c809db6680eb9355961897756f54e97f1164b88f
+verified_at: '2026-11-24T18:13:21.008Z'
+verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
 code_refs:
   - compiler/cmd/puzzle/main.go
   - compiler/internal/build/prerender.go

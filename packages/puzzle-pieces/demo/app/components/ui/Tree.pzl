@@ -15,7 +15,7 @@
         class={ row.rowClass }
         style={ row.indentStyle }
         @keydown={ handleKeydown(row.id, event) }
-        @click={ handleClick(row.id, event) }>
+        @click={ handleClick(row.id) }>
         {#if row.hasChildren}
           <svg
             class="size-4 shrink-0 text-muted transition-[rotate] duration-150 motion-reduce:transition-none {#if row.expanded}rotate-90{/if}"
@@ -104,7 +104,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 //   @toggle({ id, expanded })    a parent's expand/collapse INTENT; `expanded` is
 //                                the full next array of expanded ids. A controlled
 //                                parent writes it back to `expanded`. (Uncontrolled,
-//                                the Tree also flips its internal set + refresh().)
+//                                the Tree also flips its own expanded state.)
 //
 // KEYBOARD (roving tabindex — the whole tree is a single Tab stop; exactly one
 // visible treeitem is tabbable, and per APG it is the LAST-FOCUSED row, not the
@@ -168,9 +168,10 @@ function flatten(nodes, expandedSet, value, level, out) {
 export default class Tree extends PuzzleView {
   created() {
     this._uid = ++uid;
-    // Uncontrolled expansion state keyed by node id (instance field, flipped with
-    // refresh() — mirrors Sidebar's _openMap). Ignored when `expanded` is controlled.
-    this._expandedMap = {};
+    // uncontrolled expansion state keyed by node id, in the state layer. data()
+    // reads it through getState(), so a setState() flip re-runs data() on its
+    // own. ignored when `expanded` is controlled.
+    this.setState({ expandedMap: {} });
   }
 
   // ---- expanded: optional-controlled resolution ----------------------------
@@ -184,14 +185,13 @@ export default class Tree extends PuzzleView {
       const arr = Array.isArray(this.props.expanded) ? this.props.expanded : [];
       return new Set(arr.map(String));
     }
-    return new Set(
-      Object.keys(this._expandedMap).filter((id) => this._expandedMap[id])
-    );
+    const map = this.getState().expandedMap;
+    return new Set(Object.keys(map).filter((id) => map[id]));
   }
 
   // ---- render model --------------------------------------------------------
 
-  data(params, props) {
+  data({ props }) {
     const prev = this.getData();
     const value = props.value != null ? String(props.value) : '';
     const expandedSet = this._expandedSet();
@@ -201,12 +201,12 @@ export default class Tree extends PuzzleView {
     // ROVING TABINDEX FOLLOWS FOCUS, NOT SELECTION (APG). Whoever the reader last
     // moved focus to — by arrow key or by click — owns the tree's single Tab stop,
     // so tabbing out and shift-tabbing back returns to where they were rather than
-    // teleporting to the selection. focusedId is local state (setData in
+    // teleporting to the selection. focusedId is local state (setState in
     // _setFocused), carried across data() re-runs through `prev` so a parent
     // re-render cannot lose the reader's place. Two fallbacks in order: the row is
     // gone or now disabled (a collapsed branch, a filtered list) → the selected
-    // row if visible → the first enabled root, which keeps the tree reachable at
-    // all times.
+    // row if visible → the first enabled visible row, which keeps the tree
+    // reachable at all times.
     const focusedId = prev && prev.focusedId != null ? prev.focusedId : null;
     let rovingId = null;
     if (focusedId && rows.some((r) => r.id === focusedId && !r.disabled)) {
@@ -252,13 +252,13 @@ export default class Tree extends PuzzleView {
 
   // ---- intent helpers ------------------------------------------------------
 
-  requestSelect(row, event) {
+  requestSelect(row) {
     if (!row || row.disabled) return;
     const { select } = this.props;
     if (typeof select === 'function') select(row.id);
   }
 
-  requestToggle(row, event) {
+  requestToggle(row) {
     if (!row || !row.hasChildren || row.disabled) return;
     const set = this._expandedSet();
     const willExpand = !set.has(row.id);
@@ -270,8 +270,8 @@ export default class Tree extends PuzzleView {
     if (typeof toggle === 'function') toggle({ id: row.id, expanded: nextArr });
 
     if (!this._expandedControlled()) {
-      this._expandedMap[row.id] = willExpand;
-      this.refresh();
+      const map = this.getState().expandedMap;
+      this.setState({ expandedMap: { ...map, [row.id]: willExpand } });
     }
   }
 
@@ -288,26 +288,24 @@ export default class Tree extends PuzzleView {
     this._setFocused(row ? row.id : null);
   }
 
-  // Hand the roving tabindex to `id`. refresh() is what makes it stick: setData
-  // alone re-renders without re-running data(), and every row's tabindex is derived
-  // there — the attribute would stay on the old row until some unrelated re-render.
-  // Rows are keyed by id, so the patch reuses the same <li> and DOM focus survives.
+  // Hand the roving tabindex to `id`. data() reads focusedId, so the write re-runs
+  // it with the next render and every row's tabindex follows. Rows are keyed by
+  // id, so the patch reuses the same <li> and DOM focus survives.
   _setFocused(id) {
     if (!id || this.getData().focusedId === id) return;
-    this.setData({ focusedId: id });
-    this.refresh();
+    this.setState({ focusedId: id });
   }
 
   events = {
-    handleClick: (id, event) => {
+    handleClick: (id) => {
       const { rows } = this.getData();
       const row = rows.find((r) => r.id === id);
       if (!row || row.disabled) return;
       // A click focuses the <li> (it is tabindex-bearing), so the tab stop has to
       // move with it — otherwise clicking row 7 and tabbing back lands on row 1.
       this._setFocused(row.id);
-      this.requestSelect(row, event);
-      if (row.hasChildren) this.requestToggle(row, event);
+      this.requestSelect(row);
+      if (row.hasChildren) this.requestToggle(row);
     },
 
     handleKeydown: (id, event) => {
@@ -327,12 +325,12 @@ export default class Tree extends PuzzleView {
           break;
         case 'ArrowRight':
           event.preventDefault();
-          if (row.hasChildren && !row.expanded) this.requestToggle(row, event);
+          if (row.hasChildren && !row.expanded) this.requestToggle(row);
           else if (row.hasChildren && row.expanded) this.focusRow(idx + 1);
           break;
         case 'ArrowLeft':
           event.preventDefault();
-          if (row.hasChildren && row.expanded) this.requestToggle(row, event);
+          if (row.hasChildren && row.expanded) this.requestToggle(row);
           else this.focusRow(row.parentIndex);
           break;
         case 'Home':
@@ -350,8 +348,8 @@ export default class Tree extends PuzzleView {
           // This row already holds DOM focus (it is the keydown target); make the
           // tab stop agree even if the reader tabbed straight in and never arrowed.
           this._setFocused(row.id);
-          this.requestSelect(row, event);
-          if (row.hasChildren) this.requestToggle(row, event);
+          this.requestSelect(row);
+          if (row.hasChildren) this.requestToggle(row);
           break;
         default:
           return;

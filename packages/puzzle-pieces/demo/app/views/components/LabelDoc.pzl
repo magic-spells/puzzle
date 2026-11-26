@@ -73,15 +73,15 @@ const codeWithPieces = `<Label for="site-search">Search</Label>
 
 // parent
 events = {
-  setQuery: (v) => this.setData('query', v),
+  setQuery: (v) => this.setState('query', v),
 };`;
 
 export default class LabelDoc extends PuzzleView {
   created() {
-    this.setData({ query: '' });
+    this.setState({ query: '' });
   }
 
-  data(params, props) {
+  data() {
     return {
       ...this.getData(),
       installCmd,
@@ -98,7 +98,7 @@ export default class LabelDoc extends PuzzleView {
   }
 
   events = {
-    setQuery: (v) => this.setData('query', v),
+    setQuery: (v) => this.setState('query', v),
   };
 }
 </script>

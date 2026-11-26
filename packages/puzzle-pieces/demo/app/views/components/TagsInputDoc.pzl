@@ -105,11 +105,12 @@
 
         <section id="keyboard" class="scroll-mt-20">
           <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Keyboard</h2>
-          <p class="mb-3 text-sm text-body">Focus stays on the input; these keys drive the field:</p>
+          <p class="mb-3 text-sm text-body">These keys drive the field:</p>
           <ul class="mb-4 space-y-1.5 text-sm text-body">
             <li><span class="font-medium text-ink">Enter / comma</span> — commit the trimmed text as a new tag and clear the input</li>
             <li><span class="font-medium text-ink">Backspace</span> — on an empty input, remove the last tag</li>
             <li><span class="font-medium text-ink">Paste</span> — text with delimiters splits into several tags at once</li>
+            <li><span class="font-medium text-ink">Tab / Shift+Tab</span> — reach each chip's ×; Enter or Space drops that tag and returns focus to the input</li>
             <li><span class="font-medium text-ink">Chip ×</span> — click a chip's remove button to drop that tag</li>
           </ul>
           <ExampleBox code={ codeKeyboard }>
@@ -137,10 +138,9 @@ const usageImport = `import TagsInput from '@/components/ui/TagsInput.pzl';`;
 const usageMarkup = `<TagsInput value={ tags } @change={ setTags } />`;
 
 const codeHero = `// value is a string ARRAY; @change fires with the NEXT array on add or remove.
-setTags(next) {
-  this.setData('tags', next);
-  this.refresh();
-}
+events = {
+  setTags: (next) => this.setState('tags', next),
+};
 
 <TagsInput value={ tags } @change={ setTags } />`;
 
@@ -176,7 +176,7 @@ const codeKeyboard = `<TagsInput value={ tags } @change={ setTags } />`;
 
 export default class TagsInputDoc extends PuzzleView {
   created() {
-    this.setData({
+    this.setState({
       tags: ['design', 'puzzle'],
       basicTags: ['typescript', 'go'],
       maxTags: ['red', 'green'],
@@ -186,7 +186,7 @@ export default class TagsInputDoc extends PuzzleView {
     });
   }
 
-  data(params, props) {
+  data() {
     return {
       ...this.getData(),
       installCmd,
@@ -214,28 +214,22 @@ export default class TagsInputDoc extends PuzzleView {
 
   events = {
     setTags: (v) => {
-      this.setData('tags', v);
-      this.refresh();
+      this.setState('tags', v);
     },
     setBasicTags: (v) => {
-      this.setData('basicTags', v);
-      this.refresh();
+      this.setState('basicTags', v);
     },
     setMaxTags: (v) => {
-      this.setData('maxTags', v);
-      this.refresh();
+      this.setState('maxTags', v);
     },
     setDupeTags: (v) => {
-      this.setData('dupeTags', v);
-      this.refresh();
+      this.setState('dupeTags', v);
     },
     setCommaTags: (v) => {
-      this.setData('commaTags', v);
-      this.refresh();
+      this.setState('commaTags', v);
     },
     setErrTags: (v) => {
-      this.setData('errTags', v);
-      this.refresh();
+      this.setState('errTags', v);
     },
   };
 }

@@ -3,13 +3,15 @@ name: Home.compiled.js
 status: verified
 path: tests/fixtures/todos/Home.compiled.js
 language: JavaScript
-summary: Load-bearing file for TEST-TODOS-INTEGRATION.
+summary: >-
+  Hand-written stand-in for the compiled todos Home view, shared by the todos suite and other
+  runtime tests.
 connections:
   - TEST-TODOS-INTEGRATION
-verified_at: '2026-08-24T21:11:50.859Z'
-verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
+verified_at: '2026-11-24T18:02:16.140Z'
+verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
 ---
 
 # Home.compiled.js
 
-Source binding for [[TEST-TODOS-INTEGRATION]]. The path is the contract; keep behavioral detail on the owning card.
+A hand-written stand-in for the compiler's output of the todos example's `Home.pzl` view, used by the fixture half of the todos suite ([[TEST-TODOS-INTEGRATION]]) and by other runtime tests (list counters, component prop bailout, `./testing`). The compiled half uses real `pzlc` output. `TestGoldenHome` holds this file to the compiler's output of the same view, ignoring comments, blank lines and import specifiers, so a change to Home's codegen means editing this file too.

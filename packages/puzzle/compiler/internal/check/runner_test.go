@@ -106,7 +106,7 @@ func TestRunWithLiveTSC(t *testing.T) {
 	if err := os.MkdirAll(viewDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	source := `<puzzle-view><p>{ value.upper }</p></puzzle-view>
+	source := `<puzzle-view><p>{ round(value).upper }</p></puzzle-view>
 <script lang="ts">
 import { PuzzleView } from '@magic-spells/puzzle';
 export default class Home extends PuzzleView { value = 123; }
@@ -120,9 +120,43 @@ export default class Home extends PuzzleView { value = 123; }
 	if err == nil {
 		t.Fatal("expected template type error")
 	}
-	want := "app/views/Home.pzl:1:25: Property 'upper' does not exist on type 'number'."
+	want := "app/views/Home.pzl:1:32: Property 'upper' does not exist on type 'number'."
 	if got := err.Error(); got != want {
 		t.Fatalf("live tsc output mismatch\nwant: %s\ngot:  %s", want, got)
+	}
+}
+
+// A template reads what data() returns, not the view instance. Each of these
+// correct views was reported against the class's own declared fields, or
+// against the index signature that stood in for the rest — or, for
+// Object.values and entries, as unknown values inferred from untyped data.
+func TestLiveTSCTemplateReadsDataNotTheInstance(t *testing.T) {
+	const objectWalks = `{#for user in Object.values(users)}<i>{ user.name }</i>{/for}{#for pair in Object.entries(users)}<i>{ pair[1].name }</i>{/for}{ Object.values(users).map(u => u.name).join(', ') }`
+	for _, tc := range []struct{ name, template, members string }{
+		{"private field mirrored in data()", "{ count }", "private count = 0;\n  data() { return { count: this.count }; }"},
+		{"nullable field normalised in data()", "{ user.name }", "user: { name: string } | null = null;\n  data() { return { user: this.user ?? { name: 'guest' } }; }"},
+		{"data key named like a view member", "{ events.length }", "data() { return { events: [{ title: 'Launch' }] }; }"},
+		{"data()-only key read with a dot", "{ total }", "data() { return { total: 3 }; }"},
+		{"Object.values and entries over a data()-only key", objectWalks, "data() { return { users: { a: { name: 'A' } } }; }"},
+		{"Object.values and entries over a declared field", objectWalks, "users: Record<string, { name: string }> = {};\n  data() { return { users: this.users }; }"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			root := liveTSCApp(t)
+			if err := os.WriteFile(filepath.Join(root, "tsconfig.json"), []byte(`{"compilerOptions":{"strict":true,"noPropertyAccessFromIndexSignature":true}}`), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			writeLiveView(t, root, `<puzzle-view><p>`+tc.template+`</p></puzzle-view>
+<script lang="ts">
+import { PuzzleView } from '@magic-spells/puzzle';
+export default class Home extends PuzzleView {
+  `+tc.members+`
+}
+</script>
+`)
+			if _, err := Run(root); err != nil {
+				t.Fatalf("a template reading data() must check clean: %v", err)
+			}
+		})
 	}
 }
 
@@ -135,7 +169,7 @@ func TestPlainJSScriptUncheckedByDefault(t *testing.T) {
 	}
 }
 
-// With no app tsconfig the check is not strict. TypeScript 6 and 7 default
+// With no app tsconfig the check is not strict. TypeScript 7 defaults
 // strict on, and a JavaScript field first assigned in a lifecycle method is
 // inferred as possibly undefined — examples/stress failed with
 // `'__d.stats' is possibly 'undefined'`.
@@ -156,13 +190,13 @@ export default class Home extends PuzzleView {
 
 func TestPlainJSTemplateErrorsAreReported(t *testing.T) {
 	root := liveTSCApp(t)
-	writeLiveView(t, root, plainJSComponent("value.upper"))
+	writeLiveView(t, root, plainJSComponent("round(value).upper"))
 
 	_, err := Run(root)
 	if err == nil {
 		t.Fatal("expected checked template expression to fail")
 	}
-	want := "app/views/Home.pzl:1:25: Property 'upper' does not exist on type 'number'."
+	want := "app/views/Home.pzl:1:32: Property 'upper' does not exist on type 'number'."
 	if got := err.Error(); got != want {
 		t.Fatalf("plain-JS template diagnostic mismatch\nwant: %s\ngot:  %s", want, got)
 	}
@@ -217,7 +251,7 @@ func TestTSCRunsUnderNodeFromAPathWithSpaces(t *testing.T) {
 	// A non-executable stand-in for tsc: nothing about the invocation may depend
 	// on the exec bit or on a `.bin` shim, only on node reading the file.
 	entry := filepath.Join(binDir, "tsc")
-	if err := os.WriteFile(entry, []byte("console.log('Version 5.7.3');\n"), 0o644); err != nil {
+	if err := os.WriteFile(entry, []byte("console.log('Version 7.0.2');\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	tool, err := resolveTSC(root)
@@ -227,12 +261,53 @@ func TestTSCRunsUnderNodeFromAPathWithSpaces(t *testing.T) {
 	if tool.entry != entry {
 		t.Fatalf("entry = %q, want the typescript package entry %q", tool.entry, entry)
 	}
-	version, err := readTypeScriptVersion(tool)
-	if err != nil {
-		t.Fatalf("readTypeScriptVersion: %v", err)
+	if err := requireTypeScript7(tool); err != nil {
+		t.Fatalf("requireTypeScript7: %v", err)
 	}
-	if version != (TypeScriptVersion{5, 7}) {
-		t.Fatalf("version = %+v, want 5.7", version)
+}
+
+// npm and Yarn workspaces hoist an app's typescript to the workspace root's
+// node_modules, where Node finds it by walking up from the app.
+func TestResolveTSCFindsAWorkspaceHoistedInstall(t *testing.T) {
+	if _, err := exec.LookPath("node"); err != nil {
+		t.Skip("node not available on PATH")
+	}
+	workspace := t.TempDir()
+	entry := filepath.Join(workspace, "node_modules", "typescript", "bin", "tsc")
+	if err := os.MkdirAll(filepath.Dir(entry), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(entry, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	tool, err := resolveTSC(filepath.Join(workspace, "apps", "web"))
+	if err != nil || tool.entry != entry {
+		t.Fatalf("resolveTSC = %q, %v; want the workspace root's %q", tool.entry, err, entry)
+	}
+}
+
+// An older compiler stops the run before anything is generated: the config
+// puzzle check writes is a TypeScript 7 config.
+func TestRunRefusesTypeScriptBefore7(t *testing.T) {
+	if _, err := exec.LookPath("node"); err != nil {
+		t.Skip("node not available on PATH")
+	}
+	root := t.TempDir()
+	binDir := filepath.Join(root, "node_modules", "typescript", "bin")
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(binDir, "tsc"), []byte("console.log('Version 5.9.2');\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	writeLiveView(t, root, plainJSComponent("value"))
+	_, err := Run(root)
+	want := "puzzle check needs TypeScript 7 or later, found 5.9.2: npm install -D typescript@latest"
+	if err == nil || err.Error() != want {
+		t.Fatalf("Run = %v, want %q", err, want)
+	}
+	if _, err := os.Stat(filepath.Join(root, ".puzzle")); !os.IsNotExist(err) {
+		t.Fatalf("a refused run must not generate the workspace: %v", err)
 	}
 }
 
@@ -415,7 +490,7 @@ export default class Home extends PuzzleView {
 	if err := os.WriteFile(filepath.Join(viewDir, "Home.pzl"), []byte(source), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	result, err := Generate(root, TypeScriptVersion{Major: 7})
+	result, err := Generate(root)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -497,7 +572,7 @@ func TestTableIndexKeysMatchRemapLookup(t *testing.T) {
 // expression. The negative half runs first so a silently-skipped emission
 // cannot pass this test.
 func TestDottedComponentTagChecksProps(t *testing.T) {
-	bad := `<puzzle-view><Frame.Wrapper label={ value.upper }><Frame.Content/></Frame.Wrapper></puzzle-view>
+	bad := `<puzzle-view><Frame.Wrapper label={ round(value).upper }><Frame.Content/></Frame.Wrapper></puzzle-view>
 <script lang="ts">
 import { PuzzleView } from '@magic-spells/puzzle';
 export default class Home extends PuzzleView { value = 123; }
@@ -509,7 +584,7 @@ export default class Home extends PuzzleView { value = 123; }
 	if err == nil {
 		t.Fatal("expected the prop expression on a dotted component tag to be checked")
 	}
-	want := "app/views/Home.pzl:1:43: Property 'upper' does not exist on type 'number'."
+	want := "app/views/Home.pzl:1:50: Property 'upper' does not exist on type 'number'."
 	if got := err.Error(); got != want {
 		t.Fatalf("dotted-tag diagnostic mismatch\nwant: %s\ngot:  %s", want, got)
 	}
@@ -582,12 +657,12 @@ func TestJSHandlerArityIsNotChecked(t *testing.T) {
 // literal as open, so a misspelled handler was not reported before.
 func TestJSHandlerArgumentsAndNameAreChecked(t *testing.T) {
 	root := liveTSCApp(t)
-	writeLiveView(t, root, handlerArityComponent("", "value.upper"))
+	writeLiveView(t, root, handlerArityComponent("", "round(value).upper"))
 	_, err := Run(root)
 	if err == nil {
 		t.Fatal("expected a JavaScript handler's argument expression to be checked")
 	}
-	want := "app/views/Home.pzl:2:31: Property 'upper' does not exist on type 'number'."
+	want := "app/views/Home.pzl:2:38: Property 'upper' does not exist on type 'number'."
 	if got := err.Error(); got != want {
 		t.Fatalf("handler argument diagnostic mismatch\nwant: %s\ngot:  %s", want, got)
 	}
@@ -600,5 +675,39 @@ func TestJSHandlerArgumentsAndNameAreChecked(t *testing.T) {
 	}
 	if got := err.Error(); !strings.HasPrefix(got, "app/views/Home.pzl:2:20: Property 'plya' does not exist on type") {
 		t.Fatalf("handler name diagnostic mismatch: %s", got)
+	}
+
+	// With no events field the base class's optional events must not let a
+	// handler name through when strict is off: the click would throw.
+	undeclared := liveTSCApp(t)
+	writeLiveView(t, undeclared, strings.Replace(handlerArityComponent("", "event"), "events = {", "actions = {", 1))
+	_, err = Run(undeclared)
+	if err == nil {
+		t.Fatal("expected a handler on a JavaScript component with no events field to be reported")
+	}
+	if got := err.Error(); !strings.HasPrefix(got, "app/views/Home.pzl:2:20: Property 'play' does not exist on type 'never'.") {
+		t.Fatalf("undeclared handler diagnostic mismatch: %s", got)
+	}
+}
+
+func TestImportMetaEnvCheck(t *testing.T) {
+	root := liveTSCApp(t)
+	writeLiveView(t, root, `<puzzle-view><p>{ url }</p></puzzle-view>
+<script lang="ts">
+import { PuzzleView } from '@magic-spells/puzzle';
+export default class Home extends PuzzleView {
+ url: string = import.meta.env.API_URL;
+ beta: boolean = import.meta.env.BETA;
+ unknown: string | number | boolean | undefined = import.meta.env.UNDECLARED;
+}
+</script>`)
+	if err := os.WriteFile(filepath.Join(root, "app", "env.d.ts"), []byte(`interface ImportMetaEnv { readonly API_URL: string; readonly BETA: boolean; }`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "app", "app.ts"), []byte(`const api: string = import.meta.env.API_URL;`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Run(root); err != nil {
+		t.Fatalf("puzzle check must load env globals and app augmentation: %v", err)
 	}
 }

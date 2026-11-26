@@ -168,7 +168,7 @@ function getSessionStorage() {
  * positional shape can't survive omissions). Depth-capped and cycle-guarded so
  * a self-referential or deeply-nested model can never wedge the snapshot. The
  * store records that data() derived from queries are intentionally dropped —
- * the restored store re-provides them; only local setData state (drafts,
+ * the restored store re-provides them; only local setState state (drafts,
  * toggles, form fields) needs to cross the reload. Exported for direct testing.
  *
  * @param {unknown} data
@@ -240,56 +240,52 @@ function walk(value, depth, seen) {
  * @param {PuzzleApp} app
  */
 export function snapshotToStorage(app) {
-	// Positive gate so DCE empties this (and orphans snapshotImpl) in production.
-	if (DEV) snapshotImpl(app);
-}
-
-/** @param {PuzzleApp} app */
-function snapshotImpl(app) {
-	try {
-		const storage = getSessionStorage();
-		if (!storage) return;
-
-		/** @type {HmrBlob} */
-		const blob = { t: Date.now(), store: {}, views: [] };
-
-		// Store: the same wire shape _persist() writes (type → [toJSON()]), via
-		// the shared serializer. app.store's getter throws once unmounted, so the
-		// whole read is guarded.
+	if (DEV) {
 		try {
-			blob.store = app.store._serializeAll();
-		} catch {
-			blob.store = {};
-		}
+			const storage = getSessionStorage();
+			if (!storage) return;
 
-		// The adapter's read state rides along (D161) so a code save does not refetch
-		// every complete collection and re-404 every known miss. In-flight requests are
-		// deliberately NOT carried: an unresolved miss simply faults again after the
-		// reload. Null (no adapter) is simply absent from the blob.
-		try {
-			blob.read = serializeReadState(app.store);
-		} catch {
-			blob.read = null;
-		}
+			/** @type {HmrBlob} */
+			const blob = { t: Date.now(), store: {}, views: [] };
 
-		// View state: each live view's LOCAL layer (setData + created()-seeded
-		// state) through the JSON-safe filter (Change D). Only genuinely-local state
-		// crosses the reload — store-derived values in the model layer are recomputed
-		// by data() against the transplanted store during navigation #0, so
-		// serializing the merged getData() would wrongly pin stale derived values as
-		// local overrides. _localState() is PuzzleView's internal reader for exactly
-		// this (same-package convention, like store._serializeAll).
-		for (const { key, view } of keyedViews()) {
+			// Store: the same wire shape _persist() writes (type → [toJSON()]), via
+			// the shared serializer. app.store's getter throws once unmounted, so the
+			// whole read is guarded.
 			try {
-				blob.views.push({ key, data: safeState(view._localState()) });
+				blob.store = app.store._serializeAll();
 			} catch {
-				// one unreadable view must not lose the rest
+				blob.store = {};
 			}
-		}
 
-		storage.setItem(HMR_KEY, JSON.stringify(blob));
-	} catch {
-		// snapshot is best-effort — the reload happens regardless (D57)
+			// The adapter's read state rides along (D161) so a code save does not refetch
+			// every complete collection and re-404 every known miss. In-flight requests are
+			// deliberately NOT carried: an unresolved miss simply faults again after the
+			// reload. Null (no adapter) is simply absent from the blob.
+			try {
+				blob.read = serializeReadState(app.store);
+			} catch {
+				blob.read = null;
+			}
+
+			// View state: each live view's STATE layer (setState + created()-seeded
+			// state) through the JSON-safe filter (Change D). Only genuinely-local state
+			// crosses the reload — derived values in the derived layer are recomputed by
+			// data(): against the transplanted store during navigation #0, then again
+			// after phase 2 restores the local state it may read. Serializing the merged
+			// getData() would wrongly pin stale derived values as local overrides.
+			// getState() is PuzzleView's reader for exactly this layer.
+			for (const { key, view } of keyedViews()) {
+				try {
+					blob.views.push({ key, data: safeState(view.getState()) });
+				} catch {
+					// one unreadable view must not lose the rest
+				}
+			}
+
+			storage.setItem(HMR_KEY, JSON.stringify(blob));
+		} catch {
+			// snapshot is best-effort — the reload happens regardless (D57)
+		}
 	}
 }
 
@@ -309,92 +305,84 @@ function snapshotImpl(app) {
  * @returns {HmrBlob | null}
  */
 export function restoreStoreFromStorage(app) {
-	// Positive gate so DCE empties this (and orphans restoreStoreImpl) in production.
-	if (DEV) return restoreStoreImpl(app);
+	if (DEV) {
+		/** @type {any} parsed sessionStorage JSON, validated field by field below */
+		let blob;
+		try {
+			const storage = getSessionStorage();
+			if (!storage) return null;
+			const raw = storage.getItem(HMR_KEY);
+			// One-shot: delete BEFORE parsing so even a corrupt/expired blob is gone.
+			try {
+				storage.removeItem(HMR_KEY);
+			} catch {
+				// unable to delete — the age check still prevents a stale re-restore
+			}
+			if (!raw) return null;
+			blob = JSON.parse(raw);
+		} catch {
+			return null; // unreadable / unparseable → cold start
+		}
+
+		try {
+			if (!blob || typeof blob !== 'object') return null;
+			if (typeof blob.t !== 'number' || Date.now() - blob.t > MAX_AGE_MS) return null; // expired
+
+			// Hydrate the store in REPLACE mode — shape-validated inside _hydrateAll; a
+			// bad `store` field is ignored rather than fatal. Replace so the snapshot
+			// overrides duplicate-pk records from configured storage (Change D).
+			try {
+				app.store._hydrateAll(blob.store, { replace: true });
+			} catch {
+				// store restore is best-effort
+			}
+
+			// Read state AFTER the records, so an absence recorded before the save is
+			// dropped when the record it names is present in the transplant (D161).
+			try {
+				hydrateReadState(app.store, blob.read);
+			} catch {
+				// read-state restore is best-effort too — a cold read session still works
+			}
+
+			return blob; // hand the (validated) blob to phase 2 for view-local restore
+		} catch {
+			return null; // any failure → cold start (D57 fail-soft posture)
+		}
+	}
 	return null;
-}
-
-/**
- * @param {PuzzleApp} app
- * @returns {HmrBlob | null}
- */
-function restoreStoreImpl(app) {
-	/** @type {any} parsed sessionStorage JSON, validated field by field below */
-	let blob;
-	try {
-		const storage = getSessionStorage();
-		if (!storage) return null;
-		const raw = storage.getItem(HMR_KEY);
-		// One-shot: delete BEFORE parsing so even a corrupt/expired blob is gone.
-		try {
-			storage.removeItem(HMR_KEY);
-		} catch {
-			// unable to delete — the age check still prevents a stale re-restore
-		}
-		if (!raw) return null;
-		blob = JSON.parse(raw);
-	} catch {
-		return null; // unreadable / unparseable → cold start
-	}
-
-	try {
-		if (!blob || typeof blob !== 'object') return null;
-		if (typeof blob.t !== 'number' || Date.now() - blob.t > MAX_AGE_MS) return null; // expired
-
-		// Hydrate the store in REPLACE mode — shape-validated inside _hydrateAll; a
-		// bad `store` field is ignored rather than fatal. Replace so the snapshot
-		// overrides duplicate-pk records from configured storage (Change D).
-		try {
-			app.store._hydrateAll(blob.store, { replace: true });
-		} catch {
-			// store restore is best-effort
-		}
-
-		// Read state AFTER the records, so an absence recorded before the save is
-		// dropped when the record it names is present in the transplant (D161).
-		try {
-			hydrateReadState(app.store, blob.read);
-		} catch {
-			// read-state restore is best-effort too — a cold read session still works
-		}
-
-		return blob; // hand the (validated) blob to phase 2 for view-local restore
-	} catch {
-		return null; // any failure → cold start (D57 fail-soft posture)
-	}
 }
 
 /**
  * Phase 2 of the two-phase HMR restore (D57 + Change D) — called by
  * PuzzleApp.mount() after the initial navigation has mounted the view chain,
- * with the blob returned by phase 1. Restores each saved view's LOCAL setData
- * state onto its live keyed counterpart (store already transplanted in phase 1).
+ * with the blob returned by phase 1. Restores each saved view's LOCAL setState
+ * state onto its live keyed counterpart (store already transplanted in phase 1),
+ * then refreshes it so data()-derived keys see the restored state.
  * Fail-soft: a null blob (cold start / expired / corrupt) or a missing view is a
  * no-op, never a crash. No-op in production.
  *
  * @param {HmrBlob | null} blob
  */
 export function restoreViewsFromStorage(blob) {
-	// Positive gate so DCE empties this (and orphans restoreViewsImpl) in production.
-	if (DEV) restoreViewsImpl(blob);
-}
-
-/** @param {HmrBlob | null} blob */
-function restoreViewsImpl(blob) {
-	try {
-		if (!blob || !Array.isArray(blob.views)) return;
-		/** @type {Map<string, PuzzleView>} */
-		const byKey = new Map();
-		for (const { key, view } of keyedViews()) byKey.set(key, view);
-		for (const entry of blob.views) {
-			try {
-				const view = byKey.get(entry?.key);
-				if (view && entry.data && typeof entry.data === 'object') view.setData(entry.data);
-			} catch {
-				// a mis-shaped or missing view just cold-starts
+	if (DEV) {
+		try {
+			if (!blob || !Array.isArray(blob.views)) return;
+			/** @type {Map<string, PuzzleView>} */
+			const byKey = new Map();
+			for (const { key, view } of keyedViews()) byKey.set(key, view);
+			for (const entry of blob.views) {
+				try {
+					const view = byKey.get(entry?.key);
+					if (!view || !entry.data || typeof entry.data !== 'object') continue;
+					view.setState(entry.data);
+					view.refresh();
+				} catch {
+					// a mis-shaped or missing view just cold-starts
+				}
 			}
+		} catch {
+			// any restore failure → cold start (D57 fail-soft posture)
 		}
-	} catch {
-		// any restore failure → cold start (D57 fail-soft posture)
 	}
 }

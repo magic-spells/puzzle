@@ -27,7 +27,7 @@ puzzle dev examples/stays        # from packages/puzzle: go run ./compiler/cmd/p
   localStorage persistence for wishlist hearts + locally-created trips.
 - **app/routes.js** — flat routes plus a **nested `/account` branch**: the
   `AccountShell` view renders its matched child (`''` | `trips` | `wishlist`)
-  at `<Slot/>`; children inherit the chain's layout.
+  at `<Outlet/>`; children inherit the chain's layout.
 - **app/storage.js** — the snapshot save/load pair behind the persistence.
 
 ### Models (`app/models/`)
@@ -43,7 +43,7 @@ puzzle dev examples/stays        # from packages/puzzle: go run ./compiler/cmd/p
 
 ### Views
 - **Home.pzl** — hero, category chips filtering the grid via local
-  `setData` + `refresh` (no store round-trip), guest-favorites rail.
+  `setState` (no store round-trip), guest-favorites rail.
 - **Search.pzl** — five stacking filters (query, guests, price bucket, type,
   amenities) computed in `data()`. The free-text destination filter is the
   **URL-backed transient state showcase (v1.49, puzzle ≥ 0.2.0)**: `data()`
@@ -51,13 +51,13 @@ puzzle dev examples/stays        # from packages/puzzle: go run ./compiler/cmd/p
   `this.ctx.router.replace('/search?q=' + encodeURIComponent(v))` — no history
   entry per keystroke, scroll untouched, and the query-only change re-runs
   `data()` with the new snapshot (no `refresh()`), so `/search?q=cabin` is a
-  shareable deep link. The other four controls stay local `setData` +
-  `refresh()` state for contrast.
+  shareable deep link. The other four controls stay local `setState`
+  state for contrast.
 - **Listing.pzl** — route param join (`listing` + `host` + `reviews`), local
   `checkIn`/`checkOut` state that survives `data()` re-runs, and the
   reserve flow: create a trip record, `router.push('/account/trips')`.
 - **account/AccountShell.pzl** — the nested-route shell: identity strip, tab
-  nav computed from `this.route` (D47), `<Slot/>` for the child.
+  nav computed from `this.route` (D47), `<Outlet/>` for the child.
 - **account/Profile.pzl** — the travel-stamp passport wall.
 - **account/Trips.pzl** — upcoming/completed split with map joins.
 - **account/Wishlist.pzl** — `findMany('listing', { filter })` subscription:
@@ -79,7 +79,7 @@ puzzle dev examples/stays        # from packages/puzzle: go run ./compiler/cmd/p
 
 ## Framework surface exercised
 
-Nested routes + `<Slot/>` chains, route params, the catch-all, callback props
+Nested routes + `<Outlet/>` chains, route params, the catch-all, callback props
 (`@select`, `@reserve`), per-node DOM events, `{#for}` loop counters (D29),
 display functions with arguments, `get animations()` for per-instance staggered
 entrances, view in/out transitions, store filters as live subscriptions, and

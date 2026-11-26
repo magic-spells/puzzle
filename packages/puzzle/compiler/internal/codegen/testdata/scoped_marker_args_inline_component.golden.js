@@ -30,5 +30,4 @@ ScopedMarkerArgs.prototype.render = function () {
     , __L0),
   ]);
 };
-ScopedMarkerArgs.__pzlModule = 'scoped_marker_args_inline_component.pzl';
 ScopedMarkerArgs.__roots = ['group'];

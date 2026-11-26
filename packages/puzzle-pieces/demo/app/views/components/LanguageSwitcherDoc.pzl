@@ -103,10 +103,15 @@ import Toc from '@/components/docs/Toc.pzl';
 const installCmd = 'puzzle add piece language-switcher';
 
 const usageMarkup = `<!-- app/layouts/Default.pzl -->
-<header class="flex items-center justify-between">
-  <a href="{ link('/') }">{ t('brand') }</a>
-  <LanguageSwitcher locales={ locales } label={ t('language') }/>
-</header>
+<puzzle-view>
+  <header class="flex items-center justify-between">
+    <a href="{ link('/') }">{ t('brand') }</a>
+    <LanguageSwitcher locales={ locales } label={ t('language') }/>
+  </header>
+  <main>
+    <Outlet/>
+  </main>
+</puzzle-view>
 
 <script>
 import { PuzzleView } from '@magic-spells/puzzle';

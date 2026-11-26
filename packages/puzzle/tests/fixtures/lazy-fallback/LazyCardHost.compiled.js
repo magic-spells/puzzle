@@ -1,10 +1,17 @@
 
+
+
+
+
+
+
+        
 import { PuzzleView } from '@magic-spells/puzzle';
 import LazyCard from './LazyCard.compiled.js';
 
 export default class LazyCardHost extends PuzzleView {
   created() {
-    this.setData({ show: false, tips: [] });
+    this.setState({ show: false, tips: [] });
   }
 }
 
@@ -36,4 +43,3 @@ LazyCardHost.prototype.render = function () {
     ]),
   ]);
 };
-LazyCardHost.__pzlModule = 'LazyCardHost.pzl';

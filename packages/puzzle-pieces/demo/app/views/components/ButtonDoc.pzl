@@ -8,6 +8,10 @@
           <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">@press</code>
           callback; disabled and loading both block it.
         </p>
+        <p class="mt-2 text-body">
+          The variants are quiet on purpose: primary is solid ink, secondary an ink tint that
+          reads on any ground, and the brand colour is kept for focus rings, selection and links.
+        </p>
       </header>
 
       <ExampleBox code={ codeHero }>
@@ -96,25 +100,23 @@ const codeSizes = `<Button size="sm" @press={ save }>Small</Button>
 <Button size="lg" @press={ save }>Large</Button>`;
 
 const codeStates = `<Button disabled>Disabled</Button>
-<Button variant="primary" loading={ saving }>Save changes</Button>
+<Button variant="primary" loading={ saving } @press={ save }>Save changes</Button>
 
 // parent
 events = {
   save: async () => {
-    this.setData({ saving: true });
-    this.refresh();
+    this.setState({ saving: true });
     await api.save();
-    this.setData({ saving: false });
-    this.refresh();
+    this.setState({ saving: false });
   },
 };`;
 
 export default class ButtonDoc extends PuzzleView {
   created() {
-    this.setData({ loading: false });
+    this.setState({ loading: false });
   }
 
-  data(params, props) {
+  data() {
     return {
       ...this.getData(),
       installCmd,
@@ -137,8 +139,7 @@ export default class ButtonDoc extends PuzzleView {
   events = {
     cheer: () => toast({ message: 'Buttons wire up @press callbacks.', variant: 'success' }),
     toggleLoading: () => {
-      this.setData({ loading: !this.getData().loading });
-      this.refresh();
+      this.setState({ loading: !this.getData().loading });
     },
   };
 }

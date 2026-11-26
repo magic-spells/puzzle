@@ -42,7 +42,7 @@ describe('@magic-spells/puzzle/testing — mountView', () => {
 		const view = await mountView(Probe);
 		handles.push(view);
 		const { idle } = view.instance.ctx;
-		view.instance.setData({ n: 3 });
+		view.instance.setState({ n: 3 });
 		expect(await idle()).toBe(true);
 		expect(view.element.textContent).toBe('3');
 	});
@@ -78,7 +78,7 @@ describe('@magic-spells/puzzle/testing — mountView', () => {
 
 	it('mounts detached with the complete ctx, query helpers, click(), and setProps()', async () => {
 		class Counter extends PuzzleView {
-			data(params, props) {
+			data({ props }) {
 				return {
 					label: props.label,
 					items: this.ctx.store.findMany('item'),
@@ -134,7 +134,7 @@ describe('@magic-spells/puzzle/testing — mountView', () => {
 		const seen = [];
 
 		class Routed extends PuzzleView {
-			data(params, props) {
+			data({ params, props }) {
 				seen.push({ params, props, route: this.route });
 				return { id: params.id, filter: props.filter, path: this.route.path };
 			}
@@ -158,6 +158,45 @@ describe('@magic-spells/puzzle/testing — mountView', () => {
 		expect(seen).toEqual([{ params: route.params, props: { filter: 'open' }, route }]);
 		expect(view.find('.value').textContent).toBe('42:open:/todos/42?tab=open');
 		expect(view.router.current).toBe(route);
+	});
+
+	it('the default router answers like a Router with no routes (D182, D183, D195)', async () => {
+		class Nav extends PuzzleView {
+			events = {
+				go: async () => {
+					const result = await this.ctx.router.push('/account');
+					this.setState({ landed: result.ok ? result.route.path : result.reason });
+				},
+			};
+			render() {
+				return h('button', { '@click': this.events.go }, [text(this.getState().landed ?? '')]);
+			}
+		}
+
+		const view = await mountView(Nav);
+		handles.push(view);
+		await view.click(view.element);
+		expect(view.element.textContent).toBe('not-found');
+		await expect(view.router.prefetch('/account')).resolves.toBe(false);
+		expect(view.router.views).toEqual([]);
+		expect(Object.isFrozen(view.router.views)).toBe(true);
+
+		const routeDef = { path: '/account', view: null };
+		const route = {
+			path: '/account',
+			pathname: '/account',
+			query: Object.freeze(Object.create(null)),
+			hash: '',
+			route: routeDef,
+			params: {},
+			chain: [routeDef],
+		};
+		const routed = await mountView(Nav, { route });
+		handles.push(routed);
+		await routed.click(routed.element);
+		expect(routed.element.textContent).toBe('/account');
+		await expect(routed.router.replace('/account')).resolves.toEqual({ ok: true, route });
+		await expect(routed.router.replace('/elsewhere')).resolves.toEqual({ ok: false, reason: 'not-found' });
 	});
 
 	it('click() waits for store.flush() and the async data() refresh it starts', async () => {
@@ -212,7 +251,7 @@ describe('@magic-spells/puzzle/testing — mountView', () => {
 		};
 
 		class LastWins extends PuzzleView {
-			data(_params, props) {
+			data({ props }) {
 				if (props.value === 'old') return oldGate.promise;
 				if (props.value === 'new') return newGate.promise;
 				return { value: props.value };
@@ -269,7 +308,7 @@ describe('@magic-spells/puzzle/testing — createTestApp', () => {
 			}
 		}
 		class Todo extends PuzzleView {
-			data(params) {
+			data({ params }) {
 				return { id: params.id };
 			}
 			render() {
@@ -406,7 +445,7 @@ describe('@magic-spells/puzzle/testing — settled convergence guard', () => {
 
 		const view = await mountView(LocalUpdate);
 		handles.push(view);
-		view.instance.setData('count', 1);
+		view.instance.setState('count', 1);
 
 		await expect(settled({ maxPasses: 2 })).resolves.toBeUndefined();
 		expect(view.find('.count').textContent).toBe('1');
@@ -423,7 +462,7 @@ describe('@magic-spells/puzzle/testing — settled convergence guard', () => {
 			afterUpdate() {
 				if (this.remaining === 0) return;
 				this.remaining--;
-				this.setData('count', this.getData().count + 1);
+				this.setState('count', this.getData().count + 1);
 			}
 
 			render() {
@@ -436,7 +475,7 @@ describe('@magic-spells/puzzle/testing — settled convergence guard', () => {
 		const view = await mountView(SlowConvergence);
 		handles.push(view);
 		view.instance.remaining = 5;
-		view.instance.setData('count', 1);
+		view.instance.setState('count', 1);
 
 		await expect(settled({ maxPasses: 1 })).rejects.toThrow(
 			'did not converge after 1 pass'

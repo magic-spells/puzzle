@@ -203,8 +203,6 @@ import Toc from '@/components/docs/Toc.pzl';
 // consts because literal tag names and {#…} tokens would be parsed as template
 // syntax in prose.
 const installCmd = 'puzzle add piece collapsible';
-// TODO: switch to ^1.2.0 once published — the demo pins the package by file:
-// path while 1.2.0 is unreleased. Consumers install the published range.
 const installDep = 'npm install @magic-spells/collapsible-content@^1.2.0';
 const installCss = `/* app/styles/styles.css */
 @import "tailwindcss";
@@ -246,7 +244,7 @@ const codeControlled = `// Optional-controlled and EDGE-triggered: only a change
   <Collapsible.Content>…</Collapsible.Content>
 </Collapsible>
 
-// onChange: (open) => this.setData('open', open)`;
+// onChange: (open) => this.setState('open', open)`;
 
 const codeSpeed = `// Duration is derived from |Δheight| / speed, clamped between
 // minDuration and maxDuration. Never set --collapsible-duration
@@ -281,7 +279,7 @@ const contentRows = [
 
 export default class CollapsibleDoc extends PuzzleView {
   created() {
-    this.setData({ open: false });
+    this.setState({ open: false });
   }
 
   data() {
@@ -316,12 +314,10 @@ export default class CollapsibleDoc extends PuzzleView {
 
   events = {
     toggle: () => {
-      this.setData('open', !this.getData().open);
-      this.refresh();
+      this.setState('open', !this.getData().open);
     },
     onChange: (open) => {
-      this.setData('open', open);
-      this.refresh();
+      this.setState('open', open);
     },
   };
 }

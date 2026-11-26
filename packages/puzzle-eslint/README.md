@@ -2,8 +2,9 @@
 
 ESLint plugin for [Puzzle Framework](https://github.com/magic-spells/puzzle)
 `.pzl` single-file components. It lets your existing ESLint rules lint the
-`<script>` body of a `.pzl` file as real JavaScript / TypeScript, and it
-validates the file's section structure.
+`<script>` body of a `.pzl` file as real JavaScript / TypeScript and, once you
+configure a CSS language, the `<style>` body as CSS, and it validates the
+file's section structure.
 
 ESLint **>= 9, flat config only**.
 
@@ -11,18 +12,23 @@ ESLint **>= 9, flat config only**.
 
 A `.pzl` file is not JavaScript. It is up to four top-level sections in any
 order — `<puzzle-view>` (required), `<puzzle-skeleton>`, `<script>`, and
-`<style>`. Only the `<script>` body is real code (JS, or TS with
-`lang="ts"`), byte-for-byte.
+`<style>`. The `<script>` body is real code (JS, or TS with `lang="ts"`) and
+the `<style>` body is real CSS, byte-for-byte.
 
 This plugin is a **processor**, not a new parser:
 
-- It extracts the `<script>` body into one virtual file
-  (`your-file.pzl/0_scripts.js` or `.ts`) and hands it to ESLint, so every rule
-  you already run — and any parser you layer on — applies to it unchanged.
-- The virtual file is the original source with everything outside the
-  `<script>` body blanked to spaces (newlines preserved), so reported
-  line/column positions **and autofix ranges** land exactly on the real file.
-  Autofixes only ever touch bytes inside `<script>`.
+- It extracts the `<script>` body into one virtual JS or TS file and hands it
+  to ESLint, so every rule you already run — and any parser you layer on —
+  applies to it unchanged. ESLint prefixes each block's name with its index,
+  so match it with the glob `*.pzl/*_scripts.js` (or `.ts`). The `<style>`
+  body becomes a second virtual file, `*.pzl/*_styles.css`, which ESLint
+  lints only once you configure CSS ([below](#css-style)).
+- Each virtual file is the original source up to the end of its body, with
+  everything before the body blanked to spaces (newlines preserved), so
+  reported line/column positions **and autofix ranges** land exactly on the
+  real file. Autofixes only ever touch bytes inside the body: whitespace
+  rules see the blanked lead-in as blank lines and trailing spaces, so a
+  message whose fix would reach into it is dropped.
 - It validates section structure and reports problems (missing `<puzzle-view>`,
   duplicate sections, illegal section attributes, a `<script>`/`<style>` body
   truncated by a stray close tag, stray top-level content) as ESLint messages
@@ -36,27 +42,36 @@ comment, or regex will **not** truncate the body.
 
 ## Install
 
+Needs Node 24 or later.
+
 ```sh
-npm install --save-dev @magic-spells/eslint-plugin-puzzle eslint
+npm install --save-dev @magic-spells/eslint-plugin-puzzle eslint @eslint/js globals
 ```
 
 ## Usage (flat config)
 
-The `recommended` config only wires up the processor — you still bring your own
-JavaScript rules. A typical `eslint.config.js`:
+The `recommended` config wires up the processor and turns on
+`puzzle/uses-template-components` — you still bring your own JavaScript rules.
+A typical `eslint.config.js`:
 
 ```js
 import js from '@eslint/js';
+import globals from 'globals';
 import puzzle from '@magic-spells/eslint-plugin-puzzle';
 
 export default [
+  // Build output and the CLI's scratch folder are not source.
+  { ignores: ['dist/', '.puzzle/'] },
+
   // Your normal JS config. Because it is not restricted with `files`, it also
-  // applies to the virtual `*.pzl/0_scripts.js` files the processor emits.
+  // applies to the virtual `*.pzl/*_scripts.js` files the processor emits.
   js.configs.recommended,
 
-  // Wire the Puzzle processor onto every .pzl file, mark components rendered
-  // as template tags as used, and relax a couple of whitespace/BOM rules on
-  // the extracted virtual files.
+  // A Puzzle app runs in the browser: `document`, `window`, `setTimeout`.
+  { languageOptions: { globals: globals.browser } },
+
+  // Wire the Puzzle processor onto every .pzl file and mark components
+  // rendered as template tags as used.
   ...puzzle.configs.recommended,
 
   // Any extra rules you want on the <script> body:
@@ -96,12 +111,20 @@ does not count as a use of an import named `Component`.
 
 ### TypeScript (`<script lang="ts">`)
 
-The processor names a TypeScript block `*.pzl/0_scripts.ts`. `recommended`
-covers only the JS blocks, because a TS block needs a TS parser: without one,
-ESLint would parse it as JavaScript and stop with a fatal error, so
-`recommended` leaves TS blocks unlinted. Add `puzzle.configs.typescript` after
-your TypeScript config to lint them with the same setup the JS blocks get
-(`puzzle/uses-template-components` on, the whitespace/BOM rules off):
+typescript-eslint does not support TypeScript 7 yet (as of 8.73, November
+2026): its peer range ends below 6.1. In a `puzzle init --typescript` app,
+which installs TypeScript 7, `npm install typescript-eslint` fails with
+`ERESOLVE`, and a forced install throws "typescript-eslint does not support
+TS 7.0" when the config loads. Until a release supports TypeScript 7, the
+setups below cannot run in a Puzzle TypeScript app.
+
+A TypeScript block reaches ESLint as `*.pzl/*_scripts.ts` (ESLint prefixes
+each block's name with its index). `recommended` covers only the JS blocks,
+because a TS block needs a TS parser: without one, ESLint would parse it as
+JavaScript and stop with a fatal error, so `recommended` leaves TS blocks
+unlinted. Add `puzzle.configs.typescript` after your TypeScript config to lint
+them with the same setup the JS blocks get (`puzzle/uses-template-components`
+on):
 
 ```js
 import js from '@eslint/js';
@@ -137,13 +160,58 @@ export default [
 ];
 ```
 
+### CSS (`<style>`)
+
+The `<style>` body, plain or `scoped`, reaches ESLint as `*.pzl/*_styles.css`.
+ESLint lints it only when a config's `files` matches it, so nothing changes
+until you add a CSS language. With [`@eslint/css`](https://github.com/eslint/css)
+(ESLint 9.15 or later):
+
+```sh
+npm install --save-dev @eslint/css tailwind-csstree
+```
+
+```js
+import js from '@eslint/js';
+import css from '@eslint/css';
+import globals from 'globals';
+import { tailwind4 } from 'tailwind-csstree';
+import puzzle from '@magic-spells/eslint-plugin-puzzle';
+
+export default [
+  { ignores: ['dist/', '.puzzle/'] },
+
+  // Scoped to JS: an entry with no `files` also reaches the CSS, and the JS
+  // rules crash on it. `**/*.js` still matches the `<script>` blocks.
+  { files: ['**/*.js'], ...js.configs.recommended },
+  { languageOptions: { globals: globals.browser } },
+
+  ...puzzle.configs.recommended,
+
+  // Your .css files and every .pzl <style> body.
+  { files: ['**/*.css'], language: 'css/css', ...css.configs.recommended },
+  // Each <style> body is linted alone, so a custom property it reads from a
+  // theme or another stylesheet is unknown to it.
+  { files: ['**/*.css'], rules: { 'css/no-invalid-properties': ['error', { allowUnknownVariables: true }] } },
+  // Tailwind syntax (`@theme`) in app/styles, the stylesheet Tailwind compiles.
+  { files: ['app/styles/**/*.css'], languageOptions: { customSyntax: tailwind4 } },
+];
+```
+
+Reports and autofixes land on the `.pzl` file's own lines and touch only the
+`<style>` body.
+
+A `<style>` block is plain CSS, never run through Tailwind: `@apply` and
+`@theme` are not processed there, and `css/no-invalid-at-rules` reports them.
+Your `@theme` tokens reach it as CSS variables (`var(--color-accent)`).
+
 ## Scope and limits
 
-- **`<style>` linting is not handled here.** Use
-  [stylelint](https://stylelint.io/) for CSS.
+- **`<style>` is linted only through a CSS language you configure**; see
+  [CSS (`<style>`)](#css-style).
 - **Template linting (`<puzzle-view>` / `<puzzle-skeleton>` markup) is future
-  work.** This plugin lints the `<script>` body and validates section
-  structure only; it does not lint the Puzzle template grammar. Every template
+  work.** This plugin lints the `<script>` and `<style>` bodies and validates
+  section structure only; it does not lint the Puzzle template grammar. Every template
   construct splits correctly and passes through unjudged: dotted family tags
   (`<Frame.Header>`), the `\{` / `\}` brace escape, the `{#for}` range
   spellings, and every template expression (D176) — function calls
@@ -161,6 +229,13 @@ export default [
   expressions too; they live in template bytes, so ESLint does not see them.
 - A `.pzl` file with no `<script>` section produces no JS blocks (but section
   errors are still reported).
+- Format `.pzl` files with `@magic-spells/prettier-plugin-puzzle`, run as its
+  own step (`npx prettier --check .`). With that plugin in your Prettier
+  config, `eslint-plugin-prettier` picks Prettier's parser from the `.pzl`
+  filename, hands the Puzzle parser the extracted block, and ESLint crashes
+  with `PzlSyntaxError: missing <puzzle-view> section`. Keep it off the `.pzl`
+  blocks: after its config, add
+  `{ files: ['**/*.pzl/**'], rules: { 'prettier/prettier': 'off' } }`.
 - **Section-error columns count UTF-16 code units.** The compiler's splitter
   counts UTF-8 bytes, so on a line holding non-ASCII text (`café`, `金額`, an
   emoji) a section error from this plugin and the same error from

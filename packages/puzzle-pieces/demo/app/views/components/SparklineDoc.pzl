@@ -6,9 +6,10 @@
         <p class="mt-2 text-body">
           A tiny inline trend line — no axes, grid, or tooltip. Pass a
           <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">data</code>
-          number array and it draws one 2px path sized to fit. Color inherits from the text color, so a
+          number array and it draws one 2px path sized to fit. Color comes from the text color: the root
+          defaults to text-chart-1, and a
           <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">text-chart-*</code>
-          token on the element (or its parent) sets the stroke.
+          token in its class replaces it (a parent's text color does not reach it).
         </p>
       </header>
 
@@ -77,7 +78,8 @@ const usageMarkup = `<Sparkline data={ data } width={ 160 } height={ 40 } />`;
 
 const codeHero = `const data = [4, 6, 5, 8, 7, 10, 9, 12];
 
-<Sparkline data={ data } width={ 160 } height={ 40 } />`;
+<Sparkline data={ data } width={ 160 } height={ 40 } />
+// expose it to the template: data() { return { data }; }`;
 
 const codeBasic = `// Defaults to 120×32 and text-chart-1. Nulls in the data become gaps.
 <Sparkline data={ [4, 6, 5, 8, 7, 10, 9, 12] } />
@@ -92,7 +94,7 @@ const codeColor = `// The stroke is currentColor — set any text-* color token 
 <Sparkline data={ series } area class="text-chart-5" width={ 200 } height={ 48 } />`;
 
 export default class SparklineDoc extends PuzzleView {
-  data(params, props) {
+  data() {
     return {
       ...this.getData(),
       installCmd,

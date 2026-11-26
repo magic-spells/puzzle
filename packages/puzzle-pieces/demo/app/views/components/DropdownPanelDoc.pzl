@@ -60,7 +60,7 @@
           (<code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">app/styles/styles.css</code>).
           The first is required — the positioning, the open and closed states and the hover bridge
           all live there, so the piece does nothing without it. The second is optional: it adds the
-          five entrance effects and draws the trigger arrow, and without it
+          six entrance effects and draws the trigger arrow, and without it
           <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">effect</code>,
           <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">arrow</code>
           and
@@ -104,9 +104,9 @@
         </p>
         <p class="mt-3 text-sm text-muted">
           <span class="font-medium text-ink">Derived output, never authored.</span>
-          role, tabindex, aria-haspopup, aria-expanded and aria-controls on the trigger, and
-          aria-hidden and inert on the panel, are written by the component and will overwrite
-          anything you put there.
+          role and tabindex (added only when missing), aria-haspopup, aria-expanded and
+          aria-controls on the trigger, and aria-hidden and inert on the panel, are written by
+          the component; the aria-* attributes and inert overwrite anything you put there.
         </p>
       </section>
 
@@ -114,7 +114,7 @@
         <ExampleBox id="align" title="Alignment and effects" code={ codeAlign }>
           <div class="flex w-full flex-col items-stretch gap-3">
             <div class="relative flex w-full max-w-2xl items-center justify-between rounded-xl border border-border bg-surface px-4 py-3">
-              <DropdownPanel effect="slide">
+              <DropdownPanel>
                 <DropdownPanel.Trigger class={ triggerChrome }>Left aligned<span data-dropdown-arrow aria-hidden="true"></span></DropdownPanel.Trigger>
                 <DropdownPanel.Panel effect="slide">
                   {#for row in simple}
@@ -344,8 +344,8 @@ const codeControlled = `// open is optional-controlled and EDGE-triggered: only 
 
 // in the parent view
 events = {
-  toggle: () => this.setData('open', !this.getData().open),
-  onHide: () => this.setData('open', false),
+  toggle: () => this.setState('open', !this.getData().open),
+  onHide: () => this.setState('open', false),
 };`;
 
 const rootRows = [
@@ -366,9 +366,9 @@ const triggerRows = [
 const panelRows = [
   { name: 'wide', desc: 'A full-width mega panel. The host goes position: static, so the panel spans the nearest POSITIONED ANCESTOR — give the bar it should span position: relative.' },
   { name: 'opens', desc: "'down' (default) | 'right'. right puts the panel beside its trigger and rotates the hover bridge onto the horizontal axis — what a submenu wants." },
-  { name: 'effect', desc: "'fade' | 'slide' | 'scale' | 'blur' | 'swing'. Needs the effects stylesheet; degrades to a plain fade under prefers-reduced-motion." },
+  { name: 'effect', desc: "'fade' | 'slide' | 'scale' | 'blur' | 'bloom' | 'swing'. Needs the effects stylesheet; degrades to a plain fade under prefers-reduced-motion." },
   { name: 'align', desc: "'start' (default) | 'end'. end is left-auto right-0 — pure CSS, no measuring pass. Ignored on a wide panel and on opens=\"right\", where it is meaningless." },
-  { name: 'class', desc: 'Merged onto <dropdown-panel> after the stock chrome, so your utilities win. Never overflow-hidden — it clips nested submenus.' },
+  { name: 'class', desc: 'Merged onto <dropdown-panel> after the stock chrome. Merging is not precedence: on a property the chrome already sets, yours wins only if Tailwind emits it later (p-4 beats p-2; mt-1 cannot beat mt-2) — add ! (mt-1!) to force it. Never overflow-hidden — it clips nested submenus.' },
 ];
 
 const keyRows = [
@@ -410,7 +410,7 @@ const ACCOUNT = [
 
 export default class DropdownPanelDoc extends PuzzleView {
   created() {
-    this.setData({ controlled: false, shows: 0, hides: 0 });
+    this.setState({ controlled: false, shows: 0, hides: 0 });
   }
 
   data() {
@@ -450,18 +450,15 @@ export default class DropdownPanelDoc extends PuzzleView {
 
   events = {
     toggleControlled: () => {
-      this.setData('controlled', !this.getData().controlled);
-      this.refresh();
+      this.setState('controlled', !this.getData().controlled);
     },
     onShow: () => {
-      this.setData('shows', this.getData().shows + 1);
-      this.refresh();
+      this.setState('shows', this.getData().shows + 1);
     },
     // The dropdown closes itself too, so the parent flips its flag back here —
     // that is what keeps the next `open` a fresh edge.
     onHide: () => {
-      this.setData({ hides: this.getData().hides + 1, controlled: false });
-      this.refresh();
+      this.setState({ hides: this.getData().hides + 1, controlled: false });
     },
   };
 }

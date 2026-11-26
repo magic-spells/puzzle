@@ -151,8 +151,9 @@ const codeHero = `const BOLD = 'M6 12h9a4 4 0 0 1 0 8H7a1 1 0 0 1-1-1V5a1 1 0 0 
 
 // parent — the toggle's pressed state is parent-owned
 events = {
-  setMark: ({ value, pressed }) => this.setData({ marks: { ...this.getData().marks, [value]: pressed } }),
-};`;
+  setMark: ({ value, pressed }) => this.setState({ marks: { ...this.getData().marks, [value]: pressed } }),
+};
+// expose them to the template: data() { return { BOLD, ITALIC, UNDERLINE, ALIGN_LEFT, ALIGN_CENTER, ALIGN_RIGHT }; }`;
 
 const codeMixed = `// Buttons fire @press; the toggle fires @toggle({ value, pressed }); a separator groups them.
 <Toolbar label="Editor actions" @press={ act } @toggle={ setWrap } items={[
@@ -172,14 +173,14 @@ const codeVertical = `// orientation="vertical" switches the arrow-key axis to U
 
 export default class ToolbarDoc extends PuzzleView {
   created() {
-    this.setData({
+    this.setState({
       marks: { bold: true, italic: false, underline: false },
       wrap: false,
       grid: true,
     });
   }
 
-  data(params, props) {
+  data() {
     const { marks, wrap, grid } = this.getData();
     return {
       ...this.getData(),
@@ -224,9 +225,9 @@ export default class ToolbarDoc extends PuzzleView {
   events = {
     act: (value) => toast({ message: `Pressed “${value}”.`, variant: 'success' }),
     setMark: ({ value, pressed }) =>
-      this.setData({ marks: { ...this.getData().marks, [value]: pressed } }),
-    setWrap: ({ pressed }) => this.setData({ wrap: pressed }),
-    setGrid: ({ pressed }) => this.setData({ grid: pressed }),
+      this.setState({ marks: { ...this.getData().marks, [value]: pressed } }),
+    setWrap: ({ pressed }) => this.setState({ wrap: pressed }),
+    setGrid: ({ pressed }) => this.setState({ grid: pressed }),
   };
 }
 </script>

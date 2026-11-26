@@ -42,7 +42,7 @@
           <input
             data-emoji-search
             type="text"
-            class={ inputClass }
+            class="h-8 w-full rounded-md border border-border bg-surface px-2.5 text-sm text-ink placeholder:text-muted transition-colors focus-visible:outline-2 outline-ring focus-visible:outline-ring"
             placeholder={ placeholder }
             aria-label={ placeholder }
             aria-controls={ listId }
@@ -72,7 +72,7 @@
                 aria-label={ row.ariaLabel }
                 title={ row.title }
                 class={ row.rowClass }
-                @click={ choose(row, event) }
+                @click={ choose(row) }
                 @mouseenter={ hover(row) }>{ row.text }</li>
             {/for}
           {/if}
@@ -112,7 +112,7 @@ import { EMOJI_KEYWORDS } from '../../lib/emoji-keywords.js';
 //   <EmojiPicker morph @change={ addEmoji } />
 //
 // NO VALUE. The picker is an action menu, not a value holder: it emits
-// @change(char, event) with the picked emoji STRING, closes, and returns focus
+// @change(char) with the picked emoji STRING, closes, and returns focus
 // to the trigger. The parent decides what to do with the character (append it
 // to an input, react to a message, …) — there is no selected state to control.
 //
@@ -171,7 +171,7 @@ const TRIGGER_BASE =
 
 const PANEL_CARD =
   'absolute z-50 w-72 overflow-hidden rounded-xl border border-border bg-surface shadow-lg';
-const PANEL_MORPH = 'inset-x-0 mx-auto w-72';
+const PANEL_MORPH = 'left-1/2 -ml-36 invisible'; // half of w-72, transform-free; the engine reveals it inline
 
 // Horizontal anchoring, keyed off the relative root's edges (Popover's map).
 const ALIGN = {
@@ -179,11 +179,6 @@ const ALIGN = {
   center: 'left-1/2 -translate-x-1/2',
   end: 'right-0',
 };
-
-const INPUT_CLASS =
-  'h-8 w-full rounded-md border border-border bg-surface px-2.5 text-sm text-ink ' +
-  'placeholder:text-muted transition-colors ' +
-  'focus-visible:outline-2 outline-ring focus-visible:outline-ring';
 
 const HEADER_CLASS =
   'col-span-full px-1 pt-2 pb-1 text-xs font-semibold uppercase tracking-wide text-muted select-none';
@@ -231,7 +226,7 @@ export default class EmojiPicker extends PuzzleView {
     this._wasOpen = false; // last effective-open seen by the transition detector
     this._scrollActive = false; // scroll the active cell into view after next render
     this._pendingRestoreFocus = true; // whether the next close refocuses the trigger
-    this.setData({
+    this.setState({
       uncontrolledOpen: false,
       query: '',
       activeIndex: 0,
@@ -308,9 +303,8 @@ export default class EmojiPicker extends PuzzleView {
   // best-ranked match's group leads, and the stable sort keeps tier order within
   // each group (a header renders once per group, never per tier run). `options`
   // is the cell-only list keyboard nav walks.
-  _build(query) {
+  _build(matched) {
     const base = this._base();
-    const matched = this._matches(query);
     const groupOrder = [];
     const byGroup = new Map();
     matched.forEach((e) => {
@@ -345,16 +339,16 @@ export default class EmojiPicker extends PuzzleView {
     return this.props.id || `pieces-emoji-picker-${this._uid}`;
   }
 
-  data(params, props) {
+  data({ props }) {
     const prev = this.getData();
     const open = this._effectiveOpen();
     const base = this._base();
-    const query = prev.query ?? '';
+    const query = prev.query;
 
-    const { rows, options } = this._build(open ? query : '');
+    const { rows, options } = this._build(open ? this._matches(query) : []);
 
-    const activeIndex = Math.min(prev.activeIndex ?? 0, Math.max(options.length - 1, 0));
-    const activeOpt = open && options.length ? options[activeIndex] : null;
+    const activeIndex = Math.min(prev.activeIndex, Math.max(options.length - 1, 0));
+    const activeOpt = options[activeIndex];
     if (activeOpt) activeOpt.active = true;
 
     rows.forEach((r) => {
@@ -402,7 +396,7 @@ export default class EmojiPicker extends PuzzleView {
             placement === 'top' ? 'bottom-full mb-1' : 'top-full mt-1',
             ALIGN[align],
           ].join(' '),
-      panelStyle: morphOn ? `top:${prev.morphTop ?? 0}px;` : '',
+      panelStyle: morphOn ? `top:${prev.morphTop}px;` : '',
     };
   }
 
@@ -443,15 +437,13 @@ export default class EmojiPicker extends PuzzleView {
     const seed = { query: '', activeIndex: 0, placement };
 
     if (this._controlled()) {
-      this.setData(seed);
+      this.setState(seed);
     } else {
-      this.setData({ ...seed, uncontrolledOpen: true });
+      this.setState({ ...seed, uncontrolledOpen: true });
     }
 
     const { show } = this.props;
     if (typeof show === 'function') show();
-
-    if (!this._controlled()) this.refresh();
   }
 
   _requestClose({ restoreFocus = true } = {}) {
@@ -473,8 +465,7 @@ export default class EmojiPicker extends PuzzleView {
       // tears down `open` (→ _onClosed) once it has animated away.
       this._morph.hide();
     } else {
-      this.setData({ uncontrolledOpen: false });
-      this.refresh();
+      this.setState({ uncontrolledOpen: false });
     }
   }
 
@@ -520,7 +511,9 @@ export default class EmojiPicker extends PuzzleView {
 
       const corrected = this._measurePlacement();
       if (corrected !== this.getData().placement) {
-        this.setData({ placement: corrected });
+        this.setState({ placement: corrected });
+        // refresh() on purpose: a correction measured off the rendered panel has to
+        // paint this frame, and a setState() render would land a frame late.
         this.refresh();
       }
       this._focusSearch();
@@ -545,7 +538,9 @@ export default class EmojiPicker extends PuzzleView {
     );
     top += clamped - screenTop;
 
-    this.setData({ morphTop: Math.round(top) });
+    this.setState({ morphTop: Math.round(top) });
+    // refresh() on purpose: the morph engine measures the panel next, so the
+    // new top must already be in the DOM.
     this.refresh();
   }
 
@@ -554,7 +549,7 @@ export default class EmojiPicker extends PuzzleView {
     // trigger `visibility:hidden` forever; stop() is a no-op on an idle engine.
     this._morph?.stop();
     document.removeEventListener('pointerdown', this._onDocPointer);
-    this.setData({ placement: 'bottom', morphTop: 0, query: '', activeIndex: 0 });
+    this.setState({ placement: 'bottom', morphTop: 0, query: '', activeIndex: 0 });
     if (this._pendingRestoreFocus) {
       this.element?.querySelector('[data-emoji-trigger]')?.focus();
     }
@@ -568,8 +563,7 @@ export default class EmojiPicker extends PuzzleView {
       this._focusSearch();
     });
     engine.on('hidden', () => {
-      this.setData({ uncontrolledOpen: false });
-      this.refresh();
+      this.setState({ uncontrolledOpen: false });
     });
     return engine;
   }
@@ -584,8 +578,7 @@ export default class EmojiPicker extends PuzzleView {
     const { options } = this.getData();
     if (i < 0 || i >= options.length) return;
     this._scrollActive = !!scroll;
-    this.setData({ activeIndex: i });
-    this.refresh();
+    this.setState({ activeIndex: i });
   }
 
   // Move the active cell by `delta` over the flat option list, clamping at the
@@ -604,10 +597,10 @@ export default class EmojiPicker extends PuzzleView {
     this.element.querySelector(`#${CSS.escape(activeId)}`)?.scrollIntoView({ block: 'nearest' });
   }
 
-  _pick(opt, event) {
+  _pick(opt) {
     if (!opt) return;
     const { change } = this.props;
-    if (typeof change === 'function') change(opt.char, event);
+    if (typeof change === 'function') change(opt.char);
     this._requestClose({ restoreFocus: true });
   }
 
@@ -641,8 +634,7 @@ export default class EmojiPicker extends PuzzleView {
     // Every keystroke re-filters and reseats the active cell on the first result.
     onInput: (event) => {
       this._scrollActive = false;
-      this.setData({ query: event.target.value, activeIndex: 0 });
-      this.refresh();
+      this.setState({ query: event.target.value, activeIndex: 0 });
     },
 
     onKey: (event) => {
@@ -674,7 +666,7 @@ export default class EmojiPicker extends PuzzleView {
         case 'Enter': {
           event.preventDefault();
           const { options, activeIndex } = this.getData();
-          this._pick(options[activeIndex], event);
+          this._pick(options[activeIndex]);
           break;
         }
         case 'Tab':
@@ -693,9 +685,9 @@ export default class EmojiPicker extends PuzzleView {
       this._setActive(row.optIndex, false);
     },
 
-    choose: (row, event) => {
+    choose: (row) => {
       if (row.kind !== 'option') return;
-      this._pick(row, event);
+      this._pick(row);
     },
   };
 }

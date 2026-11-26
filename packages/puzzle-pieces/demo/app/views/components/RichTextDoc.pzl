@@ -76,8 +76,12 @@ const installCmd = 'puzzle add piece rich-text';
 const usageImport = `import RichText from '@/components/ui/RichText.pzl';`;
 const usageMarkup = `<RichText doc={ article.body } />`;
 const codeHero = `<RichText doc={ sampleDoc } />`;
-const usageImages = `<RichText doc={ note.body } resolveImage={ (ref) => imageUrls[ref] ?? null }
-  @imageError={ refreshImageUrls } />`;
+const usageImages = `<RichText doc={ note.body } resolveImage={ resolveImage }
+  @imageError={ refreshImageUrls } />
+
+// parent
+const resolveImage = (ref) => imageUrls[ref] ?? null;
+// expose it to the template: data() { return { resolveImage }; }`;
 
 const SAMPLE_DOC = {
 	type: 'root',
@@ -113,7 +117,7 @@ const SAMPLE_DOC = {
 const codeDoc = JSON.stringify(SAMPLE_DOC, null, 2);
 
 export default class RichTextDoc extends PuzzleView {
-	data(params, props) {
+	data() {
 		return {
 			sampleDoc: SAMPLE_DOC,
 			installCmd,

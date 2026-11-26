@@ -11,5 +11,8 @@
   "dependencies": [
     "@magic-spells/split-panel@^0.2.0"
   ],
+  "styles": [
+    "@magic-spells/split-panel/css"
+  ],
   "targetDir": "app/components/ui"
 }

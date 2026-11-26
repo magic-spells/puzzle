@@ -51,7 +51,7 @@
               aria-selected={ row.ariaSelected }
               aria-disabled={ row.ariaDisabled }
               class={ row.cls }
-              @click={ choose(row, event) }
+              @click={ choose(row) }
               @mouseenter={ hover(row) }>
               {#if row.kind === 'option'}
                 <Slot
@@ -84,7 +84,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 // showModal() traps focus and inerts the page, the top layer comes free, and
 // Escape arrives as the `cancel` event. Filtering, grouping, ranking, and
 // roving keyboard navigation are Puzzle-native: local UI state (query,
-// activeIndex) via setData + refresh(), imperative DOM only for focus and
+// activeIndex) via setState, imperative DOM only for focus and
 // scrollIntoView.
 //
 // THE OVERLAY IS A WRAPPER, NOT A PORT. Like Dialog, AlertDialog, Sheet and
@@ -132,7 +132,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 // against an already-closed panel.
 //
 // TWO CALLBACKS, TWO MEANINGS:
-//   @select(value, event) — fires when an item is activated (Enter or click).
+//   @select(value) — fires when an item is activated (Enter or click).
 //     The parent decides what happens next, INCLUDING whether to close (flip
 //     `open`). Command does NOT auto-close after a select — a palette often runs
 //     an action and stays open, so that call belongs to the parent.
@@ -170,13 +170,13 @@ import { PuzzleView } from '@magic-spells/puzzle';
 //   onHotkey: (e) => {
 //     if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
 //       e.preventDefault();
-//       this.setData('cmdOpen', true);
+//       this.setState('cmdOpen', true);
 //     }
 //   }
 let uid = 0;
 
 // The overlay: the look the rest of the overlay family lands on.
-const OVERLAY = 'bg-black/50 backdrop-blur-sm motion-reduce:duration-1';
+const OVERLAY = 'bg-scrim backdrop-blur-sm motion-reduce:duration-1';
 
 // The panel. `m-auto` is not decoration: a modal <dialog> is centred by the
 // browser through `margin: auto` against four zeroed insets, and Tailwind's
@@ -210,7 +210,7 @@ export default class Command extends PuzzleView {
     this._selfHiding = false;
     this._userHide = false;
     // Seed local UI state so the first data() run can read it back.
-    this.setData({ query: '', activeIndex: -1 });
+    this.setState({ query: '', activeIndex: -1 });
   }
 
   // Normalize `items` into a flat render list (`rows` — a mix of group headings
@@ -300,16 +300,17 @@ export default class Command extends PuzzleView {
     return { rows, options };
   }
 
-  data(params, props) {
+  data({ props }) {
     const prev = this.getData();
-    const query = prev.query ?? '';
-    const activeIndex = prev.activeIndex ?? -1;
-
+    const query = prev.query;
     const { rows, options } = this._build(props, query);
-    const activeOpt =
-      activeIndex >= 0 && options[activeIndex] && !options[activeIndex].disabled
-        ? options[activeIndex]
-        : null;
+
+    // -1 (each keystroke and open), a stale index or a disabled row: reseat.
+    let activeIndex = prev.activeIndex;
+    if (!options[activeIndex] || options[activeIndex].disabled) {
+      activeIndex = options.findIndex((o) => !o.disabled);
+    }
+    const activeOpt = options[activeIndex];
     if (activeOpt) activeOpt.active = true;
 
     // Precompute per-row presentation. The template renders every row through
@@ -456,19 +457,15 @@ export default class Command extends PuzzleView {
     return active && active !== document.body && active.focus ? active : undefined;
   }
 
+  // refresh() on purpose: this runs on the open edge, and the palette must not
+  // paint one frame with the previous query and rows.
   _resetForOpen() {
-    const { options } = this._build(this.props, '');
     this._scrollActive = false;
-    this.setData({ query: '', activeIndex: this._firstEnabled(options) });
+    this.setState({ query: '', activeIndex: -1 });
     this.refresh();
   }
 
   // ---- active-row movement --------------------------------------------------
-
-  _firstEnabled(options) {
-    for (let i = 0; i < options.length; i++) if (!options[i].disabled) return i;
-    return -1;
-  }
 
   // Move the active row by `dir`, wrapping around the ends and skipping disabled
   // rows. Starts one step past the current index (or from either edge when
@@ -490,8 +487,7 @@ export default class Command extends PuzzleView {
   _setActive(i, scroll) {
     if (i < 0) return;
     this._scrollActive = !!scroll;
-    this.setData({ activeIndex: i });
-    this.refresh();
+    this.setState({ activeIndex: i });
   }
 
   _scrollActiveIntoView() {
@@ -503,15 +499,12 @@ export default class Command extends PuzzleView {
   }
 
   events = {
-    // Every keystroke re-filters and reseats the active row on the first enabled
-    // result (per spec). setData writes the local layer; refresh() re-runs data()
-    // so the ranked/grouped rows recompute.
+    // Every keystroke re-filters, and activeIndex -1 tells data() to reseat the
+    // active row on the first enabled result (per spec). data() reads both keys,
+    // so the write re-runs it and the ranked/grouped rows recompute.
     onInput: (event) => {
-      const query = event.target.value;
-      const { options } = this._build(this.props, query);
       this._scrollActive = false;
-      this.setData({ query, activeIndex: this._firstEnabled(options) });
-      this.refresh();
+      this.setState({ query: event.target.value, activeIndex: -1 });
     },
 
     moveDown: () => this._move(1),
@@ -525,7 +518,7 @@ export default class Command extends PuzzleView {
       const opt = options[activeIndex];
       if (!opt || opt.disabled) return;
       const { select } = this.props;
-      if (typeof select === 'function') select(opt.value, event);
+      if (typeof select === 'function') select(opt.value);
     },
 
     // Pointer hover seats the active row (no scroll — the pointer is already
@@ -536,10 +529,10 @@ export default class Command extends PuzzleView {
       this._setActive(row.optIndex, false);
     },
 
-    choose: (row, event) => {
+    choose: (row) => {
       if (row.kind !== 'option' || row.disabled) return;
       const { select } = this.props;
-      if (typeof select === 'function') select(row.value, event);
+      if (typeof select === 'function') select(row.value);
     },
   };
 }

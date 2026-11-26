@@ -17,7 +17,7 @@ package parser
 //      (isBareIdent), since it becomes a property access this.refs.<name>.
 //   4. ref on a Component tag — a ref wires a DOM node, not a child instance;
 //      the @ready callback-prop idiom is how a parent reaches into a child.
-//   5. ref on <Children>/<Slot> — a marker is a render target, not a real element.
+//   5. ref on <Children>/<Outlet>/<Slot> — a marker is a render target, not a real element.
 //   6. ref anywhere inside a {#for} body — per-iteration array refs are deferred
 //      (v1); key the data instead.
 //   7. ref anywhere inside a <puzzle-skeleton> body — skeleton nodes are

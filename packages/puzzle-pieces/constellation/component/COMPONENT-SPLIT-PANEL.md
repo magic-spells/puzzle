@@ -1,6 +1,6 @@
 ---
 name: SplitPanel family
-status: built
+status: verified
 framework: puzzle
 props:
   - name: direction
@@ -21,11 +21,12 @@ variants:
 connections:
   - DECISION-WRAP-WEB-COMPONENTS
   - DECISION-CONFIG-FIRST-API
+verified_at: '2026-11-24T18:13:21.786Z'
+verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
 ---
 
 `SplitPanel` · `SplitPanel.Pane` · `SplitPanel.Divider`, a D167 family over
-`@magic-spells/split-panel` 0.2.0. Replaced a 708-line port with its own
-geometry, snap math, localStorage code and hand-written separator markup.
+`@magic-spells/split-panel` 0.2.0.
 
 ## Dividers are AUTHORED — the whole reason `Divider` is a member
 

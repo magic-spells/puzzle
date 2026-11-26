@@ -12,7 +12,7 @@
 
   <main class="flex-1 py-10">
     <div class="w-full max-w-[720px] mx-auto px-5">
-      <Slot/>
+      <Outlet/>
     </div>
   </main>
 
@@ -27,7 +27,7 @@
 import { PuzzleView } from '@magic-spells/puzzle';
 
 export default class DefaultLayout extends PuzzleView {
-  data(params, props) {
+  data() {
     return {};
   }
 }

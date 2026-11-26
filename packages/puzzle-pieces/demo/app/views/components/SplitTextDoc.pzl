@@ -74,8 +74,8 @@
           styles, a line break still breaks a line.
         </p>
         <p class="mb-3 text-sm text-body">
-          To show different text, change the text <em class="text-ink">and</em> bump <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-code text-ink">play</code> in the same render: the element restores its own snapshot, adopts whatever markup is
-          there now, and re-splits it.
+          To show different text, remount the piece instead of changing its content: branch it, or
+          render it from a keyed list whose key is the text.
         </p>
         <p class="text-sm text-muted">
           The same applies to the attributes. The element declares no observed attributes — <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-code text-ink">split</code>, <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-code text-ink">effect</code>,
@@ -203,8 +203,10 @@
           <p class="mb-2 text-sm text-body">
             There is no <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-code text-ink">style</code> prop: the element writes the resolved timings into the host's inline style at every
             split, and a bound style attribute would be rewritten wholesale by the patcher. Set
-            these through <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-code text-ink">class</code> instead — they are inherited, so an arbitrary-property utility on the element or on any
-            ancestor reaches them: <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-code text-ink">class="[--split-text-distance:40%]"</code>.
+            these through <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-code text-ink">class</code> instead — an arbitrary-property utility on the element reaches every one of them:
+            <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-code text-ink">class="[--split-text-distance:40%]"</code>.
+            Only --split-text-blur, --split-text-scale and --split-text-origin can also be set on an
+            ancestor; the stylesheet declares the other three on split-text itself.
           </p>
           <div class="text-sm">
             {#for row in cssRows}
@@ -235,8 +237,9 @@
               readable before JavaScript.
             </li>
             <li>
-              <span class="font-medium text-ink">Once it's done, it's ordinary text again.</span> After the reveal the wrappers collapse to <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-code text-ink">display: contents</code>,
-              so the layout matches the original markup and the text reflows normally on resize.
+              <span class="font-medium text-ink">Once it's done, it's ordinary text again.</span> After the reveal the word wrappers collapse to <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-code text-ink">display: contents</code>
+              in words and lines mode, so the layout matches the original markup and the text reflows
+              normally on resize. In chars mode they stay inline-block with the mask's overflow released.
             </li>
           </ul>
         </section>
@@ -288,11 +291,10 @@ const codeHero = `// trigger="load" fires on the next microtask instead of waiti
 <Button variant="outline" size="sm" @press={ replayHero }>Replay</Button>
 
 // in the view:
-created() { this.setData('heroPlay', 0); }
+created() { this.setState('heroPlay', 0); }
 events = {
   replayHero: () => {
-    this.setData('heroPlay', this.getData().heroPlay + 1);
-    this.refresh();
+    this.setState('heroPlay', this.getData().heroPlay + 1);
   },
 };`;
 
@@ -311,8 +313,7 @@ const codeChars = `// split="chars" masks every grapheme. Slow the stagger down 
 
 // @complete is value-first — it hands you { split, count }
 noteChars: ({ split, count }) => {
-  this.setData('charsNote', \`\${count} \${split}\`);
-  this.refresh();
+  this.setState('charsNote', \`\${count} \${split}\`);
 },`;
 
 const codeLines = `// Lines are measured, not guessed: the element splits on words, waits for
@@ -399,7 +400,7 @@ const cssRows = [
 
 export default class SplitTextDoc extends PuzzleView {
   created() {
-    this.setData({
+    this.setState({
       heroPlay: 0,
       charsPlay: 0,
       linesPlay: 0,
@@ -444,8 +445,7 @@ export default class SplitTextDoc extends PuzzleView {
   }
 
   #bump(key) {
-    this.setData(key, (this.getData()[key] || 0) + 1);
-    this.refresh();
+    this.setState(key, (this.getData()[key] || 0) + 1);
   }
 
   events = {
@@ -454,8 +454,7 @@ export default class SplitTextDoc extends PuzzleView {
     replayLines: () => this.#bump('linesPlay'),
     replayEffects: () => this.#bump('effectsPlay'),
     noteChars: ({ split, count }) => {
-      this.setData('charsNote', `${count} ${split}`);
-      this.refresh();
+      this.setState('charsNote', `${count} ${split}`);
     },
   };
 }

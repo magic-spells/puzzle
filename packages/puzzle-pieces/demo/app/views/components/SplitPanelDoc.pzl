@@ -60,8 +60,13 @@
         <CodeBlock code={ installCss }/>
         <p class="mt-3 text-sm text-body">
           The piece already bridges the sheet's divider colours to pieces.css tokens with an inline
-          style on the group host, so it matches the rest of the registry out of the box. Retune it
-          per instance by setting the same custom properties yourself:
+          style on the group host, so it matches the rest of the registry out of the box. SplitPanel
+          takes no <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">style</code>
+          prop: to change the colours, edit
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">ROOT_STYLE</code>
+          in your copy of
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">SplitPanel/SplitPanel.pzl</code>.
+          The gap and line width are not pinned, so a wrapper can set them:
         </p>
         <CodeBlock code={ installTokens } class="mt-3"/>
         <p class="mt-3 text-sm text-muted">
@@ -258,18 +263,14 @@ import Toc from '@/components/docs/Toc.pzl';
 // consts because literal tag names and {#…} tokens would be parsed as template
 // syntax in prose.
 const installCmd = 'puzzle add piece split-panel';
-// TODO: switch to ^0.2.0 once published — the demo pins the package by file:
-// path while 0.2.0 is unreleased. Consumers install the published range.
 const installDep = 'npm install @magic-spells/split-panel@^0.2.0';
 const installCss = `/* app/styles/styles.css */
 @import "tailwindcss";
 @import "@magic-spells/split-panel/css" layer(components); /* required */`;
 
-const installTokens = `<SplitPanel style="--split-panel-gap: 0.75rem;
-                    --split-panel-divider-color: var(--color-border);
-                    --split-panel-divider-line: 0.25rem">
-  …
-</SplitPanel>`;
+const installTokens = `<div style="--split-panel-gap: 0.75rem; --split-panel-divider-line: 0.25rem">
+  <SplitPanel class="h-80">…</SplitPanel>
+</div>`;
 
 const usageImport = `import SplitPanel from '@/components/ui/SplitPanel';`;
 
@@ -323,7 +324,7 @@ const codeEvents = `// @resize is ADVISORY — it fires on every applied change 
 // hook: release, keyboard step, or a double-click reset.
 <SplitPanel @resize={ onResize } @resizeEnd={ onResizeEnd }>…</SplitPanel>
 
-// onResize:    (sizes) => this.setData('live', sizes)
+// onResize:    (sizes) => this.setState('live', sizes)
 // onResizeEnd: (sizes) => save(sizes)`;
 
 const codeDisabled = `// 'disabled' on one divider locks that pair; on the group it locks
@@ -361,7 +362,7 @@ const keyRows = [
 
 export default class SplitPanelDoc extends PuzzleView {
   created() {
-    this.setData({ live: null, commit: null, commitCount: 0 });
+    this.setState({ live: null, commit: null, commitCount: 0 });
   }
 
   data() {
@@ -405,12 +406,10 @@ export default class SplitPanelDoc extends PuzzleView {
 
   events = {
     onResize: (sizes) => {
-      this.setData('live', sizes);
-      this.refresh();
+      this.setState('live', sizes);
     },
     onResizeEnd: (sizes) => {
-      this.setData({ commit: sizes, commitCount: this.getData().commitCount + 1 });
-      this.refresh();
+      this.setState({ commit: sizes, commitCount: this.getData().commitCount + 1 });
     },
   };
 }

@@ -1,4 +1,42 @@
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+        
 import { PuzzleView } from '@magic-spells/puzzle';
 import Chip from './Chip.compiled.js';
 
@@ -175,4 +213,3 @@ CoreHost.prototype.render = function () {
     ]),
   ]);
 };
-CoreHost.__pzlModule = 'CoreHost.pzl';

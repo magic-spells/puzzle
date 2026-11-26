@@ -2,7 +2,7 @@
 import { PuzzleView } from '@magic-spells/puzzle';
 
 export default class SkeletonInlineComponent extends PuzzleView {
-  async data(params, props) {
+  async data({ props }) {
     const user = await this.ctx.store.findOne('user', props.userId);
     return { user };
   }
@@ -19,7 +19,6 @@ SkeletonInlineComponent.prototype.render = function () {
     ]),
   ]);
 };
-SkeletonInlineComponent.__pzlModule = 'skeleton_inline_component.pzl';
 
 SkeletonInlineComponent.prototype.renderSkeleton = function () {
   const __d = this.getData();

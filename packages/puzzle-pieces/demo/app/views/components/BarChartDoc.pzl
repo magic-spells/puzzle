@@ -137,7 +137,7 @@ const series = [
 <BarChart data={ revenueData } xKey="month" series={ series } stacked label="Revenue by segment" />`;
 
 export default class BarChartDoc extends PuzzleView {
-  data(params, props) {
+  data() {
     return {
       ...this.getData(),
       installCmd,

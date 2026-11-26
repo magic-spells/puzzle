@@ -136,7 +136,7 @@ describe('handler/library name collision (D176 §4)', () => {
 		const app = new PuzzleApp({
 			target: '#app',
 			routes: [{ path: '/', name: 'home', view: Home, layout: Layout }],
-			formatters: { shout: (s) => String(s).toUpperCase() },
+			functions: { shout: (s) => String(s).toUpperCase() },
 		});
 		await app.mount();
 		try {

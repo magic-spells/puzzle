@@ -10,7 +10,7 @@
 // same position, so the DOM empties and a later truthy tree mounts back in place
 // and stays interactive.
 //
-// Harness follows tests/mount-enter-hook-guard.test.js (rAF-scheduled setData
+// Harness follows tests/mount-enter-hook-guard.test.js (rAF-scheduled setState
 // re-renders need several macrotask ticks to land).
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { PuzzleView } from '../client-runtime/views/PuzzleView.js';
@@ -26,7 +26,7 @@ const container = () => {
 	return el;
 };
 
-// setData re-renders schedule through requestAnimationFrame (jsdom fires that on a
+// setState re-renders schedule through requestAnimationFrame (jsdom fires that on a
 // ~16ms timer) — flush past a few ticks plus microtask drains.
 const flush = async () => {
 	for (let i = 0; i < 3; i++) {
@@ -57,7 +57,7 @@ describe('render() returning null clears the mounted DOM', () => {
 			render() { return h('span', { class: 'child' }, [text('selected')]); }
 		}
 		class Host extends PuzzleView {
-			data(_params, props) { return props; }
+			data({ props }) { return props; }
 			render() { return this.getData().hide ? null : dynamicComponent(selected ? Child : null); }
 		}
 		const before = document.createElement('input');
@@ -88,7 +88,7 @@ describe('render() returning null clears the mounted DOM', () => {
 		expect(el.querySelector('.body').textContent).toBe('0');
 
 		// The stale-DOM bug: this render returns null and the previous tree stayed up.
-		v.setData({ hide: true });
+		v.setState({ hide: true });
 		await flush();
 		expect(el.querySelector('.body')).toBeNull();
 		expect(el.textContent).toBe(''); // nothing renderable left behind
@@ -99,13 +99,13 @@ describe('render() returning null clears the mounted DOM', () => {
 		expect(v.element.isConnected).toBe(true);
 
 		// Back to a real tree: it must mount fresh (the manager stayed reusable).
-		v.setData({ hide: false, n: 1 });
+		v.setState({ hide: false, n: 1 });
 		await flush();
 		expect(el.querySelector('.body')).not.toBeNull();
 		expect(el.querySelector('.body').textContent).toBe('1');
 
 		// And the re-mounted tree still patches — the view is not a one-shot corpse.
-		v.setData({ n: 2 });
+		v.setState({ n: 2 });
 		await flush();
 		expect(el.querySelector('.body').textContent).toBe('2');
 
@@ -121,12 +121,12 @@ describe('render() returning null clears the mounted DOM', () => {
 		tail.id = 'tail';
 		el.appendChild(tail);
 
-		v.setData({ hide: true });
+		v.setState({ hide: true });
 		await flush();
 		expect(el.querySelector('.body')).toBeNull();
 		expect(el.lastElementChild).toBe(tail); // still the last element
 
-		v.setData({ hide: false, n: 7 });
+		v.setState({ hide: false, n: 7 });
 		await flush();
 		const body = el.querySelector('.body');
 		expect(body).not.toBeNull();
@@ -140,17 +140,17 @@ describe('render() returning null clears the mounted DOM', () => {
 		const el = container();
 		const v = await new Toggling().mount(el);
 
-		v.setData({ hide: true });
+		v.setState({ hide: true });
 		await flush();
-		v.setData({ hide: true, n: 1 });
+		v.setState({ hide: true, n: 1 });
 		await flush();
-		v.setData({ hide: true, n: 2 });
+		v.setState({ hide: true, n: 2 });
 		await flush();
 
 		expect(el.childNodes).toHaveLength(1);
 		expect(el.childNodes[0].nodeType).toBe(8 /* COMMENT_NODE */);
 
-		v.setData({ hide: false, n: 3 });
+		v.setState({ hide: false, n: 3 });
 		await flush();
 		expect(el.childNodes).toHaveLength(1);
 		expect(el.querySelector('.body').textContent).toBe('3');
@@ -173,7 +173,7 @@ describe('render() returning null clears the mounted DOM', () => {
 		expect(el.childNodes[0].nodeType).toBe(8 /* COMMENT_NODE */);
 		expect(v.element).toBe(el.childNodes[0]);
 
-		v.setData({ ready: true });
+		v.setState({ ready: true });
 		await flush();
 		expect(el.querySelector('.body')).not.toBeNull();
 		expect(el.querySelector('.body').textContent).toBe('ok');
@@ -204,12 +204,12 @@ describe('render() returning null clears the mounted DOM', () => {
 		expect(el.querySelector('.child')).not.toBeNull();
 		expect(mounted).toHaveLength(1);
 
-		host.setData({ hide: true });
+		host.setState({ hide: true });
 		await flush();
 		expect(el.querySelector('.child')).toBeNull();
 		expect(mounted[0].isDestroyed).toBe(true); // torn down with the cleared tree
 
-		host.setData({ hide: false });
+		host.setState({ hide: false });
 		await flush();
 		expect(el.querySelector('.child')).not.toBeNull();
 		expect(mounted).toHaveLength(2); // a FRESH child instance mounted

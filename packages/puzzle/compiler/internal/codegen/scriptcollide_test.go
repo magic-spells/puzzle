@@ -35,7 +35,9 @@ func compileResult(t *testing.T, src string) *Result {
 }
 
 func TestScriptImportCollisionWarns(t *testing.T) {
-	res := compileResult(t, `<puzzle-view><span>{ count > MAX }</span></puzzle-view>
+	res := compileResult(t, `<puzzle-view>
+  <span>{ count > MAX }</span>
+</puzzle-view>
 
 <script>
 import { PuzzleView } from '@magic-spells/puzzle';
@@ -50,8 +52,9 @@ export default class T extends PuzzleView { data() { return { count: 0 }; } }
 	if !strings.Contains(w.Message, "imported in <script>") || !strings.Contains(w.Message, "will be undefined") {
 		t.Errorf("warning message missing expected text: %q", w.Message)
 	}
-	if w.File != "T.pzl" || w.Line < 1 {
-		t.Errorf("warning not positioned: %+v", *w)
+	// Positioned at the read itself, not at the template root.
+	if w.File != "T.pzl" || w.Line != 2 || w.Col != 19 {
+		t.Errorf("warning not at the MAX read (T.pzl:2:19): %+v", *w)
 	}
 	// Output is unchanged: the collision is out-of-band, the read is still __d.MAX.
 	if !strings.Contains(res.JS, "__d.MAX") {

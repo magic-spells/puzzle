@@ -118,7 +118,7 @@ const codeHero = `<Fader label="Rest" value={ rest } min={ 0 } max={ 100 } unit=
 
 // parent — @input fires live during drag, @change on release
 events = {
-  setRest: (v) => this.setData('rest', v),
+  setRest: (v) => this.setState('rest', v),
 };`;
 
 const codeSteps = `// a numeric step quantizes to a detent. Matching tickStep to step puts a mark on
@@ -126,15 +126,15 @@ const codeSteps = `// a numeric step quantizes to a detent. Matching tickStep to
 <Fader label="Quality" value={ stepped } min={ 0 } max={ 100 } step={ 10 }
   ticks={ true } tickStep={ 10 } unit="%" @change={ setStepped } />
 
-// step="any" is continuous — format the readout so it does not run to 15 decimals
+// step="any" is continuous (values round to 2 decimals) — formatValue sets the readout's precision
 const oneDp = (v) => v.toFixed(1);
 
 <Fader label="Blend" value={ fine } min={ 0 } max={ 100 } step="any" formatValue={ oneDp }
   @change={ setFine } />`;
 
 const codeVertical = `// orientation="vertical" flips every bit of geometry: the fill grows upward,
-// the readout sits above the strip and the label below. h-40 w-14 by default —
-// override through class.
+// the readout sits at the top of the strip and the label at the bottom.
+// h-40 w-14 by default — override through class.
 <Fader orientation="vertical" label="Low" value={ low } min={ -24 } max={ 24 } unit=" dB"
   @input={ setLow } @change={ setLow } />
 
@@ -168,7 +168,7 @@ const codeDisabled = `<Fader label="Locked" value={ 40 } unit="%" disabled />`;
 
 export default class FaderDoc extends PuzzleView {
   created() {
-    this.setData({
+    this.setState({
       rest: 40,
       arc: 128,
       feather: 6.5,
@@ -187,7 +187,7 @@ export default class FaderDoc extends PuzzleView {
     });
   }
 
-  data(params, props) {
+  data() {
     return {
       ...this.getData(),
       thresholdTicks,
@@ -217,64 +217,49 @@ export default class FaderDoc extends PuzzleView {
 
   events = {
     setRest: (v) => {
-      this.setData('rest', v);
-      this.refresh();
+      this.setState('rest', v);
     },
     setArc: (v) => {
-      this.setData('arc', v);
-      this.refresh();
+      this.setState('arc', v);
     },
     setFeather: (v) => {
-      this.setData('feather', v);
-      this.refresh();
+      this.setState('feather', v);
     },
     setRadius: (v) => {
-      this.setData('radius', v);
-      this.refresh();
+      this.setState('radius', v);
     },
     setAspect: (v) => {
-      this.setData('aspect', v);
-      this.refresh();
+      this.setState('aspect', v);
     },
     setStepped: (v) => {
-      this.setData('stepped', v);
-      this.refresh();
+      this.setState('stepped', v);
     },
     setFine: (v) => {
-      this.setData('fine', v);
-      this.refresh();
+      this.setState('fine', v);
     },
     setLow: (v) => {
-      this.setData('low', v);
-      this.refresh();
+      this.setState('low', v);
     },
     setMid: (v) => {
-      this.setData('mid', v);
-      this.refresh();
+      this.setState('mid', v);
     },
     setHigh: (v) => {
-      this.setData('high', v);
-      this.refresh();
+      this.setState('high', v);
     },
     setDensity: (v) => {
-      this.setData('density', v);
-      this.refresh();
+      this.setState('density', v);
     },
     setThreshold: (v) => {
-      this.setData('threshold', v);
-      this.refresh();
+      this.setState('threshold', v);
     },
     setCorner: (v) => {
-      this.setData('corner', v);
-      this.refresh();
+      this.setState('corner', v);
     },
     setGain: (v) => {
-      this.setData('gain', v);
-      this.refresh();
+      this.setState('gain', v);
     },
     setMix: (v) => {
-      this.setData('mix', v);
-      this.refresh();
+      this.setState('mix', v);
     },
   };
 }

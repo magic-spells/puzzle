@@ -1,10 +1,14 @@
 ---
 name: DropdownPanel — shared base family for trigger↔panel overlays
-status: built
+status: verified
 framework: puzzle
 props:
   - name: trigger
-    type: '''hover'' | ''click'' | ''both'''
+    type: '''hover'' | ''click'' | ''both'' | ''contextmenu'''
+  - name: menu
+    type: boolean
+  - name: sub
+    type: boolean
   - name: arrow
     type: '''flip'' | ''static'' | ''none'''
   - name: arrowShape
@@ -28,61 +32,59 @@ connections:
 notes:
   - kind: state
     text: >-
-      2026-09-05: four more consumers landed on the base — popover, hover-card and menubar as D167
-      families (Popover · .Trigger · .Content; HoverCard · .Trigger · .Content; Menubar · .Menu ·
-      .Trigger · .Content · .Item · .Link · .Separator · .Label · .Shortcut), and popconfirm as a
-      single file. ~1,250 lines of ported overlay machinery deleted (timers, document listeners,
-      Escape handlers, rAF flip/clamp measurement, roving tabindex, aria mirroring). Menubar drops
-      role="menubar"/"menuitem" deliberately: upstream is a disclosure with no bar-level roving, so
-      the roles would promise a keyboard model that is not there (Tab moves between triggers). The
-      base root gained openDelay/closeDelay props → open-delay/close-delay attributes, honoured by
-      @magic-spells/dropdown-panel >= 2.1.0 and inert on 2.0.0 (HoverCard defaults 600/300); the
-      demo runs 2.0.0, so delays are inert there today. COMPILER CONSTRAINT that shaped all four: a
-      named <Slot name> is a compile error anywhere inside a component invocation
-      (parser/slot.go:200) and a template may declare only one default marker, so a piece whose root
-      is <DropdownPanel> has exactly ONE content channel — that is why a trigger-plus-panel piece
-      must be a family, and why Menubar.Item (button) and Menubar.Link (anchor) are separate members
-      rather than one component branching on href. Items close the whole open chain themselves
-      (hide() on each ancestor dropdown-component) because upstream only closes on an OUTSIDE press.
+      Menubar has no role="menubar"/"menuitem" on purpose: upstream is a disclosure with no
+      bar-level roving (Tab moves between triggers), so the roles would promise a keyboard model
+      that is not there. Menubar.Item (button) and Menubar.Link (anchor) are separate members
+      because a component root gets one content channel. Both close the whole open chain themselves
+      (hide() on each ancestor dropdown-component), since upstream closes only on an outside press.
+      HoverCard defaults openDelay/closeDelay to 600/300.
   - kind: state
     text: >-
-      2026-09-05 (feat/menu-families): the base gained four additive things for the last three
-      consumers — dropdown-menu, context-menu, split-button, now COMPONENT-DROPDOWN-MENU /
-      -CONTEXT-MENU / -SPLIT-BUTTON. (1) `menu` prop → `menu` attribute, opting the component into
-      application-menu mode (role=menu/menuitem, roving tabindex, typeahead, Enter/Space incl. Space
-      clicking a link, Tab-to-close, ArrowRight/Left submenus). (2) `'contextmenu'` added to the
-      `trigger` allow-list: right-click / 500 ms long-press anywhere in the component, panel fixed
-      at the pointer, clamped and flipped, and NO <dropdown-trigger> required. (3) `@select(value,
-      event)` from `dropdown-panel:select` — and it is the ONE event NOT filtered by `#mine`,
-      deliberately: a submenu choice closes the whole chain and returns focus to the ROOT trigger,
-      so the root is what owes the parent a report. The new `sub` prop silences a nested root
-      instead, so exactly one instance per chain reports, exactly once per activation. Returning
-      `false` from the handler → `preventDefault()`, which cancels the close. (4) `showAt(x, y)`
-      passthrough on the root class, guarded on `#ready` (a coordinate is not state, so there is no
-      attribute to leave the intent on). Panel gained `flip` → `flip` attribute (opt-in upward
-      opening; the component sets `flipped`, its own sheet styles it). Panel's existing `left-auto
-      right-0` ALIGN_END utility recipe was left alone even though 2.1.0 now ships an equivalent
-      `align` attribute — five shipped families depend on the recipe and the two are equivalent.
-      RE-EXPORT EXCEPTION: context-menu and split-button re-export dropdown-menu's ROW members
-      (Trigger, Item, Link, Group, Label, Separator, Shortcut, Sub) instead of forking them. The
-      "compose, do not re-export" rule above is about the BASE — it exists so a family has somewhere
-      of its own to hang chrome and so a consumer can edit one family's Trigger without forking the
-      base every other piece shares. Neither applies to a row: a context-menu row IS a dropdown-menu
-      row, and in a copy-in registry the re-export is BETTER — dropdown-menu is copied in anyway as
-      the registry dependency, so the consumer edits one Item.pzl and every menu follows. Each keeps
-      its own root and Content, which genuinely differ. PIN: demo/package.json points
-      @magic-spells/dropdown-panel at `file:../../../../../open-sourcery/dropdown-panel` (the 2.1.0
-      working tree, branch feat/menu-mode) because ^2.0.0 has no menu mode — return it to `^2.1.0`
-      when 2.1.0 publishes. Piece headers and docs already tell consumers to install ^2.1.0.
+      `menu` opts the root into upstream's application-menu mode (role=menu/menuitem, roving
+      tabindex, typeahead, Enter/Space, Tab to close, ArrowRight/Left for submenus), so
+      DropdownMenu, ContextMenu and SplitButton own no keyboard code. `trigger="contextmenu"` opens
+      the panel at the pointer on right-click or a 500 ms long-press, with no `<dropdown-trigger>`.
+      `@select(value)` is the one event not filtered to this element: a submenu choice closes the
+      whole chain and returns focus to the root trigger, so the root reports it, and a nested root
+      passes `sub` to stay quiet. Returning `false` from the handler cancels the close. `showAt(x,
+      y)` is a no-op until the component has upgraded.
+  - kind: state
+    text: >-
+      ContextMenu and SplitButton re-export DropdownMenu's row members (Item, Link, Group, Label,
+      Separator, Shortcut, Sub; ContextMenu also Trigger) instead of forking them. The compose rule
+      is about the base: a context-menu row is a dropdown-menu row, and dropdown-menu is copied in
+      anyway as their registry dependency, so editing one Item.pzl updates every menu. Each keeps
+      its own root and Content (SplitButton: Action and Menu).
+  - kind: state
+    text: >-
+      A nested NavigationMenu.Item renders an `<li>`, so the nested shape wraps just that Item in a
+      `<ul>` inside the Content; Links stay outside it. Upstream finds focusable items deeply, so
+      arrow keys still reach the nested trigger.
+  - kind: state
+    text: >-
+      Only DropdownPanel.Panel takes `effect`; the root has none, so effects go on Content/Panel.
+      The root's trigger, openDelay, closeDelay, arrow and arrowShape, and Panel's opens and effect,
+      pass straight through with `false` as the omit sentinel and no allowlist (a copy of upstream's
+      list drifts). Upstream defaults what it does not know: an unknown trigger is `both`, a bad
+      delay is 0, an unknown arrow or effect matches no selector.
+  - kind: state
+    text: >-
+      Menubar.Trigger renders `<Children/>` then a `<span data-dropdown-arrow>` hook only for
+      `variant="item"`. It has no fallback body and no `label` prop, because a filled fallback body
+      would drop the hook; `<Menubar.Trigger variant="item">Export as</Menubar.Trigger>` keeps its
+      chevron. Menubar.Menu leaves `arrow` unset (upstream default `flip`), and bar triggers have no
+      hook, so they draw no glyph.
+verified_at: '2026-11-24T18:13:21.786Z'
+verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
 ---
 
 The registry's shared base for every trigger-and-panel overlay. A D167 family —
 `registry/ui/dropdown-panel/DropdownPanel/{DropdownPanel,Trigger,Panel}.pzl` plus an
 `index.js` barrel (`Object.assign(DropdownPanel, { Trigger, Panel })`) — wrapping
-`@magic-spells/dropdown-panel` 2.x (the demo pins `^2.0.0`; `openDelay`/`closeDelay` need
-≥ 2.1.0). Consumers today: navigation-menu, popover, hover-card, popconfirm, menubar.
-Still to follow once upstream gains a menu mode and pointer placement: dropdown-menu,
-context-menu, split-button.
+`@magic-spells/dropdown-panel` (manifest floor `^2.1.1`; menu mode, `flip` and the hover
+delays need ≥ 2.1.0). Consumers: navigation-menu, popover, hover-card, popconfirm, menubar
+and dropdown-menu; context-menu, split-button and language-menu reach it through
+dropdown-menu.
 
 Consumers **compose** the members, they do not re-export them: a re-exported class has
 nowhere to hang piece-specific token chrome, and in a copy-in registry the consumer must be
@@ -117,12 +119,12 @@ able to edit `NavigationMenu/Trigger.pzl` without forking the shared base.
 - **No FOUC, one small pre-JS gap.** The core stylesheet alone holds a closed panel at
   `opacity: 0; pointer-events: none`, but `aria-hidden`/`inert` only land at upgrade, so for
   that instant a closed panel is still in the a11y tree and tab order.
-- **Two stylesheets**, both `layer(components)`: `/css` is required, `/css/effects` is
-  optional and is the only source of custom properties (`--dp-effect-duration`,
-  `--dp-effect-easing`, `--dp-arrow-size`, `--dp-arrow-thickness`). The core sheet declares
-  none, so the design-system bridge is Tailwind on the members' hosts, and the two timing
-  knobs go through an inline `style` (runtime values — Tailwind cannot generate classes for
-  strings it never sees in source).
+- **Two stylesheets**, both `layer(components)`: `/css` is required (`puzzle add piece`
+  prints its `@import` line), `/css/effects` is optional and is the only source of custom
+  properties (`--dp-effect-duration`, `--dp-effect-easing`, `--dp-arrow-size`,
+  `--dp-arrow-thickness`). The core sheet declares none, so the design-system bridge is
+  Tailwind on the members' hosts, and the two timing knobs go through an inline `style`
+  (runtime values — Tailwind cannot generate classes for strings it never sees in source).
 - **One content channel per component root.** A named `<Slot name>` is a compile error inside
   a component invocation and a template gets one default marker, so a piece rooted at
   `<DropdownPanel>` can route only one body. Trigger-plus-panel pieces are therefore families

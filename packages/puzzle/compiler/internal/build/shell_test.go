@@ -21,18 +21,23 @@ func TestRewriteShellReferences(t *testing.T) {
 		{`<img src="app.js"><scripture src="app.js">text app.js`, `<img src="app.js"><scripture src="app.js">text app.js`},
 	} {
 		t.Run(tt.source, func(t *testing.T) {
-			got, _, err := rewriteShellHTML("<head>"+tt.source+"</head>", renames, nil, map[string]bool{"vendor/app.js": true})
+			got, _, _, err := rewriteShellHTMLRefs("<head>"+tt.source+"</head>", "", renames, nil, map[string]bool{"vendor/app.js": true}, true)
 			if err != nil || got != "<head>"+tt.want+"</head>" {
 				t.Fatalf("rewrite = %q, %v; want %q", got, err, tt.want)
 			}
 		})
 	}
 	for _, source := range []string{`<head></head>`, `<head><link href="app.js"></head>`} {
-		if _, found, err := rewriteShellHTML(source, renames, nil, nil); err != nil || found {
+		if _, found, _, err := rewriteShellHTMLRefs(source, "", renames, nil, nil, true); err != nil || found {
 			t.Fatalf("entry found = %v, error = %v", found, err)
 		}
 	}
-	if _, _, err := rewriteShellHTML(`<script src="app.js"></script>`, renames, nil, nil); err == nil || !strings.Contains(err.Error(), "</head>") {
+	// </head> is only needed to place preloads: a shell that omits the optional
+	// end tag still rewrites when there are none, and fails when there are.
+	if got, _, _, err := rewriteShellHTMLRefs(`<script src="app.js"></script>`, "", renames, nil, nil, true); err != nil || got != `<script src="app-HASH.js"></script>` {
+		t.Fatalf("rewrite without </head> = %q, %v", got, err)
+	}
+	if _, _, _, err := rewriteShellHTMLRefs(`<script src="app.js"></script>`, "", renames, []string{"chunks/a.js"}, nil, true); err == nil || !strings.Contains(err.Error(), "</head>") {
 		t.Fatalf("missing head error = %v", err)
 	}
 }
@@ -41,7 +46,7 @@ func TestRewriteShellReferences(t *testing.T) {
 // checked against the emitted outputs, nor read as the entry script.
 func TestRewriteShellSkipsComments(t *testing.T) {
 	source := "<head><!-- <link rel=stylesheet href=/app.css> <script src=\"/app.js\"></script> --><!-- unterminated <link href=app.css></head>"
-	got, found, err := rewriteShellHTML(source, map[string]string{"app.js": "app-HASH.js", "styles.css": "styles-HASH.css"}, []string{"chunks/a.js"}, nil)
+	got, found, _, err := rewriteShellHTMLRefs(source, "", map[string]string{"app.js": "app-HASH.js", "styles.css": "styles-HASH.css"}, []string{"chunks/a.js"}, nil, true)
 	if err != nil || found || got != source {
 		t.Fatalf("rewrite = %q, found = %v, %v; want the shell unchanged", got, found, err)
 	}
@@ -57,7 +62,7 @@ func TestRewriteShellCommentMarkersInScriptsAndAttributes(t *testing.T) {
 		{`<meta content="<!--"><script src="/app.js"></script>`, `<meta content="<!--"><script src="/app-HASH.js"></script>`},
 		{`<script src="/app.js">if (a <!--b) {}</script>`, `<script src="/app-HASH.js">if (a <!--b) {}</script>`},
 	} {
-		got, found, err := rewriteShellHTML("<head>"+tt.source+"</head>", renames, nil, nil)
+		got, found, _, err := rewriteShellHTMLRefs("<head>"+tt.source+"</head>", "", renames, nil, nil, true)
 		if err != nil || !found || got != "<head>"+tt.want+"</head>" {
 			t.Errorf("rewrite = %q, found = %v, %v; want %q", got, found, err, tt.want)
 		}
@@ -68,7 +73,7 @@ func TestShellPreloads(t *testing.T) {
 	for _, cross := range []string{"", "crossorigin", `crossorigin = 'use-credentials'`} {
 		for _, prefix := range []string{"/", "./", "", "/docs/site/"} {
 			source := "<html>\n  <head>\n    <script " + cross + ` src="` + prefix + "app.js\"></script>\n  </head>\n</html>"
-			got, _, err := rewriteShellHTML(source, nil, []string{"chunks/first.js", "chunks/shared.js"}, nil)
+			got, _, _, err := rewriteShellHTMLRefs(source, "", nil, []string{"chunks/first.js", "chunks/shared.js"}, nil, false)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -83,9 +88,14 @@ func TestShellPreloads(t *testing.T) {
 			}
 		}
 	}
-	got, err := insertModulepreloads("<head></head>", "/", []string{"chunks/a.js"}, "")
+	got, err := insertHeadLinks("<head></head>", "/", "", []string{"chunks/a.js"}, "")
 	if err != nil || got != "<head>\n<link rel=\"modulepreload\" href=\"/chunks/a.js\">\n</head>" {
 		t.Fatalf("inline head = %q, %v", got, err)
+	}
+	got, err = insertHeadLinks("<head>\n  <link href=\"/styles.css\" rel=\"stylesheet\">\n</head>", "/", "page.css", []string{"chunks/a.js"}, "")
+	want := "<head>\n  <link href=\"/styles.css\" rel=\"stylesheet\">\n<link rel=\"stylesheet\" href=\"/page.css\">\n<link rel=\"modulepreload\" href=\"/chunks/a.js\">\n</head>"
+	if err != nil || got != want {
+		t.Fatalf("page stylesheet = %q, %v; want it after the global sheet and before the preloads", got, err)
 	}
 }
 
@@ -147,19 +157,20 @@ func TestBundleOutputsAndStaticClosure(t *testing.T) {
 func TestRewriteStaticPage(t *testing.T) {
 	for _, base := range []string{"", "/app"} {
 		source := `<head></head><script type="module" src="` + base + `/_puzzle/about.js"></script>`
-		got, err := rewriteStaticPage(source, "_puzzle/about.js", "_puzzle/about-HASH.js", []string{"_puzzle/chunks/shared.js"})
+		got, err := rewriteStaticPage(source, "_puzzle/about.js", "_puzzle/about-HASH.js", "_puzzle/about-CSS.css", []string{"_puzzle/chunks/shared.js"})
 		if err != nil {
 			t.Fatal(err)
 		}
-		if !strings.Contains(got, `src="`+base+`/_puzzle/about-HASH.js"`) || !strings.Contains(got, `href="`+base+`/_puzzle/chunks/shared.js"`) {
+		if !strings.Contains(got, `src="`+base+`/_puzzle/about-HASH.js"`) || !strings.Contains(got, `href="`+base+`/_puzzle/chunks/shared.js"`) ||
+			!strings.Contains(got, `<link rel="stylesheet" href="`+base+`/_puzzle/about-CSS.css">`) {
 			t.Fatalf("static page lost its base: %s", got)
 		}
-		fixed, err := rewriteStaticPage(source, "_puzzle/about.js", "_puzzle/about.js", nil)
+		fixed, err := rewriteStaticPage(source, "_puzzle/about.js", "_puzzle/about.js", "", nil)
 		if err != nil || fixed != source {
 			t.Fatalf("fixed page changed: %q, %v", fixed, err)
 		}
 		for _, bad := range []string{`<head></head>`, source + source} {
-			if _, err := rewriteStaticPage(bad, "_puzzle/about.js", "_puzzle/about-HASH.js", nil); err == nil {
+			if _, err := rewriteStaticPage(bad, "_puzzle/about.js", "_puzzle/about-HASH.js", "", nil); err == nil {
 				t.Fatal("expected exactly one generated module tag")
 			}
 		}
@@ -190,8 +201,17 @@ func TestRewriteShellReadErrors(t *testing.T) {
 	if err := os.Mkdir(filepath.Join(staging, "index.html"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	err := rewriteShell(staging, "", "styles.css", "app/app.js", true, false, nil)
+	err := rewriteShell(staging, `{"outputs":{}}`, "styles.css", "app/app.js", true, false, true, nil)
 	if err == nil || !strings.Contains(err.Error(), "reading public/index.html:") || strings.Contains(err.Error(), "hashNames") {
 		t.Fatalf("shell read error = %v", err)
+	}
+}
+
+func TestEntryCSSLinkCheckIsLazy(t *testing.T) {
+	if warnUnlinkedCSS(`{"outputs":{"dist/app.js":{"entryPoint":"app/app.js"}}}`, "dist", "app/app.js", func() bool {
+		t.Fatal("a bundle without CSS must not scan public HTML")
+		return false
+	}) {
+		t.Fatal("a bundle without CSS must not warn")
 	}
 }

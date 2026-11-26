@@ -1,7 +1,8 @@
 // Docs-site only: keep password managers from offering to fill the live demo
 // inputs. The pieces themselves stay untouched — an app that copies
-// `password-field` should still get its manager's autofill.
-const FIELDS = 'input, textarea, select';
+// `password-field` should still get its manager's autofill. A task-list checkbox
+// in the editor is skipped: marking it makes ProseMirror rebuild the item, forever.
+const FIELDS = 'input:not(.ProseMirror [type=checkbox]), textarea, select';
 
 function mark(root) {
 	if (root.matches?.(FIELDS)) root.setAttribute('data-1p-ignore', '');

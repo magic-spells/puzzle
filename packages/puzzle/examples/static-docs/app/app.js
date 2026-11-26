@@ -1,11 +1,11 @@
 import { PuzzleApp } from '@magic-spells/puzzle';
 import routes from './routes.js';
 import models from './models/index.js';
-import formatters from './formatters.js';
+import functions from './functions.js';
 
 // Create and configure the Puzzle app.
 // The v1 config surface is intentionally small: target, routes, models,
-// formatters, apiURL — see constellation/doc/DOC-SPEC.md §2.
+// functions, apiURL — see constellation/doc/DOC-SPEC.md §2.
 const app = new PuzzleApp({
   // Where the app mounts. In static mode (D81) `target` must be an `'#id'`
   // selector pointing at an empty element in the shell — the prerenderer injects
@@ -19,13 +19,13 @@ const app = new PuzzleApp({
   // Models registration
   models,
 
-  // Global formatters (display transformation only — logic belongs in data()).
-  // In static mode the build reads these from app/formatters.js so they exist in
-  // each page's client bundle; formatters passed ONLY here would render at build
-  // time but be missing client-side (the build warns). See app/formatters.js.
-  formatters,
+  // app functions (display transformation only — logic belongs in data()).
+  // in static mode the build reads these from app/functions.js so they exist in
+  // each page's client bundle; functions passed ONLY here would render at build
+  // time but be missing client-side (the build warns). see app/functions.js.
+  functions,
 
-  // App lifecycle hook (v1.28, D60). In static mode (D81) this runs ONLY at build
+  // App lifecycle hook (v1.28, D66). In static mode (D81) this runs ONLY at build
   // time with a `{ store, config }` facade before the routes are prerendered. Any
   // records seeded here flow into the first data() of every page, land in the
   // static HTML, and are serialized into an inline data island that the client

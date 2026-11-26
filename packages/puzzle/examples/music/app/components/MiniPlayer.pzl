@@ -64,7 +64,7 @@ import Icon from './Icon.pzl';
 // to the full-screen player this unmounts (timer cleared) and NowPlaying takes
 // over the tick; progress is unbroken because it lives in the store record.
 export default class MiniPlayer extends PuzzleView {
-  data(params, props) {
+  data() {
     const store = this.ctx.store;
     const player = store.findMany('player')[0] || null;
     const track = player && player.currentTrackId ? store.findOne('track', player.currentTrackId) : null;

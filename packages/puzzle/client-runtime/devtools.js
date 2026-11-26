@@ -53,7 +53,7 @@ import { liveViewList, safeState, setViewObserver } from './devstate.js';
 
 /**
  * The hook object the extension installs on window (only its two methods are
- * relied on, after the typeof checks in appMountedImpl).
+ * relied on, after the typeof checks in devtoolsAppMounted).
  * @typedef {{
  *   emit: (message: { puzzle: 1, v: number, type: string, payload: unknown }) => void,
  *   onRequest: (handler: (message: DevtoolsRequest) => object | null) => void,
@@ -130,7 +130,7 @@ const PROTOCOL_VERSION = 1;
 // literal — BUMP IT WITH package.json AT EVERY RELEASE (D100). `release:prep`
 // asserts this matches package.json, because the instruction above was not
 // enough on its own: it silently stayed at 0.3.0 through the 0.3.1 bump.
-const FRAMEWORK_VERSION = '0.9.0';
+const FRAMEWORK_VERSION = '0.10.0';
 
 // The global the extension installs its hook on. Referenced ONLY from DEV-gated
 // code, so production DCE drops the usages and then this const — which is what
@@ -189,7 +189,7 @@ let pendingFlushRow = null;
 // — see the measured note in devstate.js: only the positive form is reliably
 // dead-code-eliminated.
 
-// ---- public touchpoints (all no-ops without a hook) -------------------------
+// ---- registration ----------------------------------------------------------
 
 /**
  * Register with the extension hook, if one is installed. Called from
@@ -201,7 +201,54 @@ let pendingFlushRow = null;
  * @param {PuzzleApp} app
  */
 export function devtoolsAppMounted(app) {
-	if (DEV) appMountedImpl(app);
+	if (DEV) {
+		try {
+			if (typeof window === 'undefined') return;
+			const candidate = window[HOOK_KEY];
+			// Defensive: an unrelated global, an older extension, or a half-installed
+			// hook must leave the runtime completely alone.
+			if (
+				!candidate ||
+				typeof candidate.emit !== 'function' ||
+				typeof candidate.onRequest !== 'function'
+			) {
+				return;
+			}
+
+			hook = candidate;
+			boundApp = app;
+			emit('hello', {
+				protocolVersion: PROTOCOL_VERSION,
+				frameworkVersion: FRAMEWORK_VERSION,
+			});
+			emit('app-mounted', {});
+
+			try {
+				hook.onRequest(handleRequest);
+			} catch {
+				// The hook refused the handler — stay registered for one-way events
+				// rather than tearing the whole bridge down.
+			}
+
+			// Live view mount/destroy events from here on.
+			setViewObserver(onViewChange);
+
+			// Profiler events from here on too. The sink is attached for the whole
+			// session rather than only between perf:start and perf:stop: accumulation
+			// is gated on `profile`, but a LOOP DETECTION is worth pushing whenever a
+			// panel is attached, not only when someone happens to be recording.
+			// Detach first so a re-registration replaces its sink the way
+			// setViewObserver above replaces its observer — one slot, not a pile.
+			perfDetach?.();
+			perfDetach = devperfInstallSink(onPerfEvent);
+
+			// Replay anything already mounted (a beforeMount hook that mounted a view,
+			// or an app registered late). liveViewList() preserves mount order.
+			for (const view of liveViewList()) emit('view-mounted', viewInfo(view));
+		} catch {
+			// The bridge must never break the app it is inspecting.
+		}
+	}
 }
 
 /**
@@ -209,102 +256,23 @@ export function devtoolsAppMounted(app) {
  * @param {PuzzleApp} app
  */
 export function devtoolsAppUnmounted(app) {
-	if (DEV) appUnmountedImpl(app);
-}
-
-/**
- * Report one completed store flush batch: the keys that changed and the exact
- * subscriber set that was notified (PuzzleView instances become ids, function
- * subscribers become the literal 'fn').
- *
- * @param {Store} store
- * @param {string[]} keys
- * @param {Set<object>} notified
- */
-export function devtoolsFlush(store, keys, notified) {
-	if (DEV) flushImpl(store, keys, notified);
-}
-
-/**
- * Report a committed navigation. Called from Router.#commitState next to the
- * dev-only warnMissingSlots walk, so document.title is already the new route's
- * (the head sync runs inside #commitLocation, immediately before).
- *
- * @param {CommittedRoute} next
- */
-export function devtoolsRouteCommit(next) {
-	if (DEV) routeCommitImpl(next);
-}
-
-// ---- registration ----------------------------------------------------------
-
-/** @param {PuzzleApp} app */
-function appMountedImpl(app) {
-	try {
-		if (typeof window === 'undefined') return;
-		const candidate = window[HOOK_KEY];
-		// Defensive: an unrelated global, an older extension, or a half-installed
-		// hook must leave the runtime completely alone.
-		if (
-			!candidate ||
-			typeof candidate.emit !== 'function' ||
-			typeof candidate.onRequest !== 'function'
-		) {
-			return;
-		}
-
-		hook = candidate;
-		boundApp = app;
-		emit('hello', {
-			protocolVersion: PROTOCOL_VERSION,
-			frameworkVersion: FRAMEWORK_VERSION,
-		});
-		emit('app-mounted', {});
-
+	if (DEV) {
 		try {
-			hook.onRequest(handleRequest);
+			// A different app tearing down must not unregister this one's bridge.
+			if (!hook || (boundApp !== null && boundApp !== app)) return;
+			emit('app-unmounted', {});
+			setViewObserver(null);
+			perfDetach?.();
+			perfDetach = null;
+			profile = null;
+			pendingFlushRow = null;
+			removeOverlay();
+			hook = null;
+			boundApp = null;
+			lastChain = [];
 		} catch {
-			// The hook refused the handler — stay registered for one-way events
-			// rather than tearing the whole bridge down.
+			// fail-soft, as everywhere in this module
 		}
-
-		// Live view mount/destroy events from here on.
-		setViewObserver(onViewChange);
-
-		// Profiler events from here on too. The sink is attached for the whole
-		// session rather than only between perf:start and perf:stop: accumulation
-		// is gated on `profile`, but a LOOP DETECTION is worth pushing whenever a
-		// panel is attached, not only when someone happens to be recording.
-		// Detach first so a re-registration replaces its sink the way
-		// setViewObserver above replaces its observer — one slot, not a pile.
-		perfDetach?.();
-		perfDetach = devperfInstallSink(onPerfEvent);
-
-		// Replay anything already mounted (a beforeMount hook that mounted a view,
-		// or an app registered late). liveViewList() preserves mount order.
-		for (const view of liveViewList()) emit('view-mounted', viewInfo(view));
-	} catch {
-		// The bridge must never break the app it is inspecting.
-	}
-}
-
-/** @param {PuzzleApp} app */
-function appUnmountedImpl(app) {
-	try {
-		// A different app tearing down must not unregister this one's bridge.
-		if (!hook || (boundApp !== null && boundApp !== app)) return;
-		emit('app-unmounted', {});
-		setViewObserver(null);
-		perfDetach?.();
-		perfDetach = null;
-		profile = null;
-		pendingFlushRow = null;
-		removeOverlay();
-		hook = null;
-		boundApp = null;
-		lastChain = [];
-	} catch {
-		// fail-soft, as everywhere in this module
 	}
 }
 
@@ -334,42 +302,56 @@ function onViewChange(view, mounted) {
 }
 
 /**
+ * Report one completed store flush batch: the keys that changed and the exact
+ * subscriber set that was notified (PuzzleView instances become ids, function
+ * subscribers become the literal 'fn').
+ *
  * @param {Store} store
  * @param {string[]} keys
  * @param {Set<object>} notified
  */
-function flushImpl(store, keys, notified) {
-	try {
-		if (!hook) return;
-		/** @type {(number | string | null)[]} */
-		const ids = [];
-		for (const sub of notified) ids.push(subscriberId(sub));
-		// The store-side half of a recording comes from HERE rather than from
-		// devperf's 'store-flush' event, because only this call site carries the
-		// changed KEYS (devperf keeps a count). Note the deliberate shape
-		// difference the panel documents: the flush EVENT reports `notified` as
-		// subscriber ids, the profile reports it as a count.
-		if (profile?.recording) recordProfileFlush(keys, ids.length);
-		emit('flush', { keys: [...keys], notified: ids });
-	} catch {
-		// never let a diagnostic break a store flush
+export function devtoolsFlush(store, keys, notified) {
+	if (DEV) {
+		try {
+			if (!hook) return;
+			/** @type {(number | string | null)[]} */
+			const ids = [];
+			for (const sub of notified) ids.push(subscriberId(sub));
+			// The store-side half of a recording comes from HERE rather than from
+			// devperf's 'store-flush' event, because only this call site carries the
+			// changed KEYS (devperf keeps a count). Note the deliberate shape
+			// difference the panel documents: the flush EVENT reports `notified` as
+			// subscriber ids, the profile reports it as a count.
+			if (profile?.recording) recordProfileFlush(keys, ids.length);
+			emit('flush', { keys: [...keys], notified: ids });
+		} catch {
+			// never let a diagnostic break a store flush
+		}
 	}
 }
 
-/** @param {CommittedRoute} next */
-function routeCommitImpl(next) {
-	try {
-		lastChain = chainNames(next?.views);
-		if (!hook) return;
-		emit('route-commit', {
-			pathname: next?.pathname ?? null,
-			query: { ...(next?.query ?? {}) },
-			params: { ...(next?.params ?? {}) },
-			chain: [...lastChain],
-			title: typeof document !== 'undefined' ? document.title : null,
-		});
-	} catch {
-		// never let a diagnostic break a navigation commit
+/**
+ * Report a committed navigation. Called from Router.#commitState next to the
+ * dev-only warnMissingSlots walk, so document.title is already the new route's
+ * (the head sync runs inside #commitLocation, immediately before).
+ *
+ * @param {CommittedRoute} next
+ */
+export function devtoolsRouteCommit(next) {
+	if (DEV) {
+		try {
+			lastChain = chainNames(next?.views);
+			if (!hook) return;
+			emit('route-commit', {
+				pathname: next?.pathname ?? null,
+				query: { ...(next?.query ?? {}) },
+				params: { ...(next?.params ?? {}) },
+				chain: [...lastChain],
+				title: typeof document !== 'undefined' ? document.title : null,
+			});
+		} catch {
+			// never let a diagnostic break a navigation commit
+		}
 	}
 }
 
@@ -514,8 +496,11 @@ function inspectView(id) {
 		// functions are dropped rather than serialized (or thrown on).
 		params: safeState(view.params),
 		props: safeState(view.props),
-		model: safeState(view._modelState?.() ?? {}),
-		local: safeState(view._localState?.() ?? {}),
+		shared: safeState(view.shared),
+		// the wire keys stay `model` / `local` (the panel protocol); they carry the
+		// derived and state layers.
+		model: safeState(view._derived?.() ?? {}),
+		local: safeState(view.getState?.() ?? {}),
 	};
 }
 
@@ -696,7 +681,7 @@ const CAUSE_BUCKET = {
 	store: 'store',
 	props: 'parent', // a parent re-render passed new props down
 	route: 'route',
-	'local-state': 'manual', // setData()
+	'local-state': 'manual', // setState()
 	render: 'manual', // a direct rerender() with nothing else pending
 	slots: 'slot',
 };

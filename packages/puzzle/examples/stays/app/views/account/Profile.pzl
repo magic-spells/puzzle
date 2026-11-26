@@ -1,5 +1,5 @@
 <puzzle-view>
-  <!-- Index child of /account (path ''). Renders inside AccountShell's <Slot/>
+  <!-- Index child of /account (path ''). Renders inside AccountShell's <Outlet/>
        at the bare /account URL. As the topmost swapped view on a pane change it
        animates alone while the shell above holds still (D30). -->
   <div class="space-y-10">
@@ -57,7 +57,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 import TravelStamp from '@/components/TravelStamp.pzl';
 
 export default class Profile extends PuzzleView {
-  data(params, props) {
+  data() {
     // Traveler may not be seeded yet on first paint; default stamps to [] so the
     // grid and the distinct-counts below never touch undefined.
     const me = this.ctx.store.findOne('traveler', 'me');

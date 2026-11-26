@@ -37,7 +37,7 @@
        it escapes this main's overflow-y-auto because no ancestor here carries a
        transform/filter (the album view's only animation is opacity, and it isn't
        even the animator on the child swap). Same trick kanban-morph uses. -->
-  <Slot/>
+  <Outlet/>
 </puzzle-view>
 
 <script>
@@ -50,7 +50,7 @@ export default class AlbumView extends PuzzleView {
   // subscribes this view, so if the seeded photo set changed the album would
   // stay in sync. `album` carries the display name + count; `photos` is the
   // author's photos in store order.
-  data(params, props) {
+  data({ params }) {
     const all = this.ctx.store.findMany('photo');
     const album = groupAlbums(all).find((a) => a.slug === params.slug) || null;
     const photos = album ? all.filter((p) => albumSlug(p.author) === params.slug) : [];

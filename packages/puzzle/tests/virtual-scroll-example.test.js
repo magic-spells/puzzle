@@ -8,7 +8,7 @@
 // works on stock Puzzle — no framework changes.
 //
 // The recipe: a fixed-height scroll container with an @scroll handler that
-// recomputes the window's start bucket and setData/refresh()es; data() slices a
+// recomputes the window's start bucket and setState()s it; data() slices a
 // bounded window out of the 10k-row dataset; two spacer divs carry the off-window
 // geometry so the native scrollbar behaves as if all 10,000 rows were present.
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
@@ -29,7 +29,7 @@ let waapi = null;
 let apps = [];
 
 const raf = () => new Promise((r) => requestAnimationFrame(() => r()));
-// refresh() re-renders on a rAF; two rounds cover a render that schedules another.
+// A setState() render lands on a rAF; two rounds cover a render that schedules another.
 async function settle() {
 	await raf();
 	await raf();

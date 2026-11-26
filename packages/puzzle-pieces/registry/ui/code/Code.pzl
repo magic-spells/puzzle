@@ -2,7 +2,7 @@
   <div class={ rootClass }>
     <div data-code-scroll class={ scrollClass } style={ scrollStyle } aria-hidden={ scrollHidden }>
       {#if numbers}
-        <pre aria-hidden="true" class="sticky left-0 z-10 shrink-0 select-none bg-surface py-4 pl-4 pr-3 text-right font-mono text-[13px]/relaxed text-faint whitespace-pre">{ lineNumbers }</pre>
+        <pre aria-hidden="true" class="sticky left-0 z-10 shrink-0 select-none bg-surface py-4 pl-4 pr-3 text-right font-mono text-code/relaxed text-faint whitespace-pre">{ lineNumbers }</pre>
       {/if}
       <pre island data-code-pre class={ codeClass }>{ code }</pre>
     </div>
@@ -57,8 +57,8 @@ import { highlight } from '../../lib/highlight.js';
 //
 // Requires: npm install highlight.js (declared in piece.json) plus the
 // lib/highlight.js registry file. The syntax-token CSS travels with this file
-// — the only piece that carries a <style> block, because highlight.js
-// generates its class names at runtime so they can't be Tailwind utilities.
+// because highlight.js generates its class names at runtime, so they can't be
+// Tailwind utilities.
 //
 //   <Code code={ snippet }/>                            framed, numbers, copy
 //   <Code code={ installCmd } numbers={ false }/>       command block
@@ -67,7 +67,7 @@ import { highlight } from '../../lib/highlight.js';
 //
 // Props:
 //   code         the snippet string (required)
-//   lang         'javascript' | 'xml' | 'bash' — omit to auto-guess by shape
+//   lang         'javascript' | 'xml' | 'css' | 'json' | 'ini' | 'bash' | 'puzzle' — omit to auto-guess by shape
 //   numbers      line-number gutter, default true; sticky-left so it stays put
 //                while long lines scroll horizontally
 //   copy         corner copy button, default true
@@ -97,7 +97,7 @@ export default class Code extends PuzzleView {
   created() {
     this._copyTimer = null;
     this._hlKey = null;
-    this.setData({ copied: false, expanded: false });
+    this.setState({ copied: false, expanded: false });
   }
 
   destroyed() {
@@ -138,6 +138,8 @@ export default class Code extends PuzzleView {
   // max-height is the animated property (not height — the state's own
   // max-height style would clamp height keyframes and snap the collapse), and
   // overflow is pinned to hidden for the flight so no scrollbar flashes by.
+  // flip() must render synchronously (setState + refresh) so the second
+  // measurement sees the new height.
   _animateHeight(flip) {
     const el = this.element?.querySelector('[data-code-scroll]');
     if (!el || this._reducedMotion()) {
@@ -158,7 +160,7 @@ export default class Code extends PuzzleView {
     };
   }
 
-  data(params, props) {
+  data({ props }) {
     const code = props.code || '';
     const numbers = props.numbers !== false;
     const copy = props.copy !== false;
@@ -193,7 +195,7 @@ export default class Code extends PuzzleView {
           ? `max-height:${props.maxHeight};`
           : '',
       codeClass: [
-        'flex-1 py-4 font-mono text-[13px]/relaxed text-body whitespace-pre',
+        'flex-1 py-4 font-mono text-code/relaxed text-body whitespace-pre',
         numbers ? 'pl-1' : 'pl-4',
         copy || collapsible ? 'pr-16' : 'pr-4',
       ].join(' '),
@@ -217,13 +219,13 @@ export default class Code extends PuzzleView {
   events = {
     expand: () => {
       this._animateHeight(() => {
-        this.setData({ expanded: true });
+        this.setState({ expanded: true });
         this.refresh();
       });
     },
     collapse: () => {
       this._animateHeight(() => {
-        this.setData({ expanded: false });
+        this.setState({ expanded: false });
         this.refresh();
       });
     },
@@ -235,13 +237,11 @@ export default class Code extends PuzzleView {
       if (!navigator.clipboard?.writeText) return;
       navigator.clipboard.writeText(code).then(
         () => {
-          this.setData({ copied: true });
-          this.refresh();
+          this.setState({ copied: true });
           if (this._copyTimer) clearTimeout(this._copyTimer);
           this._copyTimer = setTimeout(() => {
             this._copyTimer = null;
-            this.setData({ copied: false });
-            this.refresh();
+            this.setState({ copied: false });
           }, COPIED_MS);
         },
         () => {}

@@ -257,6 +257,22 @@ export default class About extends PuzzleView {}
 `)
 	})
 
+	step("page CSS import", []string{abs("app/views/About.pzl")}, &wantPlan{routes: []string{"/about"}}, func() {
+		write("app/views/about.css", ".about { color: teal; }\n")
+		write("app/views/About.pzl", `<puzzle-view>
+  <h1 class="about">About, revised</h1>
+</puzzle-view>
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import './about.css';
+export default class About extends PuzzleView {}
+</script>
+`)
+	})
+	if about := readFile(t, filepath.Join(dist, "about", "index.html")); !strings.Contains(about, `<link rel="stylesheet" href="/_puzzle/about.css">`) {
+		t.Errorf("the dev page does not link its own stylesheet:\n%s", about)
+	}
+
 	step("component edit", []string{abs("app/components/Card.pzl")}, &wantPlan{routes: []string{"/"}}, func() {
 		write("app/components/Card.pzl", `<puzzle-view>
   <section class="card"><span>{#svg 'icons/logo.svg'}</span><em>edited</em><Children/></section>
@@ -330,13 +346,21 @@ export default class Card extends PuzzleView {}
 	// site. The catch-all's route path is '*', which sorts first.
 	step("layout edit", []string{abs("app/layouts/Default.pzl")}, &wantPlan{routes: []string{"*", "/", "/about"}}, func() {
 		write("app/layouts/Default.pzl", `<puzzle-view>
-  <main class="shell"><Slot/></main>
+  <main class="shell"><Outlet/></main>
 </puzzle-view>
 <script>
 import { PuzzleView } from '@magic-spells/puzzle';
 export default class DefaultLayout extends PuzzleView {}
 </script>
 `)
+	})
+
+	// CSS that only app.js imports ships as app.css while a public page links
+	// /app.css; the next step's shell drops the link and with it the file.
+	step("shell links app.js CSS", []string{abs("app/app.js"), abs("app/public/index.html")}, &wantPlan{full: true}, func() {
+		write("app/entry.css", "body { margin: 0; }\n")
+		write("app/app.js", "import './entry.css';\n"+readFile(t, abs("app/app.js")))
+		write("app/public/index.html", strings.Replace(readFile(t, abs("app/public/index.html")), "</head>", "  <link href=\"/app.css\" rel=\"stylesheet\">\n</head>", 1))
 	})
 
 	// The shell is spliced into every page and belongs to no module graph.
@@ -451,6 +475,58 @@ export default [
 	})
 	if got := builder.lastPlan.reason; got != "a locale file changed" {
 		t.Errorf("locale edit classified as %q, want the locale classification", got)
+	}
+}
+
+// CSS only app.js imports reaches no static page. The one-shot build names it
+// on every run; a dev session names it once, like the SPA dev builder.
+func TestStaticWatchWarnsUnloadedCSSOnce(t *testing.T) {
+	requireStaticRuntime(t)
+	files := baseSSGFixture()
+	files["app/entry.css"] = "body { margin: 0; }\n"
+	files["app/app.js"] = "import './entry.css';\n" + files["app/app.js"]
+	root := writeSSGFixture(t, files)
+	builder, err := NewStaticWatchBuilder(root, StaticWatchOptions{Config: config.Config{Output: "static"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer builder.Dispose()
+	for i, want := range []int{1, 0} {
+		stderr := captureStderr(t, func() { err = builder.Rebuild(nil) })
+		if got := strings.Count(stderr, "app/entry.css is imported outside every page's views and layouts"); err != nil || got != want {
+			t.Fatalf("rebuild %d: %v; warning printed %d times, want %d: %s", i+1, err, got, want, stderr)
+		}
+	}
+}
+
+// An app reached through a symlink (macOS /tmp and /var are links) must serve
+// the pages a one-shot build ships, not ../ URLs into .puzzle/tmp.
+func TestStaticWatchSymlinkedRootMatchesOneShot(t *testing.T) {
+	requireStaticRuntime(t)
+	target := writeSSGFixture(t, baseSSGFixture())
+	root := target + "-link"
+	if err := os.Symlink(target, root); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	t.Cleanup(func() { os.Remove(root) })
+	builder, err := NewStaticWatchBuilder(root, StaticWatchOptions{Config: config.Config{Output: "static"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer builder.Dispose()
+	if err := builder.Rebuild(nil); err != nil {
+		t.Fatal(err)
+	}
+	dist := filepath.Join(root, "dist")
+	warm := snapshotTree(t, dist)
+	if !strings.Contains(warm["about/index.html"], `src="/_puzzle/about.js"`) {
+		t.Errorf("about page does not load /_puzzle/about.js:\n%s", warm["about/index.html"])
+	}
+	if err := Build(root, Options{Development: true, Output: "static"}); err != nil {
+		t.Fatal(err)
+	}
+	if d := diffTrees(warm, snapshotTree(t, dist)); d != "" {
+		t.Errorf("dev output is not the one-shot output:\n%s", d)
 	}
 }
 

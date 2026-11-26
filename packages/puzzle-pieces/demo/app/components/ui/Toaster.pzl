@@ -88,7 +88,7 @@ export default class Toaster extends PuzzleView {
     this._unsub = null;
   }
 
-  data(params, props) {
+  data({ props }) {
     const n = Number(props.maxVisible);
     const maxVisible = Number.isFinite(n) && n >= 1 ? Math.floor(n) : 4;
 
@@ -118,6 +118,8 @@ export default class Toaster extends PuzzleView {
   }
 
   mounted() {
+    // refresh() on purpose: the toasts live in a module store data() reads, which
+    // setState() cannot see.
     this._unsub = subscribe(() => this.refresh());
   }
 

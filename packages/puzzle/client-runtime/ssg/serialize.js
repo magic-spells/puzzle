@@ -181,16 +181,18 @@ function serializeAttrs(tag, attrs, { selected = false, controlledSelect = false
  * render from browser render for a component that probes `if (this.route)`.
  */
 export async function serialize(vnode, { ctx = {} } = {}) {
-	return serializeNode(vnode, ctx, null);
+	return serializeNode(vnode, ctx, null, null);
 }
 
 /**
  * @param {ViewNode|string|null} vnode
  * @param {Record<string, any>} ctx
  * @param {SelectState} selectState
+ * @param {PuzzleView | null} parent the view whose render tree holds vnode, so a
+ *   nested component's data() sees what its ancestors share (D197)
  * @returns {Promise<string>}
  */
-async function serializeNode(vnode, ctx, selectState) {
+async function serializeNode(vnode, ctx, selectState, parent) {
 	if (vnode == null) return '';
 	// A raw string child is verbatim compile-time markup (an inlined `{#svg}` seed)
 	// — emitted as-is, the way ViewManager drops it in via innerHTML (D46).
@@ -221,10 +223,10 @@ async function serializeNode(vnode, ctx, selectState) {
 
 	if (vnode.tag === COMPONENT_SLOT_TAG) {
 		let html = '';
-		for (const child of /** @type {ViewNode[]} */ (vnode.children)) html += await serializeNode(child, ctx, selectState);
+		for (const child of /** @type {ViewNode[]} */ (vnode.children)) html += await serializeNode(child, ctx, selectState, parent);
 		return html;
 	}
-	if (vnode.isComponent) return serializeComponent(vnode, ctx, selectState);
+	if (vnode.isComponent) return serializeComponent(vnode, ctx, selectState, parent);
 
 	const tag = /** @type {string} */ (vnode.tag);
 	// The prerender half of the browser's metadata-tag guard (D89 boundary): a
@@ -270,7 +272,7 @@ async function serializeNode(vnode, ctx, selectState) {
 	const inner =
 		typeof vnode.children === 'string'
 			? vnode.children
-			: await serializeChildren(vnode.children, ctx, childSelectState);
+			: await serializeChildren(vnode.children, ctx, childSelectState, parent);
 	return `${open}${guardLeadingNewline(tag, inner)}</${tag}>`;
 }
 
@@ -293,12 +295,13 @@ function guardLeadingNewline(tag, inner) {
  * @param {Array<ViewNode|string>} children
  * @param {Record<string, any>} ctx
  * @param {SelectState} selectState
+ * @param {PuzzleView | null} parent
  * @returns {Promise<string>}
  */
-async function serializeChildren(children, ctx, selectState) {
+async function serializeChildren(children, ctx, selectState, parent) {
 	let out = '';
 	for (const child of children) {
-		out += await serializeNode(child, ctx, selectState);
+		out += await serializeNode(child, ctx, selectState, parent);
 	}
 	return out;
 }
@@ -394,25 +397,27 @@ function rawtextContent(tag, attrs, text) {
  * with `route: null` — mirroring the browser, where the ViewManager mounts nested
  * components without a route (this.route stays null off-router, viewManager.js
  * ~264). `preload()` runs created() + awaited data() with NO DOM and NO
- * mounted()/animations (PuzzleView.preload, DOC-APP-ANATOMY §5). The resolved
+ * mounted()/animations (PuzzleView.preload, DOC-VIEW-LIFECYCLE §3). The resolved
  * render() tree is slot-expanded against the call-site children and serialized.
  * Always render(), never renderSkeleton() — a build has real data.
  *
  * @param {ViewNode} vnode
  * @param {Record<string, any>} ctx
  * @param {SelectState} selectState
+ * @param {PuzzleView | null} parent
  * @returns {Promise<string>}
  */
-async function serializeComponent(vnode, ctx, selectState) {
+async function serializeComponent(vnode, ctx, selectState, parent) {
 	/** @type {PuzzleView} */
 	const instance = vnode.instance ?? new (/** @type {typeof PuzzleView} */ (vnode.tag))(ctx);
 	if (vnode.instance == null) {
+		instance.__parent = parent;
 		await instance.preload({ params: {}, props: vnode.attrs, route: null });
 	}
 	const rendered = instance.render();
 	if (rendered == null) return '';
 	const tree = expandSlots(rendered, /** @type {ViewNode[]} */ (vnode.children), vnode.tag);
-	return serializeNode(tree, ctx, selectState);
+	return serializeNode(tree, ctx, selectState, instance);
 }
 
 export default serialize;

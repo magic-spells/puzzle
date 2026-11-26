@@ -19,10 +19,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/evanw/esbuild/pkg/api"
 	"github.com/magic-spells/puzzle/compiler/internal/config"
+	"github.com/magic-spells/puzzle/compiler/internal/fsutil"
 	"github.com/magic-spells/puzzle/compiler/internal/plugin"
 	"github.com/magic-spells/puzzle/compiler/internal/ui"
 	"github.com/magic-spells/puzzle/packages/puzzle-lang/textutil"
@@ -35,8 +37,9 @@ const staticPagesDir = "_puzzle"
 
 // staticSummary mirrors the JSON the SSG runtime's prerenderToDir prints after
 // the sentinel in `mode: 'static'`. It extends the hybrid summary (prerender.go
-// ssgSummary) with the per-page module/entry/route facts and the top-level
-// mode/target/store/router wiring facts the per-page entry generation needs.
+// ssgSummary) with the skipped routes, the per-page module/entry/route facts
+// and the top-level mode/target/store/router wiring facts the per-page entry
+// generation needs.
 type staticSummary struct {
 	Written  []staticPage    `json:"written"`
 	Skipped  []staticSkipped `json:"skipped"`
@@ -53,20 +56,20 @@ type staticSummary struct {
 	APIURL json.RawMessage `json:"apiURL"`
 	// RouterBase preserves the app config value for the browser-side static
 	// context. A missing JSON field stays nil, so the generated mount call
-	// preserves app.js's conditional passthrough. (`routerMode` is deliberately NOT
+	// omits the key and the kernel defaults it. (`routerMode` is deliberately NOT
 	// carried: static pages have no router, the kernel ignored it, and since D159 a
 	// mode is an object that would serialize to a dead `{}` here anyway. Storage is
 	// not carried for the same serialization reason — the JS side warns instead; a
 	// direct mountStatic({storage}) caller still passes a real Storage object.)
 	RouterBase json.RawMessage `json:"routerBase"`
-	// HasModels/HasFormatters report config registrations. The build uses them
+	// HasModels/HasFunctions report config registrations. The build uses them
 	// only for warnings when no conventional module can reproduce that wiring in
 	// the per-page browser graph.
 	HasModels bool `json:"hasModels"`
-	// HasFormatters is true when the app config registered custom formatters; the
-	// build warns when they exist but app/formatters.js does not (they would be
-	// missing client-side in static mode).
-	HasFormatters bool `json:"hasFormatters"`
+	// HasFunctions is true when the app config registered custom template
+	// functions; the build warns when they exist but app/functions.js does not
+	// (they would be missing client-side in static mode).
+	HasFunctions bool `json:"hasFunctions"`
 	// HasAdapter carries the non-serializable app capability across the node→Go
 	// summary boundary so each browser entry can import and pass the same value.
 	HasAdapter bool `json:"hasAdapter"`
@@ -82,12 +85,10 @@ type staticSummary struct {
 	AdapterModuleMatches *bool `json:"adapterModuleMatches"`
 }
 
-// staticSkipped is one route the prerender did not render. Modules carries its
-// chain's view/layout stamps in static mode — a skipped route ships no page, but
-// its views are still chain roots for the dev builder's render-wide walk (D155).
+// staticSkipped is the part of a skipped route the build reads: its chain's
+// view/layout stamps. A skipped route ships no page, but its views are still
+// chain roots for the dev builder's render-wide walk (D155).
 type staticSkipped struct {
-	Path    string        `json:"path"`
-	Reason  string        `json:"reason"`
 	Modules staticModules `json:"modules"`
 }
 
@@ -149,29 +150,19 @@ type staticModules struct {
 // same minify/define/dropConsole policy as the main app.js pass. prof may be nil
 // (profiling off); it splits this pass into its three expensive steps — the node
 // prerender bundle, the render run, and the per-page browser bundles.
-func prerenderStaticPages(absRoot, appEntry, staging string, publicFiles map[string]bool, cfg config.Config, dev bool, prof *buildProfile, pc *passContext) error {
-	// A public/ asset that already produced a staging/_puzzle would be clobbered
-	// by the per-page bundles — reject it up front (extends the reserved-output
-	// collision guard to the static tree). copyPublic has already run, so the
-	// collision is observable here, before the splitting pass writes anything.
-	if pagesOut := filepath.Join(staging, staticPagesDir); dirExists(pagesOut) || FileExists(pagesOut) {
-		return fmt.Errorf(
-			"public asset would overwrite compiler output dist/%s (a reserved output name in static mode); rename or remove it",
-			staticPagesDir,
-		)
-	}
-	// Same class of collision for the prerender scratch dir, which is overwritten
-	// by the generated bundle and then deleted before the swap.
-	if err := checkPrerenderScratchCollision(absRoot, staging, "--static"); err != nil {
+func prerenderStaticPages(absRoot, appEntry, staging, appMetafile string, publicFiles map[string]bool, cfg config.Config, dev, quiet, linkedCSS bool, prof *PhaseProfile, pc *passContext) error {
+	// copyPublic has already run, so a public asset at a reserved name is
+	// observable here, before the splitting pass writes anything.
+	if err := checkStaticReserved(absRoot, staging); err != nil {
 		return err
 	}
 
-	// Whether the app ships a models registry, a formatters module, or a
+	// Whether the app ships a models registry, a functions module, or a
 	// conventional adapter module is a build-wide fact; resolve it once. The
 	// adapter module is needed BEFORE the render — the prerender entry imports it
 	// so the summary can report whether it is the value the config passed.
 	modelsModule := findStaticModule(absRoot, "app/models/index.js", "app/models/index.ts")
-	formattersModule := findStaticModule(absRoot, "app/formatters.js", "app/formatters.ts")
+	functionsModule := findStaticModule(absRoot, "app/functions.js", "app/functions.ts")
 	adapterModule := findStaticModule(absRoot, "app/adapter.js", "app/adapter.ts")
 
 	// 1. Node prerender pass in mode 'static': the JS side renders each static
@@ -183,14 +174,14 @@ func prerenderStaticPages(absRoot, appEntry, staging string, publicFiles map[str
 	}
 
 	outfile := filepath.Join(staging, prerenderDir, "prerender.mjs")
-	endPrerenderBundle := prof.phase("prerender bundle")
+	endPrerenderBundle := prof.Phase("prerender bundle")
 	bundleErr := bundlePrerenderEntry(absRoot, stdin, outfile, "--static", pc)
 	endPrerenderBundle()
 	if bundleErr != nil {
 		return bundleErr
 	}
 
-	endRender := prof.phase("prerender render")
+	endRender := prof.Phase("prerender render")
 	payload, err := runPrerender(outfile, staging, "--static")
 	endRender()
 	if err != nil {
@@ -219,7 +210,7 @@ func prerenderStaticPages(absRoot, appEntry, staging string, publicFiles map[str
 	}
 	var entryFiles []string
 	for _, page := range pages {
-		src, err := staticEntrySource(absRoot, appEntry, page.staticPage, summary, modelsModule, formattersModule, adapterModule)
+		src, err := staticEntrySource(absRoot, appEntry, page.staticPage, summary, modelsModule, functionsModule, adapterModule)
 		if err != nil {
 			return err
 		}
@@ -237,9 +228,8 @@ func prerenderStaticPages(absRoot, appEntry, staging string, publicFiles map[str
 		fmt.Fprintf(os.Stdout, "  %s %s\n", out.Yellow("!"),
 			"models registered in the app entry will not exist client-side in static mode — export them from app/models/index.js or app/models/index.ts")
 	}
-	if summary.HasFormatters && formattersModule == "" {
-		fmt.Fprintf(os.Stdout, "  %s %s\n", out.Yellow("!"),
-			"custom formatters registered in the app entry will not exist client-side in static mode — export them from app/formatters.js or app/formatters.ts")
+	if summary.HasFunctions && functionsModule == "" {
+		fmt.Fprintf(os.Stdout, "  %s %s\n", out.Yellow("!"), missingFunctionsModuleNote(absRoot))
 	}
 	if staticCaptured(summary, adapterModule) {
 		fmt.Fprintf(os.Stdout, "  %s %s\n", out.Yellow("!"), staticCaptureNote)
@@ -248,24 +238,33 @@ func prerenderStaticPages(absRoot, appEntry, staging string, publicFiles map[str
 	// 4. Splitting esbuild pass over all entries → staging/_puzzle. Shared chunks
 	//    land in _puzzle/chunks/ automatically. Skipped when there is nothing to
 	//    render (no static routes).
+	pagesMetafile := ""
 	if len(entryFiles) > 0 {
-		endPages := prof.phase("per-page bundles")
-		metafile, pagesErr := bundleStaticPages(absRoot, entryFiles, filepath.Join(staging, staticPagesDir), cfg, dev, pc)
+		endPages := prof.Phase("per-page bundles")
+		var pagesErr error
+		pagesMetafile, pagesErr = bundleStaticPages(absRoot, entryFiles, filepath.Join(staging, staticPagesDir), cfg, dev, pc)
 		endPages()
 		if pagesErr != nil {
 			return pagesErr
 		}
 
-		if !dev {
-			if err := rewriteStaticPages(staging, metafile, summary.Written); err != nil {
-				return err
-			}
+		if err := linkStaticPages(staging, staging, pagesMetafile, summary.Written, !dev); err != nil {
+			return err
 		}
 	}
 
 	// 5. Nothing references staging/app.js in static mode — drop it (and its map)
 	//    plus the prerender scaffolding before the swap so neither ships in dist/.
-	for _, name := range []string{"app.js", "app.js.map"} {
+	//    Pages link their own CSS, so app.css ships only for a shell that names it.
+	dead := []string{"app.js", "app.js.map"}
+	if !linkedCSS {
+		dead = append(dead, "app.css", "app.css.map")
+		warnUnloadedCSS(absRoot, appMetafile, pagesMetafile, staging)
+	}
+	for _, name := range dead {
+		if publicFiles[name] {
+			continue // the author's own public/app.css, copied over any compiler output
+		}
 		if err := os.Remove(filepath.Join(staging, name)); err != nil && !os.IsNotExist(err) {
 			return fmt.Errorf("puzzle build --static: removing staging/%s: %w", name, err)
 		}
@@ -274,12 +273,16 @@ func prerenderStaticPages(absRoot, appEntry, staging string, publicFiles map[str
 		return fmt.Errorf("puzzle build --static: cleaning %s: %w", prerenderDir, err)
 	}
 
-	printStaticSummary(summary, len(entryFiles))
+	printStaticSummary(summary, len(entryFiles), quiet)
 	return nil
 }
 
-func rewriteStaticPages(staging, metafile string, written []staticPage) error {
-	outputs, err := bundleOutputs(metafile, staging, staging)
+// linkStaticPages points each freshly rendered page at its emitted module, at
+// the stylesheet esbuild wrote for its graph's CSS imports, and (preload) at its
+// shared chunks. Output paths are relative to base, the pass's working tree;
+// the files themselves are under staging.
+func linkStaticPages(staging, base, metafile string, written []staticPage, preload bool) error {
+	outputs, err := bundleOutputs(metafile, base, base)
 	if err != nil {
 		return err
 	}
@@ -289,17 +292,27 @@ func rewriteStaticPages(staging, metafile string, written []staticPage) error {
 			entries[output.EntryPoint] = name
 		}
 	}
+	linked := make(map[string]bool)
 	for _, page := range written {
 		entry := filepath.ToSlash(filepath.Join(prerenderDir, "entries", filepath.Base(page.Entry)))
 		output, ok := entries[entry]
 		if !ok {
 			return fmt.Errorf("puzzle build --static: per-page bundle has no output for %s", page.Entry)
 		}
+		css := outputs[output].CSSBundle
+		linked[css] = true
+		var chunks []string
+		if preload {
+			chunks = staticImportClosure(outputs, output)
+		}
+		if page.Reused || (output == page.Entry && css == "" && len(chunks) == 0) {
+			continue
+		}
 		html, err := os.ReadFile(page.File)
 		if err != nil {
 			return fmt.Errorf("puzzle build --static: reading page %s: %w", page.File, err)
 		}
-		rewritten, err := rewriteStaticPage(string(html), page.Entry, output, staticImportClosure(outputs, output))
+		rewritten, err := rewriteStaticPage(string(html), page.Entry, output, css, chunks)
 		if err != nil {
 			return fmt.Errorf("puzzle build --static: rewriting page %s: %w", page.File, err)
 		}
@@ -307,7 +320,44 @@ func rewriteStaticPages(staging, metafile string, written []staticPage) error {
 			return fmt.Errorf("puzzle build --static: writing page %s: %w", page.File, err)
 		}
 	}
+	// A lazily imported module gets a stylesheet of its own that nothing loads;
+	// its CSS is already in the stylesheet of every page that imports it.
+	for name := range outputs {
+		if filepath.Ext(name) != ".css" || linked[name] {
+			continue
+		}
+		for _, file := range []string{name, name + ".map"} {
+			if err := os.Remove(filepath.Join(staging, filepath.FromSlash(file))); err != nil && !os.IsNotExist(err) {
+				return fmt.Errorf("puzzle build --static: removing unlinked %s: %w", file, err)
+			}
+		}
+	}
 	return nil
+}
+
+// warnUnloadedCSS names each CSS file the app entry's graph imports (keys
+// relative to the working directory) that no page graph does (relative to
+// pagesBase), and reports whether there was one.
+func warnUnloadedCSS(absRoot, appMetafile, pagesMetafile, pagesBase string) bool {
+	app, err := metafileAllInputs(appMetafile)
+	if err != nil {
+		return false
+	}
+	loaded, _ := metafileGraph(pagesMetafile, pagesBase)
+	var out []string
+	for path := range app {
+		if _, ok := loaded[path]; !ok && filepath.Ext(path) == ".css" {
+			if rel, err := filepath.Rel(absRoot, path); err == nil {
+				path = filepath.ToSlash(rel)
+			}
+			out = append(out, path)
+		}
+	}
+	sort.Strings(out)
+	for _, css := range out {
+		fmt.Fprintf(os.Stderr, "warning: %s is imported outside every page's views and layouts, so no static page loads it; import it from a layout or view\n", css)
+	}
+	return len(out) > 0
 }
 
 // staticPrerenderStdin builds the generated node entry for the static prerender
@@ -451,11 +501,11 @@ func sameModules(a, b staticModules) bool {
 
 // staticEntrySource builds the mountStatic entry module for one page. Import
 // specifiers and embedded values are JSON-encoded (space/quote safe, forward
-// slashes). The models/formatters imports (and their shorthand call properties)
+// slashes). The models/functions imports (and their shorthand call properties)
 // are emitted only when the source files exist — an absent binding must never be
 // referenced. Route + service options are embedded verbatim from the summary;
 // the adapter is resolved by staticAdapterImport.
-func staticEntrySource(absRoot, appEntry string, page staticPage, summary staticSummary, modelsModule, formattersModule, adapterModule string) (string, error) {
+func staticEntrySource(absRoot, appEntry string, page staticPage, summary staticSummary, modelsModule, functionsModule, adapterModule string) (string, error) {
 	var b strings.Builder
 	b.WriteString("import { mountStatic } from '@magic-spells/puzzle/static';\n")
 	// adapterBinding is emitted after every import, so the generated module reads
@@ -498,12 +548,12 @@ func staticEntrySource(absRoot, appEntry string, page staticPage, summary static
 		}
 		fmt.Fprintf(&b, "import models from %s;\n", spec)
 	}
-	if formattersModule != "" {
-		spec, err := json.Marshal(absModuleImport(absRoot, formattersModule))
+	if functionsModule != "" {
+		spec, err := json.Marshal(absModuleImport(absRoot, functionsModule))
 		if err != nil {
 			return "", err
 		}
-		fmt.Fprintf(&b, "import formatters from %s;\n", spec)
+		fmt.Fprintf(&b, "import functions from %s;\n", spec)
 	}
 
 	targetJSON, err := json.Marshal("#" + summary.Target)
@@ -536,8 +586,8 @@ func staticEntrySource(absRoot, appEntry string, page staticPage, summary static
 	if modelsModule != "" {
 		b.WriteString("  models,\n")
 	}
-	if formattersModule != "" {
-		b.WriteString("  formatters,\n")
+	if functionsModule != "" {
+		b.WriteString("  functions,\n")
 	}
 	if summary.HasAdapter {
 		b.WriteString("  adapter,\n")
@@ -619,7 +669,7 @@ const staticCaptureNote = "config.adapter is configured in the app entry, so eac
 // preferring JavaScript when both JavaScript and TypeScript variants are present.
 func findStaticModule(absRoot string, candidates ...string) string {
 	for _, candidate := range candidates {
-		if FileExists(filepath.Join(absRoot, filepath.FromSlash(candidate))) {
+		if fsutil.FileExists(filepath.Join(absRoot, filepath.FromSlash(candidate))) {
 			return candidate
 		}
 	}
@@ -663,19 +713,15 @@ func staticPagesSourcemap(cfg config.Config, dev bool) api.SourceMap {
 // bundleStaticPages runs the browser-platform, Splitting esbuild pass over the
 // generated per-page entries into outdir (staging/_puzzle). Target/minify/define
 // and the dropConsole policy match the main app.js pass exactly. EntryNames is
-// the slug, hashed in production when build.hashNames is on; the production
-// page rewrite resolves the injected URLs through the returned metafile. Shared
-// code splits into _puzzle/chunks/. The CSS this fresh plugin collects is
-// discarded — the main pass already composed the stylesheet.
+// the slug, hashed in production when build.hashNames is on; linkStaticPages
+// resolves the injected URLs through the returned metafile. Shared code splits
+// into _puzzle/chunks/. The <style> CSS this fresh plugin collects is discarded
+// (the main pass already composed the stylesheet); CSS a script imports is
+// written beside each entry as _puzzle/<slug>.css.
 func bundleStaticPages(absRoot string, entryFiles []string, outdir string, cfg config.Config, dev bool, pc *passContext) (string, error) {
 	result := api.Build(staticPagesBundleOptions(absRoot, entryFiles, outdir, cfg, dev, pc.plugin(absRoot)))
 	if len(result.Errors) > 0 {
-		lines := api.FormatMessages(result.Errors, api.FormatMessagesOptions{
-			Kind:          api.ErrorMessage,
-			Color:         ui.New(os.Stderr).Enabled(),
-			TerminalWidth: 0,
-		})
-		return "", fmt.Errorf("puzzle build --static: per-page bundle failed:\n%s", strings.Join(lines, "\n"))
+		return "", formatBuildErrors("puzzle build --static: per-page bundle failed", result.Errors)
 	}
 	return result.Metafile, nil
 }
@@ -704,7 +750,7 @@ func staticPagesBundleOptions(absRoot string, entryFiles []string, outdir string
 		// boot. Unconditional rather than tier-dependent: the other tiers never pull
 		// PuzzleApp into the graph, so the define is inert there, and this keeps the
 		// dev builder's frozen page context from going stale on an adapter change.
-		Define:   bundleDefines(pl, bundleFlags{Dev: dev, Takeover: true, Capture: true}),
+		Define:   bundleDefines(pl, bundleFlags{Env: cfg.Env, Dev: dev, Takeover: true, Capture: true}),
 		Plugins:  []api.Plugin{pl.ESBuild()},
 		LogLevel: api.LogLevelSilent,
 		// Anchor esbuild's input-path bookkeeping to the OUTPUT TREE rather than
@@ -721,11 +767,12 @@ func staticPagesBundleOptions(absRoot string, entryFiles []string, outdir string
 		// at the same depth by construction). Production output is unaffected:
 		// minification strips the comments entirely.
 		AbsWorkingDir: filepath.Dir(outdir),
+		// linkStaticPages and the dev route graph (route_deps.go) read it.
+		Metafile: true,
 	}
 	// Production (dev=false) matches the main bundle: minify everything and strip
 	// console.* unless build.dropConsole: false opts out.
 	if !dev {
-		buildOpts.Metafile = true
 		if cfg.HashNames() {
 			buildOpts.EntryNames = "[name]-[hash]"
 		}
@@ -742,9 +789,10 @@ func staticPagesBundleOptions(absRoot string, entryFiles []string, outdir string
 
 // printStaticSummary reports the static build result in the build-summary style:
 // the header, the prerendered-page count (with any prerender:false pages noted
-// as empty islands), the per-page bundle count, then advisory warnings and
-// skipped routes.
-func printStaticSummary(s staticSummary, bundleCount int) {
+// as empty islands), the per-page bundle count, then the warnings — every
+// skipped route carries one. quiet (`puzzle build -q`) drops the header and
+// counts; the warning lines always print.
+func printStaticSummary(s staticSummary, bundleCount int, quiet bool) {
 	prerendered := 0
 	for _, w := range s.Written {
 		if w.Prerender {
@@ -754,28 +802,35 @@ func printStaticSummary(s staticSummary, bundleCount int) {
 	empties := len(s.Written) - prerendered
 
 	out := ui.New(os.Stdout)
-	detail := fmt.Sprintf("· %d page%s prerendered", prerendered, textutil.Plural(prerendered))
-	if empties > 0 {
-		// `prerender: false` pages get an empty, unmarked target the per-page
-		// script fills client-side.
-		detail += fmt.Sprintf(" (+%d empty island%s)", empties, textutil.Plural(empties))
+	if !quiet {
+		detail := fmt.Sprintf("· %d page%s prerendered", prerendered, textutil.Plural(prerendered))
+		if empties > 0 {
+			// `prerender: false` pages get an empty, unmarked target the per-page
+			// script fills client-side.
+			detail += fmt.Sprintf(" (+%d empty island%s)", empties, textutil.Plural(empties))
+		}
+		fmt.Fprintln(os.Stdout)
+		fmt.Fprintf(os.Stdout, "  %s %s\n",
+			out.Cyan(out.Bold("puzzle build · static")),
+			out.Dim(detail),
+		)
+		fmt.Fprintf(os.Stdout, "  %s\n",
+			out.Dim(fmt.Sprintf("· %d page bundle%s", bundleCount, textutil.Plural(bundleCount))),
+		)
 	}
-	fmt.Fprintln(os.Stdout)
-	fmt.Fprintf(os.Stdout, "  %s %s\n",
-		out.Cyan(out.Bold("puzzle build · static")),
-		out.Dim(detail),
-	)
-	fmt.Fprintf(os.Stdout, "  %s\n",
-		out.Dim(fmt.Sprintf("· %d page bundle%s", bundleCount, textutil.Plural(bundleCount))),
-	)
 	for _, w := range s.Warnings {
 		fmt.Fprintf(os.Stdout, "  %s %s\n", out.Yellow("!"), w)
 	}
-	for _, sk := range s.Skipped {
-		fmt.Fprintf(os.Stdout, "  %s %s %s\n",
-			out.Yellow("!"),
-			out.Dim("skipped"),
-			fmt.Sprintf("%s (%s)", sk.Path, sk.Reason),
-		)
+}
+
+// missingFunctionsModuleNote is the static-mode warning for template functions
+// registered only in the app entry. before 0.10 the conventional module was
+// app/formatters.js (D199), so an app that still has that file is told to
+// rename it rather than to create a second one.
+func missingFunctionsModuleNote(absRoot string) string {
+	if old := findStaticModule(absRoot, "app/formatters.js", "app/formatters.ts"); old != "" {
+		return "custom functions registered in the app entry will not exist client-side in static mode — " +
+			old + " is app/functions.js (or .ts) since 0.10: rename it (npx puzzle check --fix does it)"
 	}
+	return "custom functions registered in the app entry will not exist client-side in static mode — export them from app/functions.js or app/functions.ts"
 }

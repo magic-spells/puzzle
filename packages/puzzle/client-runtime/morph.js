@@ -397,7 +397,7 @@ export function enableMorph(app, options = {}) {
 		const snapshots = new Map();
 		for (const e of launchElements(el)) {
 			if (e === dismissed) continue;
-			if (e.getClientRects().length === 0) continue;
+			if (!measurable(e)) continue;
 			const id = morphId(e);
 			if (snapshots.has(id)) {
 				if (snapshots.get(id).el !== e) warnDuplicateId(id); // guard: same id, different element
@@ -424,7 +424,7 @@ export function enableMorph(app, options = {}) {
 				c.isConnected &&
 				el.contains(c) &&
 				c.matches(launchSelector) &&
-				c.getClientRects().length > 0
+				measurable(c)
 			) {
 				const id = morphId(c);
 				const rect = c.getBoundingClientRect();
@@ -471,7 +471,7 @@ export function enableMorph(app, options = {}) {
 		const map = new Map();
 		for (const candidate of document.querySelectorAll(launchSelector)) {
 			if (excludeRoot.contains(candidate)) continue;
-			if (candidate.getClientRects().length === 0) continue;
+			if (!measurable(candidate)) continue;
 			const id = morphId(candidate);
 			if (map.has(id)) {
 				if (map.get(id) !== candidate) warnDuplicateId(id); // guard: same id, different element

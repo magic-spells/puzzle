@@ -4,8 +4,9 @@
       <header class="mb-8">
         <h1 class="text-3xl font-semibold tracking-tight text-ink">Input Group</h1>
         <p class="mt-2 text-body">
-          A Field-compatible input with fused leading and trailing addons. It takes everything
-          Field takes — label, hint or error, and ARIA wiring — then lets you slot a
+          A Field-compatible input with fused leading and trailing addons. It takes Field's
+          label, hint or error, and ARIA wiring (but not Field's form or autocomplete props) —
+          then lets you slot a
           <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">prefix</code>
           and
           <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">suffix</code>
@@ -124,7 +125,7 @@ const codeHero = `<InputGroup label="Website" value={ site } @change={ setSite }
 
 // parent
 events = {
-  setSite: (v) => this.setData('site', v),
+  setSite: (v) => this.setState('site', v),
 };`;
 
 const codeButton = `<InputGroup label="Share link" value={ link } @change={ setLink }>
@@ -142,10 +143,10 @@ const codeError = `<InputGroup label="Website" value="not a url" error="Enter a 
 
 export default class InputGroupDoc extends PuzzleView {
   created() {
-    this.setData({ site: '', link: 'https://acme.example/s/9f2a1', query: '' });
+    this.setState({ site: '', link: 'https://acme.example/s/9f2a1', query: '' });
   }
 
-  data(params, props) {
+  data() {
     return {
       ...this.getData(),
       installCmd,
@@ -167,9 +168,9 @@ export default class InputGroupDoc extends PuzzleView {
   }
 
   events = {
-    setSite: (v) => this.setData('site', v),
-    setLink: (v) => this.setData('link', v),
-    setQuery: (v) => this.setData('query', v),
+    setSite: (v) => this.setState('site', v),
+    setLink: (v) => this.setState('link', v),
+    setQuery: (v) => this.setState('query', v),
     copy: () => toast({ message: 'Link copied to clipboard.', variant: 'success' }),
   };
 }

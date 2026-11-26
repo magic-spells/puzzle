@@ -6,16 +6,15 @@
 
     <div class={ controlClass } data-tagsinput-control @click={ focusInput(event) }>
       {#for chip in chips}
-        <span class={ chipClass } role="listitem">
+        <span class={ chipClass }>
           <span class="truncate">{ chip.label }</span>
           <button
             type="button"
-            tabindex="-1"
             class={ chipRemoveClass }
             aria-label={ chip.removeLabel }
             disabled={ disabled }
             @mousedown={ onRemoveDown(event) }
-            @click={ removeTag(chip, event) }>
+            @click={ removeTag(chip) }>
             <svg
               class="size-3"
               viewBox="0 0 20 20"
@@ -78,7 +77,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 //
 // `value` is an ARRAY of strings (controlled: props in, callbacks out). The ONLY
 // local state is the in-progress input text (`draft`); the chips always render
-// from the parent-owned `value`. `@change(nextTags, event)` fires value-first with
+// from the parent-owned `value`. `@change(nextTags)` fires value-first with
 // the NEXT array — one MORE entry on add, one FEWER on remove.
 //
 // CHROME = InputGroup's grouped-field pattern: one bordered wrapper owns the
@@ -90,6 +89,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 //
 // KEYBOARD. A delimiter key (default Enter or ",") commits the trimmed draft as a
 // new tag and clears the input; Backspace on an empty input removes the last tag.
+// Each chip's × is a tab stop: Enter/Space removes that tag and refocuses the input.
 // Pasting text that contains character delimiters splits into multiple tags.
 //
 // DEDUPE / MAX. By default duplicate tags are rejected (case-sensitive, trimmed);
@@ -106,7 +106,7 @@ const CONTROL_OK = 'border-border outline-ring focus-within:outline-ring';
 const CONTROL_ERROR = 'border-danger outline-danger focus-within:outline-danger';
 
 const INPUT_BASE =
-  'h-7 min-w-[6rem] flex-1 bg-transparent text-sm text-ink placeholder:text-muted ' +
+  'h-7 min-w-24 flex-1 bg-transparent text-sm text-ink placeholder:text-muted ' +
   'focus:outline-none disabled:cursor-not-allowed';
 
 const CHIP_CLASS =
@@ -114,14 +114,14 @@ const CHIP_CLASS =
   'text-xs font-medium text-brand';
 const CHIP_REMOVE_CLASS =
   'inline-flex size-4 shrink-0 items-center justify-center rounded-full text-brand ' +
-  'transition-colors hover:bg-brand hover:text-brand-ink ' +
+  'transition-colors hover:bg-brand hover:text-brand-ink outline-ring focus-visible:outline-2 ' +
   'disabled:pointer-events-none';
 
 export default class TagsInput extends PuzzleView {
   created() {
     this._uid = ++uid;
     this._base = `pp-tagsinput-${this._uid}`;
-    this.setData({ draft: '' });
+    this.setState({ draft: '' });
   }
 
   // ---- value helpers -------------------------------------------------------
@@ -148,8 +148,7 @@ export default class TagsInput extends PuzzleView {
 
   // ---- render model --------------------------------------------------------
 
-  data(params, props) {
-    const draft = this.getData().draft ?? '';
+  data({ props }) {
     const values = this._values(props);
     const chips = values.map((v, i) => ({
       id: `${this._base}-chip-${i}`,
@@ -166,7 +165,6 @@ export default class TagsInput extends PuzzleView {
 
     return {
       chips,
-      draft,
       label: props.label || '',
       hint,
       error,
@@ -208,31 +206,29 @@ export default class TagsInput extends PuzzleView {
   }
 
   // Commit the draft as a single tag; rejected non-empty text stays editable.
-  _commitDraft(event) {
+  _commitDraft() {
     if (this.props.disabled) return;
     const current = this._values(this.props);
     const draft = this.getData().draft;
     const next = this._commitOne(current, draft);
     if (next !== current) {
-      this.setData({ draft: '' });
+      this.setState({ draft: '' });
       const { change } = this.props;
-      if (typeof change === 'function') change(next, event);
-    } else if (!String(draft ?? '').trim()) {
-      this.setData({ draft: '' });
+      if (typeof change === 'function') change(next);
+    } else if (!draft.trim()) {
+      this.setState({ draft: '' });
     }
-    this.refresh();
     this._focusInput();
   }
 
-  _remove(value, event) {
+  _remove(value) {
     if (this.props.disabled) return;
     const current = this._values(this.props);
     const idx = current.lastIndexOf(value);
     if (idx === -1) return;
     const next = current.slice(0, idx).concat(current.slice(idx + 1));
     const { change } = this.props;
-    if (typeof change === 'function') change(next, event);
-    this.refresh();
+    if (typeof change === 'function') change(next);
     this._focusInput();
   }
 
@@ -251,9 +247,8 @@ export default class TagsInput extends PuzzleView {
     },
 
     onInput: (event) => {
-      this.setData({ draft: event.target.value });
-      // No refresh: the native input already shows the text; refreshing here would
-      // re-render mid-keystroke. The draft is read back on commit / keydown.
+      this.setState({ draft: event.target.value });
+      // data() never reads `draft`, so a keystroke only re-renders (D23).
     },
 
     onKey: (event) => {
@@ -262,7 +257,7 @@ export default class TagsInput extends PuzzleView {
       const delimiters = this._delimiters(this.props);
       if (delimiters.includes(event.key)) {
         event.preventDefault();
-        this._commitDraft(event);
+        this._commitDraft();
         return;
       }
       if (event.key === 'Backspace') {
@@ -271,7 +266,7 @@ export default class TagsInput extends PuzzleView {
         const current = this._values(this.props);
         if (!current.length) return;
         event.preventDefault();
-        this._remove(current[current.length - 1], event);
+        this._remove(current[current.length - 1]);
       }
     },
 
@@ -283,8 +278,8 @@ export default class TagsInput extends PuzzleView {
       if (!delims.length || !delims.some((d) => text.includes(d))) return;
       event.preventDefault();
       const splitRe = new RegExp('[' + delims.map((d) => '\\' + d).join('') + ']');
-      const existing = this.getData().draft || '';
-      const parts = (existing + text).split(splitRe);
+      const el = event.target;
+      const parts = (el.value.slice(0, el.selectionStart) + text + el.value.slice(el.selectionEnd)).split(splitRe);
       let current = this._values(this.props);
       const before = current;
       const rejected = [];
@@ -293,17 +288,16 @@ export default class TagsInput extends PuzzleView {
         if (next === current && String(part).trim()) rejected.push(String(part).trim());
         current = next;
       }
-      this.setData({ draft: rejected.join(' ') });
+      this.setState({ draft: rejected.join(' ') });
       if (current !== before) {
         const { change } = this.props;
-        if (typeof change === 'function') change(current, event);
+        if (typeof change === 'function') change(current);
       }
-      this.refresh();
       this._focusInput();
     },
 
-    removeTag: (chip, event) => {
-      this._remove(chip.value, event);
+    removeTag: (chip) => {
+      this._remove(chip.value);
     },
   };
 }

@@ -11,10 +11,10 @@ streaming cadence (and puzzle-max appends one closing line) and is stamped onto
 each assistant reply.
 
 Where `examples/mission-control/` shows off animations and `examples/stays/`
-leans into store reactivity, this demo exists for **feature coverage**: it is
-the one example that exercises the v1.5–v1.8 grammar and router additions
-together — skeleton loading, `{#case}`/`{#unless}`, event modifiers, nested
-routes, and store-driven streaming.
+leans into store reactivity, this demo exists for **feature coverage**: it
+exercises the v1.5–v1.8 grammar and router additions together — skeleton
+loading, `{#case}`/`{#unless}`, event modifiers, nested routes — plus
+store-driven streaming.
 
 ## Run it
 
@@ -39,14 +39,14 @@ Every checklist feature maps to a specific file:
 | 3 | **`{#unless}`** (v1.7, SPEC §6) | `app/views/Thread.pzl` — the empty-thread state |
 | 4 | **Event modifiers** (v1.7, SPEC §5) | `@submit:prevent` + `@keydown:escape` in `app/components/Composer.pzl`; `@click:stop` on the delete button in `app/components/ConversationItem.pzl`; `@click:once` on the suggestion cards in `app/views/Welcome.pzl` |
 | 5 | **`{#for … , i}` loop counter** (v1.2) | `app/views/Shell.pzl` — the sidebar list; the index drives each `ConversationItem`'s staggered enter-animation delay |
-| 6 | **Nested routes + `<Slot />`** (v1.3) | `app/routes.js` + `app/views/Shell.pzl` — the Shell parent hosts a Welcome index child (`''`) and a Thread child (`c/:id`) at `<Slot />` |
+| 6 | **Nested routes + `<Outlet />`** (v1.3) | `app/routes.js` + `app/views/Shell.pzl` — the Shell parent hosts a Welcome index child (`''`) and a Thread child (`c/:id`) at `<Outlet />` |
 | 7 | **`animations = { in, out }`** (v1.1) | view transitions in every view; message/list-item enters in `MessageBubble.pzl`, `ConversationItem.pzl`, `TypingIndicator.pzl` |
-| 8 | **Built-in `timeago` + one custom function** | `timeago` on `conversation.updatedAt` in `ConversationItem.pzl`; the custom `clock` function is registered under `formatters` in `app/app.js` and used on message timestamps in `MessageBubble.pzl` |
+| 8 | **Built-in `timeago` + one custom function** | `timeago` on `conversation.updatedAt` in `ConversationItem.pzl`; the custom `clock` function is registered under `functions` in `app/app.js` and used on message timestamps in `MessageBubble.pzl` |
 | 9 | **Controlled input `value={ draft }` + `@input`** | `app/components/Composer.pzl`; the handler owns the write, so the implicit two-way bind (D147) stays off |
 | 10 | **Store reactivity spanning views** | `app/views/Thread.pzl` — streaming tokens `record.update()` the message *through the store*, which re-renders the thread AND bumps `conversation.updatedAt`, reordering the sidebar (`Shell.pzl` subscribes to the conversation collection) |
 
 ### App wiring
-- **app/app.js** — `PuzzleApp` config (target, routes, models, formatters), the
+- **app/app.js** — `PuzzleApp` config (target, routes, models, functions), the
   custom `clock` function, and a `beforeMount` hook that calls `seed(store)`
   before the first navigation.
 - **app/routes.js** — one top-level route with `children`: `''` → Welcome,
@@ -68,7 +68,7 @@ Every checklist feature maps to a specific file:
 
 ### Views (`app/views/`)
 - **Shell.pzl** — the persistent sidebar-plus-pane frame and nested-route
-  parent; renders its matched child at `<Slot />`.
+  parent; renders its matched child at `<Outlet />`.
 - **Welcome.pzl** — the index child: hero + suggestion cards that create a
   conversation and hand off to the thread.
 - **Thread.pzl** — the centerpiece: skeleton, message list, typing indicator,
@@ -80,7 +80,7 @@ Every checklist feature maps to a specific file:
   staggered `get animations()`.
 - **MessageBubble.pzl** — role-styled bubble with a blinking streaming caret.
 - **Composer.pzl** — the input, styled as an AI-chat input card (text row +
-  controls row). Local `draft` **and** `model` state (both via `setData`, not
+  controls row). Local `draft` **and** `model` state (both via `setState`, not
   `data()`); a quiet `<select>` model picker (puzzle-nano / puzzle-core /
   puzzle-max); callback `send` prop that passes a single `{ text, model }`
   object (the parent's `@send={ sendMessage(event) }` binding only forwards the
@@ -98,7 +98,7 @@ invisible to it. `MessageBubble` and `ConversationItem` use the idiom that
 covers every case, re-querying by id inside `data()`:
 
 ```javascript
-data(params, props) {
+data({ props }) {
   // findOne subscribes THIS component to its own record key — every update()
   // to the record re-renders exactly this bubble, nothing else.
   return {

@@ -1,12 +1,12 @@
 <puzzle-view class="h-screen w-screen overflow-hidden bg-ink text-fg">
-  <Slot/>
+  <Outlet/>
 </puzzle-view>
 
 <script>
 import { PuzzleView } from '@magic-spells/puzzle';
 
 export default class DefaultLayout extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     return {
       title: props.title || 'Puzzle Studio'
     };

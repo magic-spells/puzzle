@@ -33,7 +33,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 import config from '../playwright.benchmark.config.js';
-import { buildStaged, serveStatic, stagedDistDir } from './harness-lib.mjs';
+import { buildStaged, serveStatic, stagedAppJs, stagedDistDir } from './harness-lib.mjs';
 
 const PORT = 4291;
 
@@ -76,7 +76,7 @@ async function main() {
 		process.stderr.write(`  building examples/stress in ${args.mode.toUpperCase()} mode ... `);
 		built = build(args.mode);
 		process.stderr.write(`${built.bundleKb} KB\n`);
-	} else if (!fs.existsSync(path.join(stageDir, 'app.js'))) {
+	} else if (!stagedAppJs(stageDir)) {
 		throw new Error('--no-build but nothing is staged; run without it once');
 	}
 

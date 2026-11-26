@@ -197,15 +197,6 @@ func TestExtractClassName(t *testing.T) {
 			want:    "概要",
 		},
 		{
-			// U+30FB became ID_Continue in Unicode 15.1, after Go's tables: the
-			// scan stops at it, and binding the render tail to `データ` would
-			// crash the module on load.
-			name:    "a letter newer than the Unicode tables",
-			scripts: "export default class データ・一覧 extends PuzzleView {}",
-			wantErr: true,
-			errText: "class name `データ` is followed by a character the compiler cannot read",
-		},
-		{
 			name:    "a \\u escape inside the name",
 			scripts: "export default class Stra\\u00DFe extends PuzzleView {}",
 			wantErr: true,
@@ -214,7 +205,7 @@ func TestExtractClassName(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := extractClassName(tc.scripts, tokenizeJS(tc.scripts), "T.pzl", pos)
+			got, _, err := extractClassName(tc.scripts, tokenizeJS(tc.scripts), "T.pzl", pos)
 			if tc.wantErr {
 				if err == nil {
 					t.Fatalf("extractClassName() = %q, want error", got)
@@ -409,13 +400,8 @@ func TestCompileScriptless(t *testing.T) {
 			if !strings.Contains(out, "import { PuzzleView } from '@magic-spells/puzzle';") {
 				t.Errorf("missing synthesized PuzzleView import:\n%s", out)
 			}
-			// A script-less VIEW gets an empty class; a script-less COMPONENT gets
-			// a data() that returns its props, so `{ tone }` reads the prop
-			// (D173 V15).
+			// Both modes get an empty class: the base data() returns the props.
 			wantClass := "export default class " + name + " extends PuzzleView {}"
-			if tc.mode == ModeComponent {
-				wantClass = "export default class " + name + " extends PuzzleView {\n  data(params, props) {\n    return props;\n  }\n}"
-			}
 			if !strings.Contains(out, wantClass) {
 				t.Errorf("missing synthesized class declaration:\n%s", out)
 			}

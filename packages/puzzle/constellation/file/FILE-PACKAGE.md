@@ -8,8 +8,14 @@ connections:
   - DOC-RELEASE-SURFACE
   - FLOW-RELEASE
   - DECISION-D120-TARBALL-PUBLISH
-verified_at: '2026-08-24T21:39:23.520Z'
-verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
+verified_at: '2026-11-24T18:02:16.140Z'
+verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
+notes:
+  - kind: state
+    text: >-
+      `./puzzle-env` (the root `puzzle-env.d.ts`, the only file it loads) also declares
+      `ImportMetaEnv` and `ImportMeta.env` for config `env` values ([[DECISION-D190-CONFIG-ENV]]).
+      There is no `types/puzzle-env.d.ts`.
 ---
 
 # package.json
@@ -18,9 +24,10 @@ The root manifest of the published `@magic-spells/puzzle` package. This card
 owns the shape; the release mechanics live on [[FLOW-RELEASE]] and
 [[DECISION-D120-TARBALL-PUBLISH]].
 
-- **Exports map** — eight normal subpaths point into `client-runtime/` with a
-  `types` condition into `types/`: `.`, `./adapter`, `./morph`, `./router-modes`,
-  `./ssg`, `./static`, `./testing`, `./fixtures`. Three are shaped differently:
+- **Exports map** — ten normal subpaths point into `client-runtime/` with a
+  `types` condition into `types/`: `.`, `./adapter`, `./forms`, `./morph`,
+  `./router-modes`, `./ssg`, `./static`, `./testing`, `./fixtures`, `./vitest`
+  (Node-only). Three are shaped differently:
   `./puzzle-env` is types-only (the `.pzl` ambient-module shim), and
   `./formatters/manifest` and `./i18n/manifest` are bare strings into
   `client-runtime/` with no `types` condition. A new normal subpath needs all

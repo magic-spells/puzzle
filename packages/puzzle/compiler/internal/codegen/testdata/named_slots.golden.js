@@ -24,4 +24,3 @@ Card.prototype.render = function () {
     ]),
   ]);
 };
-Card.__pzlModule = 'named_slots.pzl';

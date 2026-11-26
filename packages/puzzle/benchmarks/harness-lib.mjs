@@ -59,6 +59,16 @@ export const machineName = () =>
 // ──────────────────────────────────────────────────────────────── build ────
 
 /**
+ * The SPA entry bundle in a built dist/: app-<hash>.js in a production build
+ * (hashed names are the default), app.js in development. null when neither.
+ */
+export function stagedAppJs(dir) {
+	if (!fs.existsSync(dir)) return null;
+	const name = fs.readdirSync(dir).find((f) => /^app(?:-[A-Z2-7]{8})?\.js$/.test(f));
+	return name ? path.join(dir, name) : null;
+}
+
+/**
  * Copy the example's SOURCE into the benchmark's own scratch tree and build
  * THERE. `examples/stress/dist` is never written, read, or served.
  *
@@ -104,8 +114,8 @@ export function buildStaged(mode, { label, log } = {}) {
 	}
 
 	const dir = path.join(stageSrc, 'dist');
-	const appJs = path.join(dir, 'app.js');
-	if (!fs.existsSync(appJs)) {
+	const appJs = stagedAppJs(dir);
+	if (!appJs) {
 		throw new Error(`build produced no app.js in ${path.relative(ROOT, dir)}`);
 	}
 

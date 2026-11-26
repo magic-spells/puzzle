@@ -36,7 +36,7 @@ import path from 'node:path';
 import config from '../playwright.benchmark.config.js';
 import { OPS, groupOps } from './scenarios.mjs';
 import { buildBaseline, compareCounters, formatReport, summarize } from './report.mjs';
-import { ROOT, buildStaged, findDevMarkers, machineName, serveStatic, stagedDistDir } from './harness-lib.mjs';
+import { ROOT, buildStaged, findDevMarkers, machineName, serveStatic, stagedAppJs, stagedDistDir } from './harness-lib.mjs';
 
 const logs = [];
 const log = (line) => logs.push(line);
@@ -488,8 +488,8 @@ async function main() {
 		}
 	} else {
 		log('BUILD  --no-build: reusing the previously staged production bundle in benchmarks/.build.');
-		const stagedApp = path.join(built.dir, 'app.js');
-		if (!fs.existsSync(stagedApp)) throw new Error('--no-build but nothing is staged; run without it once');
+		const stagedApp = stagedAppJs(built.dir);
+		if (!stagedApp) throw new Error('--no-build but nothing is staged; run without it once');
 
 		// Both modes stage to the SAME directory, so the path proves nothing about
 		// what is in it: `--build-mode development` followed by a later `--no-build`

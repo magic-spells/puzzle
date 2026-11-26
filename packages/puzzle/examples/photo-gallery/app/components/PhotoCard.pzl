@@ -35,7 +35,7 @@
 import { PuzzleView } from '@magic-spells/puzzle';
 
 export default class PhotoCard extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     // `base` (default '') scopes the target URL: '' → /photo/<id>;
     // '/album/<slug>' → /album/<slug>/photo/<id>. Prebuilt here so the template
     // attr stays a single interpolation ({ href }) rather than a mixed literal +

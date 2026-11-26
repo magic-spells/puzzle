@@ -9,8 +9,8 @@ connections:
   - COMPONENT-PUZZLE-MODEL
   - COMPONENT-STORE
   - DOC-MODELS
-verified_at: '2026-08-07T22:43:47.810Z'
-verified_sha: f2aef082b4b17fb4ded5da94da53a547e2fe66b1
+verified_at: '2026-11-24T18:05:31.213Z'
+verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
 code_refs:
   - client-runtime/model.js
   - tests/model-computed-getter.test.js

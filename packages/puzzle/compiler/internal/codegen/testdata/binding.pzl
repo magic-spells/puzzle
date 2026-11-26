@@ -25,6 +25,7 @@
   <select value={ multiValue } multiple></select>
   <Foo value={ x } />
   <input value={ x.a.b } />
+  <input value={ x.a[k] } />
 </puzzle-view>
 
 <script>

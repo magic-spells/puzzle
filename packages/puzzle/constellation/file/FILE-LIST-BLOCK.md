@@ -1,6 +1,6 @@
 ---
 name: persistent list blocks
-status: built
+status: verified
 path: client-runtime/views/listBlock.js
 language: javascript
 summary: 'Row state per key for one {#for} site: cached row vnodes, dirtiness rules, control collection.'
@@ -8,6 +8,8 @@ connections:
   - COMPONENT-VIEW-MANAGER
   - COMPONENT-PUZZLE-VIEW
   - DECISION-D170-INCREMENTAL-VDOM-LISTS
+verified_at: '2026-11-24T18:13:21.008Z'
+verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
 ---
 
 # listBlock.js

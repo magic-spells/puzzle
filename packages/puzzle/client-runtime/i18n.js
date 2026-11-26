@@ -649,11 +649,12 @@ export function createI18n(options = {}) {
 				}
 			);
 			pending = p;
-			const done = () => {
-				if (my === token) service.__busy = false;
-			};
-			p.then(done, done);
-			return /** @type {Promise<void>} */ (p);
+			// Hand out finally()'s promise, so a failure nobody awaits is still reported.
+			return /** @type {Promise<void>} */ (
+				p.finally(() => {
+					if (my === token) service.__busy = false;
+				})
+			);
 		},
 
 		/** INTERNAL — app teardown retires the service: no load in flight applies. */

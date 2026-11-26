@@ -37,7 +37,7 @@ describe('marker fallback bodies (D141)', () => {
 
 		class Host extends PuzzleView {
 			created() {
-				this.setData({ filled: false });
+				this.setState({ filled: false });
 			}
 			data() {
 				return { filled: this.getData().filled };
@@ -54,12 +54,12 @@ describe('marker fallback bodies (D141)', () => {
 		const host = await new Host().mount(el);
 		expect(el.querySelector('.default-fallback')?.textContent).toBe('Default');
 
-		host.setData('filled', true);
+		host.setState('filled', true);
 		host.flushUpdates();
 		expect(el.querySelector('.default-fallback')).toBeNull();
 		expect(el.querySelector('.default-fill')?.textContent).toBe('Filled');
 
-		host.setData('filled', false);
+		host.setState('filled', false);
 		host.flushUpdates();
 		expect(el.querySelector('.default-fill')).toBeNull();
 		expect(el.querySelector('.default-fallback')?.textContent).toBe('Default');
@@ -79,7 +79,7 @@ describe('marker fallback bodies (D141)', () => {
 
 		class Host extends PuzzleView {
 			created() {
-				this.setData({ filled: false });
+				this.setState({ filled: false });
 			}
 			data() {
 				return { filled: this.getData().filled };
@@ -100,12 +100,12 @@ describe('marker fallback bodies (D141)', () => {
 		const host = await new Host().mount(el);
 		expect(el.querySelector('.named-fallback')?.textContent).toBe('Default action');
 
-		host.setData('filled', true);
+		host.setState('filled', true);
 		host.flushUpdates();
 		expect(el.querySelector('.named-fallback')).toBeNull();
 		expect(el.querySelector('.named-fill')?.textContent).toBe('Go');
 
-		host.setData('filled', false);
+		host.setState('filled', false);
 		host.flushUpdates();
 		expect(el.querySelector('.named-fill')).toBeNull();
 		expect(el.querySelector('.named-fallback')?.textContent).toBe('Default action');

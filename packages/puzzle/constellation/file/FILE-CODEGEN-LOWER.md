@@ -1,6 +1,6 @@
 ---
 name: expression lowering
-status: built
+status: verified
 path: compiler/internal/codegen/lower.go
 language: go
 summary: >-
@@ -13,6 +13,14 @@ connections:
   - DECISION-D170-INCREMENTAL-VDOM-LISTS
   - DECISION-D62-HANDLER-CACHING
   - TEST-COMPILER-CODEGEN
+verified_at: '2026-11-21T18:49:58.010Z'
+verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
+notes:
+  - kind: state
+    text: >-
+      `ident()`'s `refData` arm calls `noteImport`, which warns once per name, at the identifier's
+      own line and column, when a template reads a name imported in `<script>`. `ExprWriter` is the
+      one writer interface, shared by the render emitter and `WriteCheckValue`.
 ---
 
 # lower.go
@@ -40,9 +48,10 @@ the file:
   emits TypeScript with no added guards and no `?? {}` on the `Object` globals
   (TypeScript 5.6+ reports a `??` whose left side can never be nullish), a
   standard library call as the shim's `__puzzle_fn.name(…)`, any other bare call
-  (an app function) as `__puzzle_app_fn("name")(…)`, and a method call with an
-  arrow argument taking its receiver through `__puzzle_check_list(…)`.
-- **D180 selector check scope:** `WriteCheckSelectorValue` augments the check scope with the private module getter references after template locals; arrow parameters keep their normal shadowing. It shares the existing lowerer and source-position writer, so hygienic module reads and mapped diagnostics do not introduce a second expression grammar.
+  (an app function) as `__puzzle_app_fn("name")(…)`, a method call with an
+  arrow argument taking its receiver through `__puzzle_check_list(…)`, and an
+  `Object.keys`/`values`/`entries` argument through `__puzzle_check_list(…)` (the
+  render target's `?? {}` position).
 - **Render facts come from the same tree** (`exprFacts`): which parent data roots
   a loop body reads, which members it reads off the row item, and whether it is
   volatile (a `timeago` call) — the inputs to D170 list blocks — plus the D62

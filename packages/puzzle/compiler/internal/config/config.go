@@ -22,6 +22,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/magic-spells/puzzle/packages/puzzle-lang/expr"
 )
 
 // ConfigFileName is the app-root config file. Its absence is not an error.
@@ -36,6 +38,8 @@ const configLoadTimeout = 10 * time.Second
 // valid "no config file" state: no style pipelines declared, default build,
 // SPA output.
 type Config struct {
+	// Env contains public compile-time literals for import.meta.env.
+	Env    map[string]json.RawMessage
 	Styles Styles
 	Build  Build
 	Dev    Dev
@@ -110,15 +114,25 @@ type Build struct {
 	// accessor without changing stored semantics.
 	Splitting *bool
 
-	// HashNames is the tri-state build.hashNames setting: nil follows Splitting(),
-	// a non-nil pointer is the explicit user value. It applies to production only.
+	// HashNames is the tri-state build.hashNames setting: nil means the key was
+	// absent (hashed names by default), a non-nil pointer is the explicit user
+	// value. It applies to production only. The build reads the pointer itself
+	// to tell a default-on hash (which falls back to fixed names, with a warning,
+	// when the shell cannot be rewritten) from an explicit true (which fails).
 	HashNames *bool
 }
 
 // Dev mirrors the `dev` block of puzzle.config.js.
 type Dev struct {
-	// Proxy maps same-origin path prefixes to backend origins for puzzle dev.
-	Proxy map[string]string `json:"proxy"`
+	// Proxy maps same-origin path prefixes to the backend puzzle dev forwards them to.
+	Proxy map[string]Proxy
+}
+
+// Proxy is one dev.proxy entry, Vite's { target, changeOrigin }; a bare URL
+// string is the target alone.
+type Proxy struct {
+	Target       string // the backend's absolute http(s) URL
+	ChangeOrigin bool   // send the target's host as Host, not the browser's
 }
 
 // TailwindEnabled reports whether the Tailwind pipeline is declared.
@@ -155,10 +169,11 @@ func (c Config) Splitting() bool {
 }
 
 // HashNames reports whether production output names should carry content hashes.
-// When unset, it follows the configured build.splitting value.
+// It defaults to true whatever build.splitting says; build: { hashNames: false }
+// is the opt-out.
 func (c Config) HashNames() bool {
 	if c.Build.HashNames == nil {
-		return c.Splitting()
+		return true
 	}
 	return *c.Build.HashNames
 }
@@ -168,6 +183,7 @@ func (c Config) HashNames() bool {
 // be distinguished from strings and reported precisely; build booleans are raw
 // so invalid values can be named precisely in rejection messages.
 type rawConfig struct {
+	Env    json.RawMessage `json:"env"`
 	Styles struct {
 		Use []json.RawMessage `json:"use"`
 	} `json:"styles"`
@@ -177,7 +193,10 @@ type rawConfig struct {
 		Splitting   json.RawMessage `json:"splitting"`
 		HashNames   json.RawMessage `json:"hashNames"`
 	} `json:"build"`
-	Dev Dev `json:"dev"`
+	Dev struct {
+		// Proxy values are a URL string or an object, told apart in validate.
+		Proxy map[string]json.RawMessage `json:"proxy"`
+	} `json:"dev"`
 	// Output is kept raw so a non-string or unsupported value can be named
 	// precisely in the rejection message (parallel to build.dropConsole).
 	Output json.RawMessage `json:"output"`
@@ -239,10 +258,11 @@ const configSentinel = "__PUZZLE_CONFIG_JSON__"
 // a Windows drive letter resolve correctly. The JSON rides a unique sentinel so
 // stray console output from the config cannot corrupt the payload.
 func readConfigViaNode(configPath string) ([]byte, error) {
+	// Keep an unset env value as null so validate can report its key.
 	script := fmt.Sprintf(
 		"const { pathToFileURL } = await import('node:url');"+
-			"const m = await import(pathToFileURL(process.argv[1]).href);"+
-			"process.stdout.write('\\n%s' + JSON.stringify(m.default ?? {}));",
+			"const c = (await import(pathToFileURL(process.argv[1]).href)).default ?? {};"+
+			"process.stdout.write('\\n%s' + JSON.stringify(c, function (k, v) { return v === undefined && this === c.env ? null : v; }));",
 		configSentinel,
 	)
 	ctx, cancel := context.WithTimeout(context.Background(), configLoadTimeout)
@@ -303,6 +323,19 @@ func unset(raw json.RawMessage) bool {
 // every v1-deferred style entry with a message that names it.
 func validate(raw rawConfig) (Config, error) {
 	var cfg Config
+	if !unset(raw.Env) {
+		if err := json.Unmarshal(raw.Env, &cfg.Env); err != nil {
+			return Config{}, fmt.Errorf("%s: env must be a flat object of strings, numbers or booleans; got %s", ConfigFileName, raw.Env)
+		}
+		for key, value := range cfg.Env {
+			if !expr.IsIdentifier(key) {
+				return Config{}, fmt.Errorf("%s: env key %q must be a JavaScript identifier", ConfigFileName, key)
+			}
+			if c := value[0]; c == '{' || c == '[' || c == 'n' {
+				return Config{}, fmt.Errorf("%s: env.%s must be a string, number or boolean; got %s", ConfigFileName, key, value)
+			}
+		}
+	}
 	for _, entry := range raw.Styles.Use {
 		var name string
 		if err := json.Unmarshal(entry, &name); err == nil {
@@ -363,7 +396,7 @@ func validate(raw rawConfig) (Config, error) {
 		cfg.Build.Splitting = &split
 	}
 
-	// build.hashNames: an explicit boolean overrides the splitting-based default.
+	// build.hashNames: an explicit boolean overrides the hashed-names default.
 	// Anything non-boolean is rejected; null means unset.
 	if !unset(raw.Build.HashNames) {
 		var hash bool
@@ -377,8 +410,11 @@ func validate(raw rawConfig) (Config, error) {
 	}
 
 	// dev.proxy is consumed only by puzzle dev. Prefixes stay intact when
-	// forwarded, so each key must be an absolute request path prefix and each
-	// target must name an http(s) backend origin.
+	// forwarded, so each key must be an absolute request path prefix. Each value
+	// is a target URL string or Vite's { target, changeOrigin }, whose other keys
+	// are ignored. The target must name an http(s) backend origin; an unset one
+	// (a dev-only process.env value) leaves its prefix unproxied in either form,
+	// so it never fails `puzzle build`.
 	//
 	// Two further rules exist because dev registers each prefix with a
 	// http.ServeMux, and ServeMux PANICS on a bad or repeated pattern — a panic on
@@ -394,8 +430,17 @@ func validate(raw rawConfig) (Config, error) {
 	}
 	sort.Strings(prefixes)
 	routes := make(map[string]string, len(prefixes))
+	cfg.Dev.Proxy = make(map[string]Proxy, len(prefixes))
 	for _, prefix := range prefixes {
-		target := raw.Dev.Proxy[prefix]
+		value := raw.Dev.Proxy[prefix]
+		target := value
+		var entry map[string]json.RawMessage
+		if json.Unmarshal(value, &entry) == nil {
+			target = entry["target"]
+		}
+		if unset(target) {
+			continue
+		}
 		if !strings.HasPrefix(prefix, "/") {
 			return Config{}, fmt.Errorf(
 				"%s: dev.proxy prefix %q must start with '/'",
@@ -420,15 +465,23 @@ func validate(raw rawConfig) (Config, error) {
 			)
 		}
 		routes[route] = prefix
-		parsed, err := url.Parse(target)
-		if err != nil || !parsed.IsAbs() || parsed.Host == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") {
+		var p Proxy
+		if v := entry["changeOrigin"]; !unset(v) && json.Unmarshal(v, &p.ChangeOrigin) != nil {
 			return Config{}, fmt.Errorf(
-				"%s: dev.proxy target for %q must be an absolute http or https URL; got %q",
-				ConfigFileName, prefix, target,
+				"%s: dev.proxy changeOrigin for %q must be a boolean; got %s",
+				ConfigFileName, prefix, strings.TrimSpace(string(v)),
 			)
 		}
+		_ = json.Unmarshal(target, &p.Target) // a non-string target stays "" and fails below
+		parsed, err := url.Parse(p.Target)
+		if err != nil || !parsed.IsAbs() || parsed.Host == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") {
+			return Config{}, fmt.Errorf(
+				"%s: dev.proxy target for %q must be an absolute http or https URL; got %s",
+				ConfigFileName, prefix, strings.TrimSpace(string(value)),
+			)
+		}
+		cfg.Dev.Proxy[prefix] = p
 	}
-	cfg.Dev.Proxy = raw.Dev.Proxy
 
 	// output: the prerender opt-in. Absent leaves it "" (the default SPA build);
 	// the accepted values are 'static' (true static pages) and 'hybrid'

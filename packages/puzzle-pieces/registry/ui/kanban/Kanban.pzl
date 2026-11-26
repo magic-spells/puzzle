@@ -34,7 +34,7 @@
                     @pointerdown={ onCardPointerDown(column.id, item.id, event) }
                     @keydown={ onCardKey(column.id, item.id, event) }>
                     <Slot name="card" card={ item.card } column={ column.raw }>
-                      <KanbanCard card={ item.card } variant="content"/>
+                      <KanbanCard card={ item.card }/>
                     </Slot>
                   </div>
                 {/if}
@@ -94,7 +94,7 @@ import KanbanCard from './KanbanCard.pzl';
 //       }
 //       const dest = cols.find((c) => c.id === toColumnId);
 //       dest.cards.splice(toIndex, 0, card);
-//       this.setData({ columns: cols });
+//       this.setState({ columns: cols });
 //     },
 //   };
 //
@@ -113,13 +113,13 @@ import KanbanCard from './KanbanCard.pzl';
 //           assignee: 'Ada Lovelace', // optional name → initials disc
 //         },
 //       ],
+//     },
+//   ]
 //
 // STOCK CARD CONTENT lives in the sibling KanbanCard.pzl and is mounted through
 // the `card` marker's fallback. Custom content comes from the caller's matching
 // Snippet. During a pointer drag the SAME keyed card row becomes the fixed ghost,
 // so either rendering follows the pointer without a duplicate snippet stamp.
-//     },
-//   ]
 //
 // Props
 //   columns   the board data (array described above). Controlled — props in.
@@ -135,9 +135,10 @@ import KanbanCard from './KanbanCard.pzl';
 // KEYBOARD LEVEL SHIPPED: full keyboard drag-and-drop. Tab focuses a card;
 // Space/Enter "picks it up" (aria-grabbed=true, announced); Arrow Up/Down reorder
 // within the column, Arrow Left/Right move to the adjacent column at a comparable
-// index; Space/Enter drops; Escape cancels the pickup. Every move is announced
-// through a polite aria-live region. Each arrow emits @move and the board keeps
-// the card grabbed + refocused after the parent re-renders.
+// index; Space/Enter/Escape drops it where it is. Every move is announced
+// through a polite aria-live region. Each arrow emits @move (already committed,
+// so there is nothing to revert) and the board keeps the card grabbed +
+// refocused after the parent re-renders.
 //
 // POINTER MODEL (mirrors Slider/Sheet/ScrollArea):
 //   - pointerdown on a card ARMS a gesture; it only promotes to a drag once the
@@ -175,6 +176,13 @@ const FLIP = { duration: 180, easing: 'cubic-bezier(.2,.8,.2,1)' };
 // tilt on the surface and the imperative translate on its <li> wrapper lets the
 // independent CSS properties compose.
 const CARD_SURFACE = 'rounded-lg border border-border bg-surface p-3 text-left';
+// `touch-pinch-zoom` claims the single-finger gesture for dragging. Without a
+// declared touch-action the UA starts its own pan (the board scrolls horizontally)
+// before the 5px drag threshold is crossed, and by the time the card calls
+// preventDefault the events are already `cancelable === false` — the gesture is
+// lost. Not `touch-none`: that also refuses a two-finger pinch, which a low-vision
+// user needs to enlarge the board (WCAG 1.4.4), and a pinch never collides with a
+// one-finger drag. So on touch the board scrolls from column gaps and headers.
 const CARD_BASE =
   CARD_SURFACE +
   ' block w-full shadow-sm select-none touch-pinch-zoom transition-shadow hover:shadow-md ' +
@@ -207,7 +215,7 @@ export default class Kanban extends PuzzleView {
       if (this._arm && this._arm.started && e.cancelable) e.preventDefault();
     };
 
-    this.setData({
+    this.setState({
       dragging: false,
       dragCardId: null,
       dragFromCol: null,
@@ -226,7 +234,7 @@ export default class Kanban extends PuzzleView {
     if (this._rafT) cancelAnimationFrame(this._rafT);
   }
 
-  data(params, props) {
+  data({ props }) {
     const d = this.getData();
     const cols = Array.isArray(props.columns) ? props.columns : [];
     const disabled = !!props.disabled;
@@ -235,7 +243,7 @@ export default class Kanban extends PuzzleView {
     const dragFromCol = dragging ? d.dragFromCol : null;
     const hoveredColId = dragging ? d.hoveredColId : null;
     const targetIndex = dragging ? d.targetIndex : -1;
-    const grabbedId = d.grabbedId || null;
+    const grabbedId = d.grabbedId;
 
     // The board owns the draggable surface; KanbanCard owns only its stock inner
     // fallback. Whether ANY card is grabbed is board-wide knowledge, and it
@@ -319,7 +327,7 @@ export default class Kanban extends PuzzleView {
       disabled,
       dragging,
       ghostStyle: dragging ? `width:${d.ghostW || 288}px` : false,
-      announce: d.announce || '',
+      announce: d.announce,
     };
   }
 
@@ -432,7 +440,7 @@ export default class Kanban extends PuzzleView {
     }
   }
 
-  // --- ghost (imperative — never setData per move) ---------------------------
+  // --- ghost (imperative — never setState per move) ---------------------------
 
   _applyGhost() {
     if (!this.element || !this._ghostPos) return;
@@ -453,8 +461,7 @@ export default class Kanban extends PuzzleView {
       if (!t) return;
       const d = this.getData();
       if (d.hoveredColId !== t.colId || d.targetIndex !== t.index) {
-        this.setData({ hoveredColId: t.colId, targetIndex: t.index });
-        this.refresh();
+        this.setState({ hoveredColId: t.colId, targetIndex: t.index });
       }
     });
   }
@@ -483,7 +490,7 @@ export default class Kanban extends PuzzleView {
     const orig = this._origIndex(a.colId, a.cardId);
     // clear any keyboard grab — one gesture at a time
     this._ghostPos = { x: event.clientX, y: event.clientY };
-    this.setData({
+    this.setState({
       dragging: true,
       dragCardId: a.cardId,
       dragFromCol: a.colId,
@@ -495,7 +502,6 @@ export default class Kanban extends PuzzleView {
       grabbedId: null,
       announce: '',
     });
-    this.refresh();
     // Capture on the ROOT (persists across the source-card removal), mouse/pen only.
     if (event.pointerType !== 'touch' && this.element) {
       try {
@@ -531,7 +537,7 @@ export default class Kanban extends PuzzleView {
     const dest = (Array.isArray(this.props.columns) ? this.props.columns : []).find(
       (c) => c.id === toColId
     );
-    this.setData({
+    this.setState({
       dragging: false,
       dragCardId: null,
       dragFromCol: null,
@@ -543,7 +549,6 @@ export default class Kanban extends PuzzleView {
           ? `Moved ${card.title} to ${dest.title}.`
           : '',
     });
-    this.refresh();
 
     if (!noop && toColId) this._emitMove(cardId, toColId, toIndex, event);
   }
@@ -558,7 +563,7 @@ export default class Kanban extends PuzzleView {
       this._rafT = null;
     }
     if (this.getData().dragging) {
-      this.setData({
+      this.setState({
         dragging: false,
         dragCardId: null,
         dragFromCol: null,
@@ -567,7 +572,6 @@ export default class Kanban extends PuzzleView {
         targetIndex: -1,
         announce: 'Move cancelled.',
       });
-      this.refresh();
     }
   }
 
@@ -589,27 +593,20 @@ export default class Kanban extends PuzzleView {
 
   _grab(colId, cardId) {
     const card = this._findCard(colId, cardId);
-    this.setData({
+    this.setState({
       grabbedId: cardId,
       announce: card
-        ? `Picked up ${card.title}. Use the arrow keys to move, space to drop, escape to cancel.`
+        ? `Picked up ${card.title}. Use the arrow keys to move, space or escape to drop.`
         : '',
     });
-    this.refresh();
   }
 
   _drop() {
     const card = this._findCard(this._grabColOf(), this.getData().grabbedId);
-    this.setData({
+    this.setState({
       grabbedId: null,
       announce: card ? `Dropped ${card.title}.` : '',
     });
-    this.refresh();
-  }
-
-  _cancelGrab() {
-    this.setData({ grabbedId: null, announce: 'Move cancelled.' });
-    this.refresh();
   }
 
   // Locate the column currently holding the grabbed card (its position moves as
@@ -654,12 +651,13 @@ export default class Kanban extends PuzzleView {
     const card = cards[i];
     const destCol = cols.find((c) => c.id === destColId);
     const destLen = (destCol.cards || []).length + (destColId === colId ? 0 : 1);
-    this.setData({
+    this.setState({
       announce: `Moved ${card.title} to ${destCol.title}, position ${index + 1} of ${destLen}.`,
     });
+    // refresh() on purpose, and the marker set after it: refresh runs afterUpdate
+    // synchronously, which consumes the marker. A setState() render alone would run
+    // that afterUpdate later, ahead of the parent's re-render, and eat the marker there.
     this.refresh();
-    // set after the announcement refresh: refresh runs afterUpdate synchronously, which
-    // consumes the marker — it has to survive until the parent's re-render
     this._refocusGrabbed = cardId;
     this._emitMove(cardId, destColId, index, event);
   }
@@ -675,7 +673,7 @@ export default class Kanban extends PuzzleView {
       }
       // starting a pointer gesture clears any keyboard grab
       if (this.getData().grabbedId) {
-        this.setData({ grabbedId: null });
+        this.setState({ grabbedId: null });
       }
       const rect = event.currentTarget.getBoundingClientRect();
       this._arm = {
@@ -698,17 +696,10 @@ export default class Kanban extends PuzzleView {
       const key = event.key;
       const grabbed = this.getData().grabbedId === cardId;
 
-      if (key === ' ' || key === 'Spacebar' || key === 'Enter') {
+      if (key === ' ' || key === 'Enter' || (key === 'Escape' && grabbed)) {
         event.preventDefault();
         if (grabbed) this._drop();
         else this._grab(colId, cardId);
-        return;
-      }
-      if (key === 'Escape') {
-        if (grabbed) {
-          event.preventDefault();
-          this._cancelGrab();
-        }
         return;
       }
       if (!grabbed) return; // arrows only act on a grabbed card

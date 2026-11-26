@@ -36,4 +36,3 @@ Slots.prototype.render = function () {
     , __L2),
   ]);
 };
-Slots.__pzlModule = 'component_slot_lists.pzl';

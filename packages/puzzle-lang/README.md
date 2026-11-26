@@ -105,7 +105,7 @@ name is a value: it reads, and calling it is an error, so `t('key')` inside
 
 **In the template parser.** Every AST field that holds an expression string
 has a parsed sibling filled while parsing — `Interpolation.ExprAST`,
-`DynamicAttr.ExprAST`, `EventAttr.ExprAST`,
+`DynamicAttr.ExprAST`, `SpreadAttr.ExprAST`, `EventAttr.ExprAST`,
 `If.CondAST`, `InlineIfPart.CondAST`, `Case.ExprAST`, `WhenClause.ValuesAST`,
 and `For.CollectionAST` / `RangeFromAST` / `RangeToAST` — and an expression
 error is a `ParseError` at the offending token. `{#unless}` keeps its folded
@@ -151,6 +151,11 @@ root, err := parser.ParseMarkup(markup, parser.Position{}, "sections/Hero.pzl", 
   unknown-block error.
 - **`SkipIslandCheck`, `SkipSlotCheck`, `SkipRefCheck`** turn off the
   post-parse `island`, composition-marker and `ref` rules.
+- **`SkipForeignSyntaxCheck`** turns off the steers for React, Vue and Svelte
+  spellings: `className`, `htmlFor`, the `v-` names, `on:click`, `class:x`,
+  and a brace-valued `onclick` on a standard element. They suggest `@event`
+  and implicit form binding, so a host without those turns them off. The `:`
+  namespace rule and the `{@html}` steer stay.
 - **`MaxDepth`** (read by `ParseMarkup` only) caps template nesting. The parser
   is recursive descent, so an untrusted file nested a million levels deep would
   exhaust the stack, which `recover()` cannot catch. `ParseMarkup` runs a
@@ -181,7 +186,7 @@ built from these alone, and `FuzzHostScanners` fuzzes all of them.
 - **PuzzleKit's compiler** (`packages/puzzle`). Its `go.mod` requires this
   module at `v0.0.0` and replaces it with `../puzzle-lang`, so the compiler
   always builds against the working tree.
-- **Magic Spells Sites**, from `v0.8.1`, with `Options{Let: true}` and the
+- **Magic Spells Sites**, with `Options{Let: true, Pipes: true}` and the
   three checks skipped, parsing its theme files through `ParseMarkup`. Its own
   code keeps only the theme-file splitter (`<schema>` lifting) and its
   migration tools.
@@ -223,6 +228,7 @@ The parser's integration tests parse copies of the todos example's `.pzl`
 files, vendored under `parser/testdata/todos`, so the module's tests are
 self-contained and run the same from a monorepo checkout or the module cache.
 From a monorepo checkout, `TestCorpusExpressionsParse` also parses every
-`.pzl` file under the framework's examples, the scaffold templates, the pieces
-registry, and the codegen goldens, and requires every expression in them to
-parse; outside the monorepo it skips.
+`.pzl` file under the framework's examples, the `puzzle init` starters, the pieces
+registry and demo, the DevTools panel, the runtime test fixtures, and the
+codegen and check goldens, and requires every expression in them to parse;
+outside the monorepo it skips.

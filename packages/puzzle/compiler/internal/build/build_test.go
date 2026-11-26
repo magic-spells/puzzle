@@ -212,7 +212,7 @@ func TestBuildDevDefineDCE(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("prod Build failed: %v", err)
 	}
-	prodJS, err := os.ReadFile(distApp)
+	prodJS, err := os.ReadFile(appBundle(t, filepath.Join(root, "dist")))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -336,7 +336,7 @@ func TestBuildTakeoverDefineDCE(t *testing.T) {
 		if err := Build(root, Options{Development: false, Metafile: &meta}); err != nil {
 			t.Fatalf("SPA Build failed: %v", err)
 		}
-		js := readFile(t, filepath.Join(root, "dist", "app.js"))
+		js := readFile(t, appBundle(t, filepath.Join(root, "dist")))
 		for _, name := range []string{
 			ssgTakeoverMarker, // the router's only takeover signal
 			"takeoverPreloaded",
@@ -365,7 +365,7 @@ func TestBuildTakeoverDefineDCE(t *testing.T) {
 		if err := Build(root, Options{Development: false, Output: "hybrid", Metafile: &meta}); err != nil {
 			t.Fatalf("hybrid Build failed: %v", err)
 		}
-		js := readFile(t, filepath.Join(root, "dist", "app.js"))
+		js := readFile(t, appBundle(t, filepath.Join(root, "dist")))
 		if !strings.Contains(js, ssgTakeoverMarker) {
 			t.Errorf("hybrid bundle must retain the router's takeover branches (%q)", ssgTakeoverMarker)
 		}
@@ -559,7 +559,7 @@ export default class Home extends PuzzleView {
 <script>
 import { PuzzleView } from '@magic-spells/puzzle';
 export default class ScopedList extends PuzzleView {
-  data(params, props) { return { items: props.items }; }
+  data({ props }) { return { items: props.items }; }
 }
 </script>
 `
@@ -648,7 +648,7 @@ func TestBuildUsageDefinesDCE(t *testing.T) {
 	if err := Build(without, Options{Development: false}); err != nil {
 		t.Fatalf("Build without feature usage failed: %v", err)
 	}
-	withoutJS, err := os.ReadFile(filepath.Join(without, "dist", "app.js"))
+	withoutJS, err := os.ReadFile(appBundle(t, filepath.Join(without, "dist")))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -667,7 +667,7 @@ func TestBuildUsageDefinesDCE(t *testing.T) {
 	if err := Build(with, Options{Development: false}); err != nil {
 		t.Fatalf("Build with feature usage failed: %v", err)
 	}
-	withJS, err := os.ReadFile(filepath.Join(with, "dist", "app.js"))
+	withJS, err := os.ReadFile(appBundle(t, filepath.Join(with, "dist")))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -679,7 +679,7 @@ func TestBuildUsageDefinesDCE(t *testing.T) {
 	if err := Build(withPortal, Options{Development: false}); err != nil {
 		t.Fatalf("Build with Portal usage failed: %v", err)
 	}
-	portalJS := readFile(t, filepath.Join(withPortal, "dist", "app.js"))
+	portalJS := readFile(t, appBundle(t, filepath.Join(withPortal, "dist")))
 	if !strings.Contains(portalJS, portalMarker) {
 		t.Errorf("bundle with <Portal> should retain %q", portalMarker)
 	}
@@ -688,7 +688,7 @@ func TestBuildUsageDefinesDCE(t *testing.T) {
 	if err := Build(withRaw, Options{Development: false}); err != nil {
 		t.Fatalf("Build with raw usage failed: %v", err)
 	}
-	rawJS := readFile(t, filepath.Join(withRaw, "dist", "app.js"))
+	rawJS := readFile(t, appBundle(t, filepath.Join(withRaw, "dist")))
 	if !strings.Contains(rawJS, rawAtEscape) {
 		t.Errorf("bundle with {#raw} should retain the %q literal-attribute shim", rawAtEscape)
 	}
@@ -697,7 +697,7 @@ func TestBuildUsageDefinesDCE(t *testing.T) {
 	if err := Build(withRawHTML, Options{Development: false}); err != nil {
 		t.Fatalf("Build with raw function usage failed: %v", err)
 	}
-	rawHTMLJS := readFile(t, filepath.Join(withRawHTML, "dist", "app.js"))
+	rawHTMLJS := readFile(t, appBundle(t, filepath.Join(withRawHTML, "dist")))
 	if !strings.Contains(rawHTMLJS, sanitizerMarker) {
 		t.Errorf("bundle with `raw()` should retain the sanitizer (%q)", sanitizerMarker)
 	}
@@ -707,7 +707,7 @@ func TestBuildUsageDefinesDCE(t *testing.T) {
 	if err := Build(withBr, Options{Development: false}); err != nil {
 		t.Fatalf("Build with newline_to_br usage failed: %v", err)
 	}
-	brJS := readFile(t, filepath.Join(withBr, "dist", "app.js"))
+	brJS := readFile(t, appBundle(t, filepath.Join(withBr, "dist")))
 	if strings.Contains(brJS, sanitizerMarker) {
 		t.Errorf("bundle with only `newline_to_br()` retained the sanitizer (%q)", sanitizerMarker)
 	}
@@ -719,7 +719,7 @@ func TestBuildUsageDefinesDCE(t *testing.T) {
 	if err := Build(withSnippets, Options{Development: false}); err != nil {
 		t.Fatalf("Build with snippet usage failed: %v", err)
 	}
-	snippetJS := readFile(t, filepath.Join(withSnippets, "dist", "app.js"))
+	snippetJS := readFile(t, appBundle(t, filepath.Join(withSnippets, "dist")))
 	for _, marker := range []string{snippetsMarker, snippetForwardingMarker} {
 		if !strings.Contains(snippetJS, marker) {
 			t.Errorf("bundle with <Snippet> should retain %q", marker)
@@ -769,7 +769,7 @@ func TestBuildUsageThroughSymlinkedRoot(t *testing.T) {
 		if err := Build(root, Options{Development: false}); err != nil {
 			t.Fatalf("Build(%q): %v", root, err)
 		}
-		bundle := readFile(t, filepath.Join(root, "dist", "app.js"))
+		bundle := readFile(t, appBundle(t, filepath.Join(root, "dist")))
 		scopeAttr := "data-" + codegen.ScopeID("app/views/Home.pzl")
 		for _, marker := range []string{portalMarker, snippetsMarker, snippetForwardingMarker, scopeAttr} {
 			if !strings.Contains(bundle, marker) {
@@ -777,7 +777,7 @@ func TestBuildUsageThroughSymlinkedRoot(t *testing.T) {
 			}
 		}
 		css := readFile(t, filepath.Join(root, "dist", "styles.css"))
-		if !strings.Contains(css, "@scope (["+scopeAttr+"])") {
+		if !strings.Contains(css, "@scope(["+scopeAttr+"])") {
 			t.Errorf("root %q: scoped CSS lost app-relative scope id: %s", root, css)
 		}
 	}
@@ -804,7 +804,7 @@ func TestBuildLazyDefineDCE(t *testing.T) {
 			if err := Build(root, Options{Development: false}); err != nil {
 				t.Fatalf("Build with lazy() usage failed: %v", err)
 			}
-			js := readFile(t, filepath.Join(root, "dist", "app.js"))
+			js := readFile(t, appBundle(t, filepath.Join(root, "dist")))
 			if !strings.Contains(js, lazyResolverMarker) {
 				t.Errorf("bundle with lazy() route views should retain %q", lazyResolverMarker)
 			}
@@ -878,7 +878,7 @@ func TestBuildNeverBundlesHeadTagMachinery(t *testing.T) {
 		if err := Build(root, Options{Development: false}); err != nil {
 			t.Fatalf("SPA Build failed: %v", err)
 		}
-		assertNoHeadTagMachinery(t, "SPA bundle", readFile(t, filepath.Join(root, "dist", "app.js")))
+		assertNoHeadTagMachinery(t, "SPA bundle", readFile(t, appBundle(t, filepath.Join(root, "dist"))))
 	})
 
 	// Hybrid: the mode that both bakes tags AND ships a client router. The baked
@@ -890,7 +890,7 @@ func TestBuildNeverBundlesHeadTagMachinery(t *testing.T) {
 			t.Fatalf("hybrid Build failed: %v", err)
 		}
 		dist := filepath.Join(root, "dist")
-		assertNoHeadTagMachinery(t, "hybrid bundle", readFile(t, filepath.Join(dist, "app.js")))
+		assertNoHeadTagMachinery(t, "hybrid bundle", readFile(t, appBundle(t, dist)))
 
 		home := readFile(t, filepath.Join(dist, "index.html"))
 		for _, want := range []string{
@@ -2128,36 +2128,6 @@ func TestBuildMissingEntry(t *testing.T) {
 	}
 }
 
-// TestCLIBuild is one exec-based smoke test of the actual command. Skipped when
-// the go toolchain is not on PATH.
-func TestCLIBuild(t *testing.T) {
-	if _, err := exec.LookPath("go"); err != nil {
-		t.Skip("go not on PATH")
-	}
-	// This goes through the real binary, hence the real Tailwind runner. The
-	// example declares Tailwind, so without a working toolchain the build fails
-	// by design ("never silently skip a declared pipeline"); skip rather than
-	// flag that expected environment gap here.
-	if _, err := (styles.NpxRunner{}).Run(styles.RunOptions{AppRoot: t.TempDir()}); err != nil {
-		t.Skipf("Tailwind CLI not runnable in this environment: %v", err)
-	}
-	root := exampleRoot(t)
-
-	// Module root is three levels up from compiler/internal/build.
-	wd, _ := os.Getwd()
-	moduleDir := filepath.Clean(filepath.Join(wd, "..", "..", ".."))
-
-	cmd := exec.Command("go", "run", "./compiler/cmd/puzzle", "build", root, "--mode", "development")
-	cmd.Dir = moduleDir
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("puzzle build exited non-zero: %v\n%s", err, out)
-	}
-	if _, err := os.Stat(filepath.Join(root, "dist", "app.js")); err != nil {
-		t.Errorf("CLI build produced no dist/app.js: %v", err)
-	}
-}
-
 // TestBuildOptionsConfigSkipsLoad proves Options.Config is used INSTEAD of
 // loading puzzle.config.js — not merged with it. The fixture's config file is
 // deliberately unloadable (it throws), which fails any build that reads it, so a
@@ -2313,6 +2283,27 @@ func TestCopyPublicStagingWritesPlainCopies(t *testing.T) {
 
 // emittedAsset reads compiler-owned asset names from the built HTML. The shell
 // can carry a router base; the on-disk path is still relative to dist.
+// appBundle returns dist's SPA entry bundle: app-<hash>.js in a default
+// production build, app.js in development or with build.hashNames: false.
+func appBundle(t *testing.T, dist string) string {
+	t.Helper()
+	matches, err := filepath.Glob(filepath.Join(dist, "app*.js"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	entryRE := regexp.MustCompile(`^app(?:-[A-Z2-7]{8})?\.js$`)
+	var found []string
+	for _, m := range matches {
+		if entryRE.MatchString(filepath.Base(m)) {
+			found = append(found, m)
+		}
+	}
+	if len(found) != 1 {
+		t.Fatalf("%s: want exactly one app entry bundle, found %v", dist, found)
+	}
+	return found[0]
+}
+
 func emittedAsset(t *testing.T, dist, htmlPath, originalName string) string {
 	t.Helper()
 	ext := filepath.Ext(originalName)
@@ -2331,7 +2322,8 @@ func TestProductionHashedNamesAndPreloads(t *testing.T) {
 		name, cfg            string
 		dev, hashed, preload bool
 	}{
-		{name: "default production"},
+		{name: "default production", hashed: true},
+		{name: "opt out", cfg: `build: { hashNames: false }`},
 		{name: "split production", cfg: `build: { splitting: true }`, hashed: true, preload: true},
 		{name: "split opt out", cfg: `build: { splitting: true, hashNames: false }`, preload: true},
 		{name: "hash without splitting", cfg: `build: { hashNames: true }`, hashed: true},
@@ -2422,7 +2414,6 @@ func TestHashedShellFailuresPreserveDist(t *testing.T) {
 	}{
 		{name: "no entry", shell: `<head></head>`, want: "build.hashNames: false"},
 		{name: "no shell", missing: true, want: "build.hashNames: false"},
-		{name: "no head", shell: `<script src="/app.js"></script>`, want: "</head>"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			root := writeSplitFixture(t, `export default { build: { hashNames: true } };`)
@@ -2446,6 +2437,302 @@ func TestHashedShellFailuresPreserveDist(t *testing.T) {
 				t.Fatal("failed rewrite changed dist")
 			}
 		})
+	}
+}
+
+// With build.hashNames unset, hashing is on by default but must never fail a
+// build the shell cannot follow: each file the shell does not reference in a
+// rewritable tag keeps its fixed name, with one warning naming it. An explicit
+// hashNames: true keeps the hard error (TestHashedShellFailuresPreserveDist).
+func TestDefaultHashFallsBackToFixedNames(t *testing.T) {
+	requireNodeBin(t)
+	for _, tt := range []struct {
+		name, shell        string
+		missing            bool
+		hashEntry, hashCSS bool
+	}{
+		{name: "full shell", shell: `<html><head><link rel="stylesheet" href="/styles.css"></head><body><script type="module" src="/app.js"></script></body></html>`, hashEntry: true, hashCSS: true},
+		{name: "shell without head end", shell: `<link rel="stylesheet" href="/styles.css"><script type="module" src="/app.js"></script>`, hashEntry: true, hashCSS: true},
+		{name: "no entry tag", shell: `<html><head><link rel="stylesheet" href="/styles.css"></head><body></body></html>`, hashCSS: true},
+		{name: "no stylesheet tag", shell: `<html><head></head><body><script type="module" src="/app.js"></script></body></html>`, hashEntry: true},
+		{name: "neither", shell: `<html><head></head><body></body></html>`},
+		{name: "no shell", missing: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			// A Tailwind layer makes the stylesheet non-empty: an app with no CSS
+			// never gets the styles.css warning (TestDefaultHashEmptyStylesheetIsQuiet).
+			root := writeSplitFixture(t, `export default { styles: { use: ['tailwindcss'] } };`)
+			shell := filepath.Join(root, "app", "public", "index.html")
+			if tt.missing {
+				if err := os.Remove(shell); err != nil {
+					t.Fatal(err)
+				}
+			} else if err := os.WriteFile(shell, []byte(tt.shell), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			var buildErr error
+			stderr := captureStderr(t, func() { buildErr = Build(root, Options{Runner: &fakeRunner{css: ".tw{color:red}"}}) })
+			if buildErr != nil {
+				t.Fatalf("default hashing must not fail the build: %v", buildErr)
+			}
+			dist := filepath.Join(root, "dist")
+			for _, c := range []struct {
+				fixed, glob string
+				hashed      bool
+			}{
+				{"app.js", "app-*.js", tt.hashEntry},
+				{"styles.css", "styles-*.css", tt.hashCSS},
+			} {
+				hashed, _ := filepath.Glob(filepath.Join(dist, c.glob))
+				_, fixedErr := os.Stat(filepath.Join(dist, c.fixed))
+				if c.hashed && (len(hashed) != 1 || fixedErr == nil) {
+					t.Errorf("%s: want one hashed file and no fixed name, got %v (fixed stat: %v)", c.fixed, hashed, fixedErr)
+				}
+				if !c.hashed && (len(hashed) != 0 || fixedErr != nil) {
+					t.Errorf("%s: want the fixed name only, got hashed %v (fixed stat: %v)", c.fixed, hashed, fixedErr)
+				}
+				warned := strings.Contains(stderr, "so "+c.fixed+" keeps its fixed name")
+				if warned == c.hashed {
+					t.Errorf("%s fallback warning printed = %v, want %v; stderr:\n%s", c.fixed, warned, !c.hashed, stderr)
+				}
+				if n := strings.Count(stderr, "so "+c.fixed+" keeps its fixed name"); n > 1 {
+					t.Errorf("%s warning printed %d times, want once", c.fixed, n)
+				}
+			}
+			if !tt.missing {
+				html := readFile(t, filepath.Join(dist, "index.html"))
+				if tt.hashEntry && !regexp.MustCompile(`src="/app-[A-Z2-7]{8}\.js"`).MatchString(html) {
+					t.Errorf("shell does not load the hashed entry:\n%s", html)
+				}
+				if tt.hashCSS && !regexp.MustCompile(`href="/styles-[A-Z2-7]{8}\.css"`).MatchString(html) {
+					t.Errorf("shell does not link the hashed stylesheet:\n%s", html)
+				}
+			}
+		})
+	}
+}
+
+// An app with no CSS at all (the composed stylesheet is empty) keeps an
+// unlinked, empty styles.css and prints nothing about it: there is nothing for
+// a browser to cache, so no warning is owed.
+func TestDefaultHashEmptyStylesheetIsQuiet(t *testing.T) {
+	requireNodeBin(t)
+	root := writeSplitFixture(t, "")
+	shell := `<html><head></head><body><script type="module" src="/app.js"></script></body></html>`
+	if err := os.WriteFile(filepath.Join(root, "app", "public", "index.html"), []byte(shell), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var buildErr error
+	stderr := captureStderr(t, func() { buildErr = Build(root, Options{}) })
+	if buildErr != nil {
+		t.Fatal(buildErr)
+	}
+	if strings.Contains(stderr, "build.hashNames") {
+		t.Errorf("an app with no CSS must not warn about styles.css:\n%s", stderr)
+	}
+	if _, err := os.Stat(filepath.Join(root, "dist", "styles.css")); err != nil {
+		t.Errorf("the empty stylesheet keeps its fixed name: %v", err)
+	}
+}
+
+// assertLocalAssetsResolve fails when any HTML page under dist references a
+// root-relative .js or .css file the build did not write.
+func assertLocalAssetsResolve(t *testing.T, dist string) {
+	t.Helper()
+	refRE := regexp.MustCompile(`(?:src|href)="(/[^"?#]+\.(?:js|css))[^"]*"`)
+	err := filepath.WalkDir(dist, func(path string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() || filepath.Ext(path) != ".html" {
+			return err
+		}
+		for _, m := range refRE.FindAllStringSubmatch(readFile(t, path), -1) {
+			if _, statErr := os.Stat(filepath.Join(dist, filepath.FromSlash(m[1][1:]))); statErr != nil {
+				t.Errorf("%s references %s, which the build did not write", path, m[1])
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+// Other public HTML pages (a GitHub Pages 404.html copy of the shell, an
+// embed.html) are copied, not generated, so they must never ship a link to a
+// name the build no longer writes. Unset hashNames keeps the fixed names those
+// pages name, with a warning naming the page; an explicit true rewrites them.
+func TestPublicPagesFollowHashedNames(t *testing.T) {
+	requireNodeBin(t)
+	for _, tt := range []struct {
+		name, cfg string
+		hashed    bool
+	}{
+		{name: "default keeps fixed names", cfg: `export default { styles: { use: ['tailwindcss'] } };`},
+		{name: "explicit true rewrites pages", cfg: `export default { styles: { use: ['tailwindcss'] }, build: { hashNames: true } };`, hashed: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			root := writeSplitFixture(t, tt.cfg)
+			public := filepath.Join(root, "app", "public")
+			shell := readFile(t, filepath.Join(public, "index.html"))
+			if err := os.WriteFile(filepath.Join(public, "404.html"), []byte(shell), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.MkdirAll(filepath.Join(public, "embed"), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(public, "embed", "index.html"), []byte(`<link rel="stylesheet" href="/styles.css">`), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			var buildErr error
+			stderr := captureStderr(t, func() { buildErr = Build(root, Options{Runner: &fakeRunner{css: ".tw{color:red}"}}) })
+			if buildErr != nil {
+				t.Fatal(buildErr)
+			}
+			dist := filepath.Join(root, "dist")
+			assertLocalAssetsResolve(t, dist)
+			for _, fixed := range []string{"app.js", "styles.css"} {
+				_, err := os.Stat(filepath.Join(dist, fixed))
+				if tt.hashed != os.IsNotExist(err) {
+					t.Errorf("%s: fixed name present = %v, want %v", fixed, err == nil, !tt.hashed)
+				}
+			}
+			if tt.hashed {
+				if strings.Contains(stderr, "build.hashNames") {
+					t.Errorf("explicit true must not warn:\n%s", stderr)
+				}
+				page := readFile(t, filepath.Join(dist, "404.html"))
+				if !regexp.MustCompile(`src="/app-[A-Z2-7]{8}\.js"`).MatchString(page) || modulepreloadHrefs(page) != nil {
+					t.Errorf("404.html must load the hashed entry and gain no preloads:\n%s", page)
+				}
+				return
+			}
+			for _, want := range []string{
+				"public/404.html names app.js or app.css by its fixed name, so app.js keeps its fixed name",
+				"public/404.html, public/embed/index.html names styles.css by its fixed name, so styles.css keeps its fixed name",
+			} {
+				if !strings.Contains(stderr, want) {
+					t.Errorf("stderr missing %q:\n%s", want, stderr)
+				}
+			}
+			if got, want := readFile(t, filepath.Join(dist, "404.html")), shell; got != want {
+				t.Errorf("a page that kept fixed names is copied verbatim; got:\n%s", got)
+			}
+		})
+	}
+}
+
+// A nested public page's relative styles.css and app.js are the files beside
+// it, not the compiler's: under either hashing setting the page ships as
+// written and the app's own outputs stay hashed, with no warning.
+func TestNestedPublicPageKeepsItsOwnAssets(t *testing.T) {
+	requireNodeBin(t)
+	page := `<link rel="stylesheet" href="styles.css"><script src="app.js"></script>`
+	for _, cfg := range []string{
+		`export default { styles: { use: ['tailwindcss'] } };`,
+		`export default { styles: { use: ['tailwindcss'] }, build: { hashNames: true } };`,
+	} {
+		t.Run(cfg, func(t *testing.T) {
+			root := writeSplitFixture(t, cfg)
+			docs := filepath.Join(root, "app", "public", "docs")
+			if err := os.MkdirAll(docs, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			for name, body := range map[string]string{"index.html": page, "styles.css": "p{}", "app.js": ""} {
+				if err := os.WriteFile(filepath.Join(docs, name), []byte(body), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			var buildErr error
+			stderr := captureStderr(t, func() { buildErr = Build(root, Options{Runner: &fakeRunner{css: ".tw{color:red}"}}) })
+			if buildErr != nil {
+				t.Fatal(buildErr)
+			}
+			if strings.Contains(stderr, "build.hashNames") {
+				t.Errorf("the page's own files must not hold a fixed name:\n%s", stderr)
+			}
+			dist := filepath.Join(root, "dist")
+			for _, fixed := range []string{"app.js", "styles.css"} {
+				if _, err := os.Stat(filepath.Join(dist, fixed)); !os.IsNotExist(err) {
+					t.Errorf("dist/%s must be hashed", fixed)
+				}
+			}
+			if got := readFile(t, filepath.Join(dist, "docs", "index.html")); got != page {
+				t.Errorf("docs/index.html must keep its own links; got:\n%s", got)
+			}
+		})
+	}
+}
+
+// A shell <link href="/app.css"> left over from an entry that no longer imports
+// CSS built before hashing became the default, and still does with hashNames
+// unset: the reference is left as written. Explicit true keeps the error.
+func TestStaleShellAssetOnlyFailsExplicitHash(t *testing.T) {
+	requireNodeBin(t)
+	shell := `<html><head><link rel="stylesheet" href="/styles.css"><link rel="stylesheet" href="/app.css"></head><body><script type="module" src="/app.js"></script></body></html>`
+	for _, tt := range []struct {
+		name, cfg, entry string
+		wantErr          bool
+	}{
+		{name: "default", cfg: "", entry: `src="/app-[A-Z2-7]{8}\.js"`},
+		{name: "explicit true", cfg: `export default { build: { hashNames: true } };`, wantErr: true},
+		// D181: false opts out of hashing, so splitting's shell rewrite stays lenient.
+		{name: "explicit false with splitting", cfg: `export default { build: { splitting: true, hashNames: false } };`, entry: `src="/app\.js"`},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			root := writeSplitFixture(t, tt.cfg)
+			if err := os.WriteFile(filepath.Join(root, "app", "public", "index.html"), []byte(shell), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			err := Build(root, Options{})
+			if tt.wantErr {
+				if err == nil || !strings.Contains(err.Error(), `shell asset "/app.css" has no emitted output`) {
+					t.Fatalf("build error = %v, want the missing app.css output", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("a lenient build must leave the stale reference alone: %v", err)
+			}
+			html := readFile(t, filepath.Join(root, "dist", "index.html"))
+			if !strings.Contains(html, `href="/app.css"`) || !regexp.MustCompile(tt.entry).MatchString(html) {
+				t.Errorf("want the entry as %s and /app.css left as written:\n%s", tt.entry, html)
+			}
+		})
+	}
+}
+
+// A shell without </head> builds while there is nothing to preload, but a split
+// build whose entry statically imports a shared chunk has preloads to place:
+// that fails, and the last good dist/ survives.
+func TestShellWithoutHeadFailsWhenPreloadsNeeded(t *testing.T) {
+	requireNodeBin(t)
+	root := writeSplitFixture(t, `export default { build: { splitting: true } };`)
+	for name, source := range map[string]string{
+		"app/app.js": `import { shared } from './lib/shared.js';
+globalThis.__shared = shared('entry');
+globalThis.__loadLazy = () => import('./lib/lazy.js');`,
+		"app/lib/shared.js": `export function shared(value) { return value + 'SHARED_MARKER'; }`,
+		"app/lib/lazy.js":   `import { shared } from './shared.js'; export const marker = shared('LAZY_MARKER_XYZ');`,
+	} {
+		if err := os.WriteFile(filepath.Join(root, filepath.FromSlash(name)), []byte(source), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := Build(root, Options{}); err != nil {
+		t.Fatal(err)
+	}
+	dist := filepath.Join(root, "dist")
+	before := readFile(t, filepath.Join(dist, "index.html"))
+	if len(modulepreloadHrefs(before)) == 0 {
+		t.Fatal("fixture must need a preload")
+	}
+	if err := os.WriteFile(filepath.Join(root, "app", "public", "index.html"), []byte(`<script type="module" src="/app.js"></script>`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := Build(root, Options{}); err == nil || !strings.Contains(err.Error(), "</head>") {
+		t.Fatalf("build error = %v, want the missing </head>", err)
+	}
+	if after := readFile(t, filepath.Join(dist, "index.html")); after != before {
+		t.Fatal("failed rewrite changed dist")
 	}
 }
 
@@ -2521,5 +2808,72 @@ func TestSplitShellWithoutRecognizedEntrySkipsPreloads(t *testing.T) {
 	}
 	if got := readFile(t, filepath.Join(root, "dist", "index.html")); got != shell {
 		t.Fatalf("shell without a recognized entry changed: %s", got)
+	}
+}
+
+func TestBuildUnlinkedEntryCSSWarning(t *testing.T) {
+	for _, tc := range []struct {
+		name, page, output string
+		dev, noCSS, public bool
+	}{
+		{name: "production"},
+		{name: "development", dev: true},
+		{name: "static", output: "static"},
+		{name: "static linked", output: "static", page: "index.html"},
+		{name: "static public app.css", output: "static", page: "index.html", noCSS: true, public: true},
+		{name: "linked", page: "index.html"},
+		{name: "other page links", page: "embed.html"},
+		{name: "no CSS", noCSS: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			root := writeSplitFixture(t, "")
+			if tc.output == "static" {
+				requireStaticRuntime(t)
+				root = writeSSGFixture(t, baseSSGFixture())
+			}
+			if !tc.noCSS {
+				write(t, filepath.Join(root, "app", "entry.css"), "body { color: red; }")
+				write(t, filepath.Join(root, "app", "app.js"), "import './entry.css';\n"+readFile(t, filepath.Join(root, "app", "app.js")))
+			}
+			if tc.page != "" {
+				page := filepath.Join(root, "app", "public", tc.page)
+				body := `<link href="/app.css" rel="stylesheet">`
+				if tc.page == "index.html" {
+					body += readFile(t, page)
+				}
+				write(t, page, body)
+			}
+			if tc.public {
+				write(t, filepath.Join(root, "app", "public", "app.css"), "body { color: blue; }")
+			}
+			var err error
+			stderr := captureStderr(t, func() { err = Build(root, Options{Development: tc.dev, Output: tc.output}) })
+			if err != nil {
+				t.Fatal(err)
+			}
+			want := tc.page == "" && !tc.noCSS
+			if tc.output == "static" {
+				// Static pages link their own CSS; what only app.css could carry is named instead.
+				if got := strings.Count(stderr, "app/entry.css is imported outside every page's views and layouts"); (got == 1) != want || got > 1 || strings.Contains(stderr, "no shell page references app.css") {
+					t.Fatalf("static warning count = %d, want warning %v: %s", got, want, stderr)
+				}
+				if _, err := os.Stat(filepath.Join(root, "dist", "app.css")); os.IsNotExist(err) != want {
+					t.Errorf("dist/app.css shipped = %v, want %v", !os.IsNotExist(err), !want)
+				}
+				return
+			}
+			if got := strings.Count(stderr, "no shell page references app.css"); (got == 1) != want || got > 1 {
+				t.Fatalf("warning count = %d, want warning %v: %s", got, want, stderr)
+			}
+			if want {
+				files, _ := filepath.Glob(filepath.Join(root, "dist", "app*.css"))
+				if len(files) != 1 || !strings.Contains(stderr, "emitted "+filepath.Base(files[0])) {
+					t.Errorf("warning does not name emitted file %v: %s", files, stderr)
+				}
+				if !strings.Contains(stderr, `add <link href="/app.css" rel="stylesheet"> to app/public/index.html`) {
+					t.Errorf("warning missing exact fix: %s", stderr)
+				}
+			}
+		})
 	}
 }

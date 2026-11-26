@@ -1,10 +1,10 @@
-
+        
 import { PuzzleView } from '@magic-spells/puzzle';
 import Card from './Card.pzl';
 import Panel from './Panel.pzl';
 const cards = { card: Card, panel: Panel };
 export default class Host extends PuzzleView {
-  data(_params, props) { return { ...props, current: cards[props.type] }; }
+  data({ props }) { return { ...props, current: cards[props.type] }; }
   events = { close: (title) => this.props.onclose?.(title) };
 }
 
@@ -42,4 +42,3 @@ Host.prototype.render = function () {
     new ViewNode('input', { class: 'persistent' }, []),
   ]);
 };
-Host.__pzlModule = 'Host.pzl';

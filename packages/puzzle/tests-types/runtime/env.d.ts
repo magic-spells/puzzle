@@ -62,6 +62,35 @@ declare module 'node:path' {
 		dirname(p: string): string;
 		relative(from: string, to: string): string;
 		isAbsolute(p: string): boolean;
+		resolve(...parts: string[]): string;
 	};
 	export default path;
+}
+
+// The Vitest plugin (client-runtime/vitest) is Node tooling too: it spawns the
+// compiler. Same rule as the SSG shims above — only the calls it makes.
+declare module 'node:child_process' {
+	function execFile(
+		file: string,
+		args: string[],
+		options: { maxBuffer?: number; encoding: 'utf8' },
+		callback: (error: Error | null, stdout: string, stderr: string) => void
+	): unknown;
+}
+
+declare module 'node:buffer' {
+	const Buffer: { from(data: string, encoding: 'base64'): { toString(): string } };
+}
+
+declare module 'node:url' {
+	function fileURLToPath(url: URL | string): string;
+}
+
+declare module 'node:process' {
+	const process: {
+		env: Record<string, string | undefined>;
+		execPath: string;
+		cwd(): string;
+	};
+	export default process;
 }

@@ -1,4 +1,12 @@
 
+
+
+
+
+
+
+
+        
 import { PuzzleView } from '@magic-spells/puzzle';
 
 // The global wrapper component a layout forwards routed content into (D71).
@@ -15,4 +23,3 @@ Card.prototype.render = function () {
     ]),
   ]);
 };
-Card.__pzlModule = 'Card.pzl';

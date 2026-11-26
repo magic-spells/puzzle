@@ -296,6 +296,9 @@ export default class Home extends PuzzleView {}
 	for _, e := range res.Errors {
 		if e.Location != nil && strings.HasSuffix(filepath.ToSlash(e.Location.File), "app/assets/icons/bad.svg") {
 			located = true
+			if e.Location.LineText != "<div><span/></div>" || e.Location.Column != 0 {
+				t.Errorf("SVG frame = %+v, want the SVG source", e.Location)
+			}
 			if !strings.Contains(e.Text, "root element is <div>") {
 				t.Errorf("malformed-svg error should name the actual root; got: %q", e.Text)
 			}
@@ -393,6 +396,12 @@ export default class Home extends PuzzleView {}
 	}
 }
 
+// scanFormatters is ScanUsage narrowed to the function set these tests assert on.
+func scanFormatters(root string) (map[string]bool, error) {
+	usage, err := ScanUsage(root)
+	return usage.Formatters, err
+}
+
 func TestScanFormatters(t *testing.T) {
 	root := writeApp(t, map[string]string{
 		"app/views/Home.pzl": `<puzzle-view>
@@ -412,19 +421,19 @@ export default class Home extends PuzzleView {}
 `,
 	})
 
-	got, err := ScanFormatters(filepath.Join(root, "app"))
+	got, err := scanFormatters(filepath.Join(root, "app"))
 	if err != nil {
-		t.Fatalf("ScanFormatters: %v", err)
+		t.Fatalf("scanFormatters: %v", err)
 	}
 
 	for _, want := range []string{"capitalize", "currency", "truncate"} {
 		if !got[want] {
-			t.Errorf("ScanFormatters missing built-in function %q in %#v", want, got)
+			t.Errorf("scanFormatters missing built-in function %q in %#v", want, got)
 		}
 	}
 	for _, notWant := range []string{"custom", "escape"} {
 		if got[notWant] {
-			t.Errorf("ScanFormatters should not include %q in %#v", notWant, got)
+			t.Errorf("scanFormatters should not include %q in %#v", notWant, got)
 		}
 	}
 }
@@ -448,19 +457,19 @@ export default class Home extends PuzzleView {}
 `,
 	})
 
-	got, err := ScanFormatters(filepath.Join(root, "app"))
+	got, err := scanFormatters(filepath.Join(root, "app"))
 	if err != nil {
-		t.Fatalf("ScanFormatters: %v", err)
+		t.Fatalf("scanFormatters: %v", err)
 	}
 	for _, removed := range []string{"upcase", "size", "plus", "split", "join"} {
 		if got[removed] {
-			t.Errorf("ScanFormatters kept removed formatter %q in %#v", removed, got)
+			t.Errorf("scanFormatters kept removed formatter %q in %#v", removed, got)
 		}
 	}
 
 	pl := New(root)
 	pl.SetRuntimeDir("/runtime")
-	pl.SetFormatters(got)
+	pl.SetUsage(Usage{Formatters: got})
 	manifest, err := pl.formatterManifest()
 	if err != nil {
 		t.Fatalf("formatterManifest: %v", err)
@@ -1028,13 +1037,13 @@ export default class Card extends PuzzleView {}
 `,
 	})
 
-	got, err := ScanFormatters(root)
+	got, err := scanFormatters(root)
 	if err != nil {
-		t.Fatalf("ScanFormatters: %v", err)
+		t.Fatalf("scanFormatters: %v", err)
 	}
 	for _, want := range []string{"capitalize", "truncate"} {
 		if !got[want] {
-			t.Errorf("ScanFormatters missing %q from project-wide scan: %#v", want, got)
+			t.Errorf("scanFormatters missing %q from project-wide scan: %#v", want, got)
 		}
 	}
 }
@@ -1056,15 +1065,15 @@ export default class Home extends PuzzleView {}
 		"node_modules/pkg/Thing.pzl": `<puzzle-view>{ currency(v, '$') }</puzzle-view>`,
 	})
 
-	got, err := ScanFormatters(root)
+	got, err := scanFormatters(root)
 	if err != nil {
-		t.Fatalf("ScanFormatters must tolerate a broken .pzl, got error: %v", err)
+		t.Fatalf("scanFormatters must tolerate a broken .pzl, got error: %v", err)
 	}
 	if !got["capitalize"] {
-		t.Errorf("ScanFormatters dropped a valid file's function: %#v", got)
+		t.Errorf("scanFormatters dropped a valid file's function: %#v", got)
 	}
 	if got["currency"] {
-		t.Errorf("ScanFormatters walked node_modules (found currency): %#v", got)
+		t.Errorf("scanFormatters walked node_modules (found currency): %#v", got)
 	}
 }
 
@@ -1089,9 +1098,9 @@ export default class Home extends PuzzleView {}
 </script>
 `,
 	})
-	got, err := ScanFormatters(root)
+	got, err := scanFormatters(root)
 	if err != nil {
-		t.Fatalf("ScanFormatters: %v", err)
+		t.Fatalf("scanFormatters: %v", err)
 	}
 	// capitalize = text run, truncate = attr interpolation, json = inline-if branch.
 	for site, want := range map[string]string{"text": "capitalize", "attr": "truncate", "inline-if": "json"} {
@@ -1125,9 +1134,9 @@ export default class Home extends PuzzleView {}
 </script>
 `,
 	})
-	got, err := ScanFormatters(root)
+	got, err := scanFormatters(root)
 	if err != nil {
-		t.Fatalf("ScanFormatters: %v", err)
+		t.Fatalf("scanFormatters: %v", err)
 	}
 	for site, want := range map[string]string{
 		"text": "capitalize", "attribute": "truncate", "arrow in a prop": "currency",
@@ -1198,9 +1207,9 @@ export default class Home extends PuzzleView {
 </script>
 `,
 	})
-	got, err := ScanFormatters(filepath.Join(root, "app"))
+	got, err := scanFormatters(filepath.Join(root, "app"))
 	if err != nil {
-		t.Fatalf("ScanFormatters: %v", err)
+		t.Fatalf("scanFormatters: %v", err)
 	}
 	if !got["date"] {
 		t.Errorf("scanner missed builtin %q used only inside <puzzle-skeleton>: %#v", "date", got)
@@ -1315,11 +1324,11 @@ export default class Home extends PuzzleView {}
 
 	// rescan mirrors what `puzzle dev` runs before each incremental Rebuild.
 	rescan := func() {
-		used, err := ScanFormatters(filepath.Join(root, "app"))
+		usage, err := ScanUsage(filepath.Join(root, "app"))
 		if err != nil {
-			t.Fatalf("ScanFormatters: %v", err)
+			t.Fatalf("ScanUsage: %v", err)
 		}
-		pl.SetFormatters(used)
+		pl.SetUsage(usage)
 	}
 
 	ctx, cerr := api.Context(api.BuildOptions{
@@ -1390,10 +1399,10 @@ console.log(manifest);
 
 	pl := New(root)
 	pl.SetRuntimeDir(runtimeDir)
-	pl.SetFormatters(map[string]bool{
+	pl.SetUsage(Usage{Formatters: map[string]bool{
 		"capitalize": true,
 		"json":       true,
-	})
+	}})
 
 	res := api.Build(api.BuildOptions{
 		EntryPoints: []string{filepath.Join(root, "app", "app.js")},
@@ -1534,6 +1543,50 @@ func TestPluginScriptErrorPositions(t *testing.T) {
 			col := off - strings.LastIndex(src[:off], "\n") - 1
 			if loc == nil || loc.Line != line || loc.Column != col || !strings.HasSuffix(filepath.ToSlash(loc.File), "app/views/Home.pzl") {
 				t.Fatalf("location = %+v, want Home.pzl:%d:%d", loc, line, col)
+			}
+		})
+	}
+}
+
+// The plugin must supply source text itself: esbuild does not read .pzl files
+// for plugin diagnostics. Imported files must use their own bytes.
+func TestPluginDiagnosticFrames(t *testing.T) {
+	for _, tc := range []struct {
+		name, line, tail string
+	}{
+		{"expression", "  {#if todos.length > }", "\n  {/if}"},
+		{"tab and UTF-8", "\té🙂 {#if todos.length > }", "\n  {/if}"},
+		{"missing for close", "  {#for todo in todos}", "\n  <p>{ todo }</p>"},
+		{"style attribute", "<style invalid>", ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			src := "<puzzle-view>\n" + tc.line + tc.tail + "\n</puzzle-view>"
+			if tc.name == "style attribute" {
+				src = "<puzzle-view><p>Hi</p></puzzle-view>\n" + tc.line + "body {}\n</style>"
+			}
+			root := writeApp(t, map[string]string{
+				"app/app.js":                "import './views/Home.pzl';",
+				"app/views/Home.pzl":        strings.Replace(homePzl, "../components/Button.pzl", "../components/Broken.pzl", 1),
+				"app/components/Broken.pzl": src,
+			})
+			res, _ := buildApp(t, root)
+			if len(res.Errors) != 1 {
+				t.Fatalf("errors = %v, want one", res.Errors)
+			}
+			loc := res.Errors[0].Location
+			if loc == nil || !strings.HasSuffix(filepath.ToSlash(loc.File), "app/components/Broken.pzl") {
+				t.Fatalf("location = %+v, want imported Broken.pzl", loc)
+			}
+			lines := strings.Split(src, "\n")
+			if loc.LineText != lines[loc.Line-1] || loc.LineText == "" {
+				t.Errorf("line text = %q, want %q", loc.LineText, lines[loc.Line-1])
+			}
+			if strings.Contains(tc.name, "expression") || tc.name == "tab and UTF-8" {
+				// The missing expression is immediately after > and before its space.
+				want := strings.Index(tc.line, ">") + 1
+				if loc.Line != 2 || loc.Column != want || loc.Length != 0 {
+					t.Errorf("location = %+v, want line 2 byte column %d, point span", loc, want)
+				}
 			}
 		})
 	}

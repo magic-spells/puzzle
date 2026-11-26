@@ -3,7 +3,7 @@ package parser
 import "strings"
 
 // attr.go implements the attribute-value mini-grammar
-// (packages/puzzle/constellation/doc/DOC-COMPILER-DESIGN.md §c), the trickiest part
+// (packages/puzzle/constellation/doc/DOC-SPEC.md §6), the trickiest part
 // of the parser:
 //
 //	attr-value := (static-text | interpolation | inline-if)*

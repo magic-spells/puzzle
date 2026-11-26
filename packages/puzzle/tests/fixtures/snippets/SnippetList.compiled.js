@@ -1,8 +1,30 @@
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+        
 import { PuzzleView } from '@magic-spells/puzzle';
 
 export default class SnippetList extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     return { users: props.users, group: props.group };
   }
 
@@ -11,7 +33,7 @@ export default class SnippetList extends PuzzleView {
       const users = this.getData().users.map((user, index) => (
         index === 0 ? { ...user, name: `${user.name}!` } : user
       ));
-      this.setData('users', users);
+      this.setState('users', users);
     },
   };
 }
@@ -51,5 +73,4 @@ SnippetList.prototype.render = function () {
     ]),
   ]);
 };
-SnippetList.__pzlModule = 'SnippetList.pzl';
 SnippetList.__roots = ['group'];

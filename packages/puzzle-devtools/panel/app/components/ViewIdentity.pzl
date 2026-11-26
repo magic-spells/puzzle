@@ -1,9 +1,9 @@
 <puzzle-view>
   <span class="flex min-w-0 items-center gap-1.5">
     <span class="shrink-0 size-1.5 rounded-full { kindClass }" data-kind-dot aria-hidden="true"></span>
-    <span class="shrink-0 font-mono text-[12px] leading-none { nameClass }">{ name }</span>
+    <span class="shrink-0 font-mono leading-none { nameClass }">{ name }</span>
     {#if hasModuleLabel}
-      <span class="min-w-0 truncate font-mono text-[10px] leading-none { moduleClass }">{ moduleLabel }</span>
+      <span class="min-w-0 truncate font-mono text-10 leading-none { moduleClass }">{ moduleLabel }</span>
     {/if}
   </span>
 </puzzle-view>
@@ -35,7 +35,7 @@ const KIND_DOT = {
 };
 
 export default class ViewIdentity extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     const name = props.name ?? 'View';
     const label = basenameOf(name, props.module);
     const dim = !!props.dim;

@@ -14,9 +14,10 @@
  * Update triggers (constellation/doc/DOC-VIEW-LIFECYCLE.md §5):
  * - store change matching a data() query → onStoreChange → data() re-runs
  * - refresh({params|props}) from router/parent → data() re-runs
- * - a two-way bind write-back (D147) → setData + refresh, or the record's
+ * - a two-way bind write-back (D147) → setState + refresh, or the record's
  *   update() and the store flush behind it → data() re-runs
- * - setData() → re-render only, data() does NOT re-run
+ * - setState() → re-render; data() re-runs first when the last committed
+ *   data() read a written key through getData()/getState() (D23)
  */
 
 import { ViewManager, releasePins, moveManager } from './viewManager.js';
@@ -32,7 +33,6 @@ import {
 	devperfMarkCause,
 	devperfMemo,
 	devperfPrepareData,
-	devperfRenderCancel,
 	devperfRenderEnd,
 	devperfRenderPrepare,
 	devperfRenderScheduled,
@@ -65,7 +65,7 @@ import {
 // DCEs the calls and the registry import tree-shakes away. An undefined
 // define (unbundled vitest) reads as true.
 
-// The write-back for a bind whose resolved root is a primitive (D147; see
+// The write-back for a bind whose resolved target is a primitive (D147; see
 // __bind). One shared function for the whole module: identity-stable by
 // definition, so the differ never churns the listener, and typing does nothing.
 const INERT_BIND = () => {};
@@ -124,24 +124,82 @@ function warnThisHandlers(view) {
  * @typedef {{ params?: Record<string, any>, props?: any, route?: any }} RefreshInput
  */
 
+/**
+ * The keys one data() invocation read through getData()/getState() (D23).
+ * `all` means it enumerated a copy, so every key counts as read.
+ * @typedef {{ keys: Set<string>, all: boolean, open: boolean }} ReadRecord
+ */
+
+/**
+ * Wrap `target` so every key read off it lands on the record `recordFor()`
+ * returns (none when it returns nothing). Enumerating it (a spread, Object.keys,
+ * JSON.stringify) counts as reading every key, present or future.
+ * @param {Record<string, any>} target
+ * @param {() => ReadRecord | null | false} recordFor
+ * @returns {Record<string, any>}
+ */
+function trackReads(target, recordFor) {
+	/** @param {string | symbol | null} key null = every key */
+	const note = (key) => {
+		if (typeof key === 'symbol') return;
+		const rec = recordFor();
+		if (!rec) return;
+		if (key === null) rec.all = true;
+		else rec.keys.add(key);
+	};
+	return new Proxy(target, {
+		get(target, key, receiver) {
+			note(key);
+			return Reflect.get(target, key, receiver);
+		},
+		has(target, key) {
+			note(key);
+			return Reflect.has(target, key);
+		},
+		ownKeys(target) {
+			note(null);
+			return Reflect.ownKeys(target);
+		},
+	});
+}
+
+/**
+ * The one object data() and share() receive (D197): the route params, the
+ * parent's props, and what sharing ancestors pass down, grouped by each
+ * sharer's name. `shared` is always an object, so destructuring it never throws.
+ * @typedef {{ params: Record<string, any>, props: any, shared: Record<string, any> }} DataInput
+ */
+
+/**
+ * The key a sharing view's values sit under in `shared` (D197): the compiler's
+ * `__share` stamp (a minified build renames classes, so a .pzl carries it), or
+ * for a hand-written class its name in camelCase — Filter → filter,
+ * FilterPanel → filterPanel, URLFilter → urlFilter.
+ * @param {Function & { __share?: string }} View
+ * @returns {string}
+ */
+const shareKey = (View) =>
+	View.__share ?? View.name.replace(/^[A-Z]+(?=[A-Z][a-z]|$)|^./, (head) => head.toLowerCase());
+
 export class PuzzleView {
-	// Two-layer component state (Change C, SPEC §4). #local holds values written
-	// via setData() (and created()-seeded state, which uses setData); #model holds
+	// Two-layer component state (Change C, SPEC §4). #state holds values written
+	// via setState() (and created()-seeded state, which uses setState); #derived holds
 	// the latest SUCCESSFUL data() result, REPLACED wholesale on each commit (not
-	// merged). #data is the composed, visible state — { ...#local, ...#model } —
-	// rebuilt by #recompose() on every commit and written straight by setData().
-	// Precedence: a data() commit wins over an EARLIER setData for a key (the model
-	// overlays local); a LATER setData wins over the model value for that key until
-	// the next commit (setData writes #data directly). getData() hands out copies of
+	// merged). #data is the composed, visible state — { ...#state, ...#derived } —
+	// rebuilt by #recompose() on every commit and written straight by setState().
+	// Precedence: a data() commit wins over an EARLIER setState for a key (derived
+	// overlays state); a LATER setState wins over the derived value for that key until
+	// the next commit (setState writes #data directly). getData() hands out copies of
 	// #data, so its identity is internal — but it is mutated in place regardless, so
-	// setData's direct writes and the recompose target stay the one object.
+	// setState's direct writes and the recompose target stay the one object.
 	/** @type {Record<string, any>} */
 	#data = {};
 	/** @type {Record<string, any>} */
-	#local = {};
+	#state = {};
 	/** @type {Record<string, any>} */
-	#model = {};
+	#derived = {};
 	#params = {};
+	/** @type {any} */
 	#props = {};
 	// Route snapshot of the navigation that delivered this view's params (v1.15,
 	// D47) — set only when the router threads it through preload()/refresh(), so
@@ -220,7 +278,39 @@ export class PuzzleView {
 	#enterPending = false;
 	#destroyed = false;
 	#updateScheduled = false;
+	// Read tracking for the automatic data() re-run (D23). While data() runs, the
+	// reads it makes through getData()/getState() land in #recorder (one record
+	// per invocation, the latest in #lastReads). A successful commit keeps that
+	// invocation's record in #dataReads, and a setState() that writes one of those
+	// keys sets #rerunData, so the scheduled flush re-runs data() before it renders.
+	/** @type {ReadRecord | null} */
+	#recorder = null;
+	/** @type {ReadRecord | null} */
+	#lastReads = null;
+	/** @type {ReadRecord | null} */
+	#dataReads = null;
+	#rerunData = false;
+	// Bumped by every render that lands, so a flush can tell whether the data()
+	// re-run it started already painted (a sync data() commits and renders).
+	#renderSeq = 0;
 	#runToken = 0;
+	// share() (D197). #shared is this view's last published share() output — null
+	// until its first run, and forever for a view without share(). #shareRaw is
+	// what share() itself returned, which the stable callback wrappers in
+	// #shareFns call through, so a child always calls the newest callback.
+	// #shareSubs maps each view that read a key of #shared to the keys it read;
+	// #shareFrom is the reverse, the sharers this view read from, so a new run or
+	// destroy() can take this view off their lists.
+	/** @type {Record<string, any> | null} */
+	#shared = null;
+	/** @type {Record<string, any>} */
+	#shareRaw = {};
+	/** @type {Record<string, (...args: any[]) => any> | null} */
+	#shareFns = null;
+	/** @type {Map<PuzzleView, ReadRecord> | null} */
+	#shareSubs = null;
+	/** @type {Set<PuzzleView> | null} */
+	#shareFrom = null;
 	// D161 settle loop: the run token of the refresh currently re-running data()
 	// behind fetches (0 = none), and whether a store change landed during it. A
 	// notification mid-settle folds into that run as one more pass rather than
@@ -313,13 +403,27 @@ export class PuzzleView {
 	 * this.refs[name] with the mounted DOM element and nulls it on unmount. A
 	 * PUBLIC instance field, NOT render data — never composed into #data, never
 	 * returned by getData(), never snapshotted by the dev HMR path (devstate reads
-	 * the local layer via _localState(), which is #local — refs stays out for
+	 * the state layer via getState(), which is #state — refs stays out for
 	 * free). The compiler emits `ref: this.__ref("name")` in a vnode's attrs; the
 	 * ViewManager calls that setter on mount/unmount (see __ref below).
 	 *
 	 * @type {Record<string, Element | null>}
 	 */
 	refs = {};
+
+	/**
+	 * The view whose render tree mounted this one — the owner whose patch holds
+	 * its position, which for slot content is the component that renders the
+	 * slot, not the template that wrote it. Set by the ViewManager before the
+	 * child's first data() run (and by the prerender walks). share() (D197) walks
+	 * it to find sharing ancestors, and a failed mount walks it to mark every
+	 * view above for a re-walk (D170). Null for a root view.
+	 *
+	 * INTERNAL, like `__walk`; declared so every view keeps one hidden class.
+	 *
+	 * @type {PuzzleView | null}
+	 */
+	__parent = null;
 
 	/**
 	 * Per-instance static-subtree cache (D170). The compiler wraps every
@@ -396,37 +500,241 @@ export class PuzzleView {
 	// ---- state ---------------------------------------------------------------
 
 	/**
-	 * The composed component model — the local layer overlaid by data()'s result.
+	 * The composed component model — the state layer overlaid by data()'s result.
 	 * @template [T=any] the caller's view of the model (unchecked, as published)
 	 * @returns {T}
 	 */
 	getData() {
-		return /** @type {T} */ ({ ...this.#data });
+		return /** @type {T} */ (this.#tracked({ ...this.#data }));
 	}
 
 	/**
-	 * Write local UI state and schedule a re-render. Never re-runs data(). Accepts
-	 * (key, value) or an object map. Safe before mount (e.g. in created()) — it just
-	 * seeds state for the first data() run to read back.
+	 * Write local UI state and schedule a re-render. Accepts (key, value) or an
+	 * object map. Safe before mount (e.g. in created()) — it just seeds state for
+	 * the first data() run to read back. Replaces the old setData() (renamed in
+	 * 0.10, D191).
 	 *
-	 * Two-layer state (Change C, SPEC §4): the write targets the LOCAL layer AND the
-	 * visible #data directly, so the value shows immediately and wins over any model
-	 * value for that key until the next data() commit recomposes (a later setData
-	 * beats the model; a data() commit beats an earlier setData).
+	 * When the last committed data() read a written key through getData() or
+	 * getState(), the scheduled render re-runs data() first (D23), so values
+	 * derived from local state stay current with no refresh(). Any number of
+	 * writes before that render share one data() run. A key data() never read
+	 * only re-renders.
+	 *
+	 * Two-layer state (Change C, SPEC §4): the write targets the STATE layer AND the
+	 * visible #data directly, so the value shows immediately and wins over any derived
+	 * value for that key until the next data() commit recomposes (a later setState
+	 * beats the derived value; a data() commit beats an earlier setState).
 	 *
 	 * @param {string | Record<string, any>} key a key, or a map of keys to values
 	 * @param {any} [value] the value for a single key
 	 */
-	setData(key, value) {
+	setState(key, value) {
 		if (this.#destroyed || this.#leaving) return;
-		if (typeof key === 'object' && key !== null) {
-			Object.assign(this.#local, key);
-			Object.assign(this.#data, key);
-		} else {
-			this.#local[/** @type {string} */ (key)] = value;
-			this.#data[/** @type {string} */ (key)] = value;
-		}
+		const patch = typeof key === 'object' && key !== null ? key : { [/** @type {string} */ (key)]: value };
+		Object.assign(this.#state, patch);
+		Object.assign(this.#data, patch);
+		// A write to a key the last committed data() read re-runs data() with the
+		// render (D23). A write made while data() itself is running never does: the
+		// run in progress already sees it, and re-running would loop.
+		const reads = this.#dataReads;
+		if (reads && !this.#recorder && !this.#rerunData)
+			this.#rerunData = reads.all || Object.keys(patch).some((k) => reads.keys.has(k));
 		this.#scheduleRender();
+	}
+
+	/**
+	 * The STATE layer only — what setState() wrote, created()-seeded values
+	 * included — as a fresh shallow copy, without data()'s derived values laid
+	 * over it. getData() is the merged view the template reads; getState() is
+	 * the raw local state. The dev HMR snapshot (constellation/doc/DOC-SPEC.md
+	 * §27, D57) and the DevTools bridge (D100) read it for the same reason: they
+	 * need genuinely-local state (drafts, toggles), not values data() recomputes.
+	 * @template [T=any] the caller's view of the state layer (unchecked)
+	 * @returns {T}
+	 */
+	getState() {
+		return /** @type {T} */ (this.#tracked({ ...this.#state }));
+	}
+
+	/**
+	 * Hand out `copy` as is, or — while this view's data() is running — wrapped so
+	 * every key data() reads off it is recorded (D23). The record closes when its
+	 * run commits, so a proxy data() returned inside its model stops recording
+	 * from then on.
+	 * @param {Record<string, any>} copy
+	 * @returns {Record<string, any>}
+	 */
+	#tracked(copy) {
+		const rec = this.#recorder;
+		return rec ? trackReads(copy, () => rec.open && rec) : copy;
+	}
+
+	/**
+	 * Run one data() invocation with read tracking on — the one place data() is
+	 * called. Only the synchronous part of the call installs the recorder; an async
+	 * data() keeps recording through any getData()/getState() copy it took before
+	 * its first await.
+	 * @param {Record<string, any>} params
+	 * @param {any} props
+	 * @returns {any} the model, or a promise of it
+	 */
+	#runData(params, props) {
+		/** @type {ReadRecord} */
+		const rec = { keys: new Set(), all: false, open: true };
+		this.#lastReads = rec;
+		const outer = this.#recorder;
+		this.#recorder = rec;
+		let out;
+		try {
+			out =
+				typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__
+					? devperfRunData(this, this.#input(params, props))
+					: this.data(this.#input(params, props));
+		} finally {
+			this.#recorder = outer;
+		}
+		if (out && typeof out.then === 'function') this.#noteAsyncShape();
+		return out;
+	}
+
+	// ---- share() (D197) -------------------------------------------------------
+
+	/**
+	 * What sharing ancestors pass down, for a handler: the same object data()
+	 * receives as `shared`, keyed by each sharer's name (Filter → `filter`), the
+	 * nearest ancestor of a name winning. Always an object — empty when no
+	 * ancestor shares. Reading it here records nothing; only a data() or
+	 * share() run that reads a key re-runs when that key changes.
+	 * @returns {Record<string, any>}
+	 */
+	get shared() {
+		return this.#inherited(false);
+	}
+
+	/**
+	 * The one object a data() or share() run receives (D197). Building it starts
+	 * the run's shared-read record over: the sharers this view read last time
+	 * forget it, and the run's own reads sign it up again.
+	 * @param {Record<string, any>} params
+	 * @param {any} props
+	 * @returns {DataInput}
+	 */
+	#input(params, props) {
+		this.#unwatch();
+		return { params, props, shared: this.#inherited(true) };
+	}
+
+	/**
+	 * Group every sharing ancestor's output under its name, nearest first, so the
+	 * nearest ancestor of a name wins. The walk follows the render tree up from
+	 * this view and stops at the first router-mounted view (one with a route
+	 * snapshot): the router loads a layout and its page side by side, so a
+	 * layout's share() reaches the components it renders but never its page.
+	 * With `track`, each sharer's values come wrapped so this view's reads sign
+	 * it up for that sharer's changes.
+	 * @param {boolean} track
+	 * @returns {Record<string, any>}
+	 */
+	#inherited(track) {
+		/** @type {Record<string, any>} */
+		const shared = {};
+		for (let view = this.#route ? null : this.__parent; view; view = view.#route ? null : view.__parent) {
+			if (typeof (/** @type {any} */ (view).share) !== 'function') continue;
+			const key = shareKey(view.constructor);
+			if (!(key in shared)) shared[key] = track ? view.#watched(this) : (view.#shared ?? {});
+		}
+		return shared;
+	}
+
+	/**
+	 * This sharer's current output, wrapped so every key `reader` reads off it is
+	 * recorded on this sharer's subscriber list. A sharer that has not published
+	 * yet hands out an empty object, and the reads still sign the reader up, so
+	 * the first publish reaches it.
+	 * @param {PuzzleView} reader
+	 * @returns {Record<string, any>}
+	 */
+	#watched(reader) {
+		const subs = (this.#shareSubs ??= new Map());
+		return trackReads(this.#shared ?? {}, () => {
+			// a torn-down reader holding an old copy must not sign up again
+			if (reader.#destroyed) return null;
+			let rec = subs.get(reader);
+			if (!rec) {
+				subs.set(reader, (rec = { keys: new Set(), all: false, open: true }));
+				(reader.#shareFrom ??= new Set()).add(this);
+			}
+			return rec;
+		});
+	}
+
+	/** Take this view off the subscriber list of every sharer it read from. */
+	#unwatch() {
+		if (!this.#shareFrom) return;
+		for (const sharer of this.#shareFrom) sharer.#shareSubs?.delete(this);
+		this.#shareFrom = null;
+	}
+
+	/**
+	 * Run share() for the model that just committed, publish its output, and
+	 * return every descendant that read a key whose value changed, with the read
+	 * record it holds now, for #rerunReaders() to re-run once the render has patched
+	 * (D197). share() runs under the committed data() run's read record, so a
+	 * later setState() of a key share() read re-runs data() and share()
+	 * together (D23). A function value is published as a stable wrapper that
+	 * calls the newest one, so a callback never goes stale in a child and a new
+	 * closure on every run never counts as a change.
+	 * @returns {[PuzzleView, ReadRecord][] | undefined}
+	 */
+	#publish() {
+		const rec = this.#dataReads;
+		const outer = this.#recorder;
+		if (rec) rec.open = true;
+		this.#recorder = rec;
+		/** @type {any} */
+		let raw;
+		try {
+			// no #input(): that would wipe the shared reads the data() run just made
+			raw = /** @type {any} */ (this).share({ params: this.#params, props: this.#props, shared: this.#inherited(true) });
+		} finally {
+			this.#recorder = outer;
+			if (rec) rec.open = false;
+		}
+		this.#shareRaw = raw = raw || {};
+		const fns = (this.#shareFns ??= {});
+		const prev = this.#shared ?? {};
+		/** @type {Record<string, any>} */
+		const out = {};
+		for (const key of Object.keys(raw)) {
+			const value = raw[key];
+			out[key] = typeof value === 'function' ? (fns[key] ??= (...args) => this.#shareRaw[key](...args)) : value;
+		}
+		this.#shared = out;
+		const subs = this.#shareSubs;
+		if (!subs?.size) return undefined;
+		/** @type {Set<string>} */
+		const changed = new Set();
+		for (const key of new Set([...Object.keys(prev), ...Object.keys(out)])) {
+			if (!Object.is(prev[key], out[key])) changed.add(key);
+		}
+		if (!changed.size) return undefined;
+		return [...subs].filter(([, reads]) => reads.all || [...reads.keys].some((key) => changed.has(key)));
+	}
+
+	/**
+	 * Re-run the readers #publish() returned that still hold the record they held
+	 * then (D197), and empty the list, so the call at the end of #commit re-runs
+	 * nobody the render already did. One that left the list since (destroyed) or
+	 * holds a new record (the patch re-ran it with new props, or an earlier
+	 * reader's re-run did) is skipped.
+	 * @param {[PuzzleView, ReadRecord][] | undefined} readers
+	 */
+	#rerunReaders(readers) {
+		if (!readers) return;
+		for (const [view, reads] of readers.splice(0)) {
+			if (this.#shareSubs?.get(view) === reads)
+				view.#refreshContained('[puzzle] data() failed after a shared value changed:', 'refresh');
+		}
 	}
 
 	/**
@@ -440,26 +748,14 @@ export class PuzzleView {
 	}
 
 	/**
-	 * The LOCAL layer only (setData + created()-seeded state), as a fresh shallow
-	 * copy. INTERNAL — not public API: the dev HMR snapshot (constellation/doc/DOC-SPEC.md
-	 * §27, D57; Change D) restores only genuinely-local state (drafts, toggles) and
-	 * lets data() recompute store-derived values against the transplanted store, so
-	 * it must read this layer, not the merged getData(). Underscore-prefixed by the
-	 * codebase's internal convention (like _store/_type), never spelled in a template.
-	 */
-	_localState() {
-		return { ...this.#local };
-	}
-
-	/**
-	 * The MODEL layer only (the last data() commit), as a fresh shallow copy.
+	 * The DERIVED layer only (the last data() commit), as a fresh shallow copy.
 	 * INTERNAL — not public API: the DevTools bridge (constellation/doc/DOC-SPEC.md
-	 * §27, D100) shows the two state layers SEPARATELY, so it needs this alongside
-	 * _localState() rather than the merged getData(). Same underscore-prefixed
+	 * §27, D100) shows the two layers SEPARATELY, so it needs this alongside
+	 * getState() rather than the merged getData(). Same underscore-prefixed
 	 * internal convention, never spelled in a template.
 	 */
-	_modelState() {
-		return { ...this.#model };
+	_derived() {
+		return { ...this.#derived };
 	}
 
 	/**
@@ -562,16 +858,17 @@ export class PuzzleView {
 	}
 
 	/**
-	 * Snapshot the render revisions of the record props just applied
+	 * Snapshot the render revisions of the record props a data() run is about to read
 	 * (D170, record render revision).
 	 *
 	 * `propsEqual` compares a record prop against THIS snapshot rather than
 	 * against the old prop object, because a record mutates in place: after an
 	 * update both sides hold the same object with the same (already advanced)
-	 * revision, and only a value stored at the time props were last applied can
-	 * say whether this view has seen it. Written at mount and at every
-	 * applyParentUpdate that carries props — the two moments a view's props become
-	 * current — and replaced wholesale, never merged.
+	 * revision, and only a value stored as the last refresh began can say
+	 * whether this view has seen it. Written as every refresh begins, before
+	 * data() runs (#refreshInner) — whichever wake-up came first, a parent's push
+	 * or the view's own notification — so it holds what the next committed
+	 * data() sees, never more; replaced wholesale, never merged.
 	 *
 	 * Null when no prop carries a revision, which is the overwhelmingly common
 	 * case and allocates nothing; `propsEqual` reads it with `?.`.
@@ -598,7 +895,7 @@ export class PuzzleView {
 	 * `'@input:bind': this.__bind(null, 'draft', 'v')`.
 	 *
 	 * - `target` is null for a bare identifier bind (local component state) or the
-	 *   resolved ROOT object of a one-member path (`todo.completed` → the loop
+	 *   resolved object that owns the path's last step (`todo.completed` → the loop
 	 *   variable, `profile.hue` → the data() value). The write arm is chosen from
 	 *   the target at write time, not here — a data() commit can swap a plain
 	 *   object for a record between renders.
@@ -612,16 +909,16 @@ export class PuzzleView {
 	 * INTERNAL — underscore-prefixed like the rest of the compiler-facing surface;
 	 * never spelled in a template. Not part of the public typed API.
 	 *
-	 * @param {any} target null, or the bound path's resolved root (any app value)
+	 * @param {any} target null, or the object that owns the bound field (any app value)
 	 * @param {string} key
 	 * @param {'v' | 'vn' | 'c'} spec
 	 * @returns {BindHandler}
 	 */
 	__bind(target, key, spec) {
-		// A member path whose ROOT resolves to a primitive is not a writable target
+		// A member path whose owner resolves to a primitive is not a writable target
 		// — `value={ title.length }` over a string `title` is the classic case. The
 		// compiler cannot see runtime types, so it emits the bind for any qualifying
-		// one-member path; the primitive-rooted ones degrade here to the one-way
+		// member path; the primitive-owned ones degrade here to the one-way
 		// display binding they always were, instead of throwing at render (a
 		// primitive is not a legal WeakMap key). No memo entry: INERT_BIND is a
 		// single shared function, so the identity is stable without one.
@@ -701,10 +998,11 @@ export class PuzzleView {
 	/**
 	 * Apply one bind write. Three arms, decided by the target:
 	 *
-	 * 1. null → local component state. refresh(), not a bare setData: a bound
-	 *    filter field feeding a data()-derived list must narrow it as you type, and
-	 *    setData never re-runs data(). #renderNow disarms the frame setData armed,
-	 *    so this still costs exactly one render.
+	 * 1. null → local component state. setState then refresh(): a bound filter
+	 *    field feeding a data()-derived list narrows it within the same input
+	 *    event, rather than on the frame setState's own re-run (D23) would use.
+	 *    The refresh clears that pending re-run and #renderNow disarms the frame
+	 *    setState armed, so this still costs one data() run and one render.
 	 * 2. a PuzzleModel record → its validated update(). Duck-typed on `update` and
 	 *    a string `_type` TOGETHER (this file must not import model.js); a plain
 	 *    object that merely owns an update() method is not a record. update()
@@ -719,7 +1017,7 @@ export class PuzzleView {
 	 */
 	#bindWrite(target, key, value, spec) {
 		if (target == null) {
-			this.setData(key, value);
+			this.setState(key, value);
 			// Arm the clobber diagnostic BEFORE the refresh: the commit this refresh
 			// drives is the one that can revert the write, so it is the commit that
 			// must see the pending value. A Map keyed by field keeps only the LATEST
@@ -737,13 +1035,7 @@ export class PuzzleView {
 				// The store's batched flush drives the re-render and the persistence write.
 				target.update({ [key]: value });
 			} catch (err) {
-				reportError(
-					this.ctx,
-					err,
-					{ phase: 'bind', view: this, route: this.route },
-					'[puzzle] bound write rejected:',
-					err
-				);
+				this.#report('bind', '[puzzle] bound write rejected:', err);
 			}
 		} else {
 			// Contain the assignment exactly like the record arm above. The write target
@@ -756,13 +1048,7 @@ export class PuzzleView {
 			try {
 				target[key] = value;
 			} catch (err) {
-				reportError(
-					this.ctx,
-					err,
-					{ phase: 'bind', view: this, route: this.route },
-					'[puzzle] bound write rejected:',
-					err
-				);
+				this.#report('bind', '[puzzle] bound write rejected:', err);
 				// Stop here rather than falling through. Nothing was written, so the
 				// clobber diagnostic below has no write to watch for and the refresh
 				// would re-render byte-identical state whose only visible effect is
@@ -793,11 +1079,6 @@ export class PuzzleView {
 		return !!this.#errorView;
 	}
 
-	/** Preserve the manager's exact position before destroying this view. */
-	#plantFailurePlaceholder() {
-		return this.#vm?.plantFailurePlaceholder();
-	}
-
 	/** Tear down a replacement when its parent/router removes the position. */
 	#disposeFailurePosition() {
 		this.#errorView?.destroy();
@@ -822,7 +1103,7 @@ export class PuzzleView {
 		if (this.#destroyed && !this.#errorView) return false;
 		if (this.#errorView) return true;
 
-		const placeholder = this.#plantFailurePlaceholder();
+		const placeholder = this.#vm?.plantFailurePlaceholder();
 		this.ctx.router?.__failedView?.(this);
 		this.destroy();
 		if (placeholder) this.__failedPlaceholder = placeholder;
@@ -907,7 +1188,7 @@ export class PuzzleView {
 			// and its closure stays spent. The owner's re-render refills it.
 			this.#errorView = null;
 			face.destroy();
-			const owner = this.__retryParent;
+			const owner = this.__parent;
 			// A failed child under a REUSED element vnode is unreachable by an
 			// ordinary refresh (D170): a cached list row, or slot content the owner
 			// (a wrapper) splices back in by reference, is the same object on both
@@ -998,7 +1279,7 @@ export class PuzzleView {
 	/**
 	 * The DOM node occupying this component's position (null before mount).
 	 * While an async data() is in flight this is the anchor placeholder, so
-	 * a parent's sibling insertion refs stay valid (constellation/doc/DOC-APP-ANATOMY.md §4).
+	 * a parent's sibling insertion refs stay valid (constellation/component/COMPONENT-VIEW-MANAGER.md, "Reconciliation").
 	 *
 	 * @returns {Element | Comment | null}
 	 */
@@ -1090,7 +1371,7 @@ export class PuzzleView {
 	 * → render → mounted (constellation/doc/DOC-VIEW-LIFECYCLE.md §3).
 	 *
 	 * A parent's ViewManager also calls this to mount a child component
-	 * (constellation/doc/DOC-APP-ANATOMY.md §4): `children` is the slot content captured at the
+	 * (constellation/component/COMPONENT-VIEW-MANAGER.md, "Components"): `children` is the slot content captured at the
 	 * call site (rendered at the child's `<Children/>`) and `ref` is the DOM node
 	 * to insert before. The anchor placeholder reserves the position
 	 * synchronously so an async data() does not strand the parent's insertion
@@ -1120,19 +1401,17 @@ export class PuzzleView {
 			this.#params = params;
 			this.#props = props;
 		}
-		// Record-prop revisions as of this mount (D170, record render revision).
-		// Read from the COMMITTED props rather than the argument so a preloaded
-		// view — whose props were set in preload(), not here — is snapshotted too;
-		// without an entry a record prop would compare unequal on every later
-		// patch and re-run the child's data() for nothing.
-		this.#snapshotPropRevs(this.#props);
 		this.#children = children;
 		this.#vm.anchorAt(ref);
 
-		// preloaded: created() + data() already ran in preload() (constellation/doc/DOC-APP-ANATOMY.md
-		// §5) — just render the resolved model into the reserved position. This keeps
+		// preloaded: created() + data() already ran in preload() (constellation/doc/DOC-VIEW-LIFECYCLE.md
+		// §4) — just render the resolved model into the reserved position. This keeps
 		// the mount synchronous so the Router's COMMIT stays atomic (D19).
 		if (preloaded) {
+			// A preload that already failed paints nothing: its position goes straight
+			// to the error view (or its placeholder), and the render and mounted()
+			// below skip the destroyed view.
+			this.#flushPendingFailure();
 			// Only a prerender takeover ever stamps __takeoverTree, so a bundle built
 			// without the takeover path folds this to the bare `#renderNow()` it was
 			// before the feature existed — no hasOwnProperty probe and, more to the
@@ -1156,7 +1435,7 @@ export class PuzzleView {
 				// reserved position NOW and resolve the mount — the real render
 				// patches over it when data() commits. The mount promise no longer
 				// waits on data, so a data() rejection surfaces here (logged), not to
-				// the caller; the skeleton stays up.
+				// the caller; §60 replaces the skeleton.
 				pending.catch((err) =>
 					this.#handleViewFailure('[puzzle] data() failed behind a skeleton:', err, 'mount')
 				);
@@ -1177,14 +1456,12 @@ export class PuzzleView {
 				// refresh committed normally, #loaded is already true → complete inline.
 				if (!this.#loaded) {
 					this.#pendingMountHook = true;
-					this.#flushPendingFailure();
 					return this;
 				}
 			}
 		}
 
 		this.#completeMount();
-		this.#flushPendingFailure();
 		return this;
 	}
 
@@ -1214,7 +1491,7 @@ export class PuzzleView {
 		// component removal is asynchronous and this can be reached after the owner
 		// let go: an async data() resolving mid-leave would otherwise fire mounted()
 		// on a view already on its way out (re-subscribing, starting timers, taking
-		// focus). Same guard the setData/refresh/applyParentUpdate/onStoreChange
+		// focus). Same guard the setState/refresh/applyParentUpdate/onStoreChange
 		// entry points carry.
 		if (this.#mounted || this.#destroyed || this.#leaving) return;
 		this.#mounted = true;
@@ -1246,7 +1523,7 @@ export class PuzzleView {
 	}
 
 	/**
-	 * Parent re-render hook (constellation/doc/DOC-APP-ANATOMY.md §4). The ViewManager reuses
+	 * Parent re-render hook (constellation/component/COMPONENT-VIEW-MANAGER.md, "Components"). The ViewManager reuses
 	 * this instance for a matching component vnode and forwards the fresh slot
 	 * content plus changed props: props re-run data() (prop reactivity); a slot
 	 * content swap alone re-renders without re-running data().
@@ -1260,13 +1537,6 @@ export class PuzzleView {
 			if (this.#vm) this.#vm.slotChildren = children;
 		}
 		if (props !== undefined) {
-			// The props the patcher just handed down are now this view's current
-			// props, so re-stamp their record revisions (D170, record render
-			// revision) BEFORE the refresh that will render them. Doing it here
-			// rather than inside #refreshInner keeps it to the one path where props
-			// are APPLIED — a router refresh carrying params only must not rewrite
-			// a snapshot it knows nothing about.
-			this.#snapshotPropRevs(props);
 			// Fire-and-forget: a data() failure is logged rather than escaping into
 			// the parent's patch path (mount's skeleton-path style). #refreshContained
 			// takes both arms — a rejecting async data() and a sync throw.
@@ -1295,8 +1565,8 @@ export class PuzzleView {
 
 	/**
 	 * Latch `_dataAsyncShape` the first time a data() invocation comes back thenable
-	 * (D161). Called from every eval wrapper, so the flag engages whichever entry
-	 * point happened to run first. In dev it also steers a .then-style data() at the
+	 * (D161). Called from #runData, so the flag engages whichever entry point
+	 * happened to run first. In dev it also steers a .then-style data() at the
 	 * declaration that would have made it serialize from the start; a declared-async
 	 * data() latches the flag silently, since it already defers up front.
 	 */
@@ -1352,54 +1622,25 @@ export class PuzzleView {
 				return;
 		}
 		const token = ++this.#runToken;
-		// Flush-sequence dedupe (D170). A child that both receives a
-		// record prop and queries that record gets TWO wake-ups from one store
-		// flush: the parent's applyParentUpdate during delivery, and its own
-		// onStoreChange later in the same delivery loop. Capture the sequence the
-		// store is delivering — non-zero only INSIDE that loop — before data() runs;
-		// #commit stamps it onto `_settleMark`, and the second wake-up then takes
-		// onStoreChange's existing `seq <= _settleMark` early return. The mutations
-		// in that batch already landed in the store before delivery started, so the
-		// model this pass commits reflects every one of them. The D161 settle loop
-		// keeps its own (higher, _notifySeq-based) stamping; #commit takes the max.
-		const mark = this.ctx.store?._flushSeq || 0;
-		const run = () => {
-			const out =
-				typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__
-					? devperfRunData(this, this.#params, this.#props)
-					: this.data(this.#params, this.#props);
-			if (out && typeof out.then === 'function') this.#noteAsyncShape();
-			return out;
-		};
-		const store = this.ctx.store;
-		const expectsAsync = this._dataAsyncShape || this.data.constructor.name === 'AsyncFunction';
-		let result;
-		if (!store) {
-			result = run();
-		} else if (!store._a || !this._settleData) {
-			// No adapter capability on THIS app's store: no query can fault, so this is
-			// the single-evaluation path it has always been, and without the capability
-			// anywhere in the realm the settle loop is not even in the bundle (D157
-			// boundary — the capability installs it).
-			//
-			// The seam is the STORE's capability, not `_settleData`'s presence.
-			// install() copies the methods onto the shared prototypes once per realm
-			// and never removes them (concurrent apps depend on that), so an app
-			// mounted after an adapter app would otherwise inherit the settle path and
-			// fault reads it deliberately opted out of.
-			result = store.withTracking(this, run, expectsAsync);
-		} else {
-			// The loop owns the settle window it opens under `token`, so this stays one
-			// call and the commit tail below is the same one it always was.
-			result = this._settleData(
-				store,
-				run,
-				expectsAsync,
-				() => /** @type {boolean} */ (this.#destroyed || this.#leaving || token !== this.#runToken),
-				null,
-				token
-			);
-		}
+		// This run reads the current state, so a pending setState()-driven re-run is
+		// satisfied by it (an explicit refresh() right after setState() runs data()
+		// once, not twice).
+		this.#rerunData = false;
+		// Notification dedupe (D161, D170). Every store mutation lands before its
+		// _notify, so each sequence already queued as data() starts is baked into
+		// the model this pass commits; #commit stamps it onto `_settleMark` and that
+		// batch's later delivery takes onStoreChange's `seq <= _settleMark` early
+		// return. Read before data() runs, so it can only under-stamp: a change
+		// queued later is delivered, never dropped.
+		const mark = this.ctx.store?._notifySeq || 0;
+		this.#snapshotPropRevs(this.#props);
+		// The settle loop owns the window it opens under `token`.
+		const result = this.#evaluate(
+			() => this.#runData(this.#params, this.#props),
+			() => /** @type {boolean} */ (this.#destroyed || this.#leaving || token !== this.#runToken),
+			null,
+			token
+		);
 
 		if (result && typeof result.then === 'function') {
 			return result.then(
@@ -1411,6 +1652,34 @@ export class PuzzleView {
 			);
 		}
 		this.#commit(token, result, mark);
+	}
+
+	/**
+	 * Evaluate `run` (one #runData call) through this view's store. With no adapter
+	 * capability on THIS app's store no query can fault, so it is one tracked
+	 * evaluation, and without the capability anywhere in the realm the settle loop
+	 * is not even in the bundle (D157 boundary — the capability installs it).
+	 *
+	 * The seam is the STORE's capability, not `_settleData`'s presence. install()
+	 * copies the methods onto the shared prototypes once per realm and never removes
+	 * them (concurrent apps depend on that), so an app mounted after an adapter app
+	 * would otherwise inherit the settle path and fault reads it deliberately opted
+	 * out of.
+	 *
+	 * @param {() => any} run
+	 * @param {() => boolean} isStale
+	 * @param {any} [pending] prepareRefresh's held-eval channel (D146)
+	 * @param {number} [token] the refresh run that owns the settle window
+	 * @returns {any} the model, or a promise of it
+	 */
+	#evaluate(run, isStale, pending = null, token) {
+		const store = this.ctx.store;
+		const expectsAsync = this._dataAsyncShape || this.data.constructor.name === 'AsyncFunction';
+		return !store
+			? run()
+			: store._a && this._settleData
+				? this._settleData(store, run, expectsAsync, isStale, pending, token)
+				: store.withTracking(this, run, expectsAsync, pending);
 	}
 
 	/**
@@ -1525,16 +1794,12 @@ export class PuzzleView {
 			const mine = this.#beginEvalRun(scope);
 			let out;
 			try {
-				out =
-					typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__
-						? devperfRunData(this, scope.params, scope.props)
-						: this.data(scope.params, scope.props);
+				out = this.#runData(scope.params, scope.props);
 			} catch (err) {
 				this.#endEvalRun(mine);
 				throw err;
 			}
 			if (out && typeof out.then === 'function') {
-				this.#noteAsyncShape();
 				return out.then(
 					(/** @type {any} */ model) => {
 						this.#endEvalRun(mine);
@@ -1550,25 +1815,13 @@ export class PuzzleView {
 			return out;
 		};
 
-		const store = this.ctx.store;
-		const expectsAsync = this._dataAsyncShape || this.data.constructor.name === 'AsyncFunction';
+		const mark = this.ctx.store?._notifySeq || 0; // see #refreshInner
 		// D161: a prepared run settles through the same loop. Intermediate passes are
 		// discarded as they are anywhere else; the FINAL pass's reconcile is parked on
 		// `pending`, so commit()/discard() below are unchanged. Store notifications
-		// are NOT coalesced here — while the gate is open the ancestor still shows its
-		// committed route and must keep taking live updates (D146). Gated on the
-		// STORE's capability for the same realm-leak reason as #refreshInner above.
-		const result = !store
-			? run()
-			: store._a && this._settleData
-				? this._settleData(
-						store,
-						run,
-						expectsAsync,
-						() => /** @type {boolean} */ (this.#destroyed || this.#leaving),
-						pending
-					)
-				: store.withTracking(this, run, expectsAsync, pending);
+		// are NOT coalesced here (no token) — while the gate is open the ancestor still
+		// shows its committed route and must keep taking live updates (D146).
+		const result = this.#evaluate(run, () => /** @type {boolean} */ (this.#destroyed || this.#leaving), pending);
 
 		/** @type {any} the prepared data() result */
 		let model;
@@ -1590,10 +1843,10 @@ export class PuzzleView {
 				// Torn down between prepare and commit: unwind the prepared subscriptions
 				// and touch nothing else (destroy() already dropped this subscriber).
 				if (this.#destroyed || this.#leaving) {
-					pending.reconcile?.(false);
+					pending.reconcile(false);
 					return;
 				}
-				pending.reconcile?.(true);
+				pending.reconcile(true);
 				this.#params = scope.params;
 				this.#props = scope.props;
 				this.#route = scope.route;
@@ -1634,7 +1887,7 @@ export class PuzzleView {
 					// containment broken together). Every other refresh() caller funnels;
 					// so does this one.
 					try {
-						this.#commit(++this.#runToken, model);
+						this.#commit(++this.#runToken, model, mark);
 					} catch (err) {
 						this.#handleViewFailure(
 							'[puzzle] render failed during a prepared commit:',
@@ -1650,7 +1903,7 @@ export class PuzzleView {
 				// Subscription-only unwind: drops just this run's own additions. No
 				// render, no lifecycle hook, no error-boundary/onStoreChange side effect —
 				// a discarded prepare must be invisible to the app (D145).
-				pending.reconcile?.(false);
+				pending.reconcile(false);
 			},
 		};
 	}
@@ -1714,6 +1967,17 @@ export class PuzzleView {
 	}
 
 	/**
+	 * Report `err` into the D145 funnel as this view's, under `phase`.
+	 * @param {ErrorSite['phase']} phase
+	 * @param {string} message the console prefix
+	 * @param {unknown} err
+	 * @returns {ErrorInfo}
+	 */
+	#report(phase, message, err) {
+		return reportError(this.ctx, err, { phase, view: this, route: this.route }, message, err);
+	}
+
+	/**
 	 * Report a view failure into the D145 funnel. Normally logging is enough, but
 	 * an anchor-race mount whose superseding first render failed can never reach
 	 * #completeMount(). Recover through the same instance-owned placeholder
@@ -1727,15 +1991,9 @@ export class PuzzleView {
 	 * @param {ErrorSite['phase']} phase
 	 */
 	#handleViewFailure(message, err, phase) {
-		const info = reportError(
-			this.ctx,
-			err,
-			{ phase: this.__errorViewFailed ? 'error-view' : phase, view: this, route: this.route },
-			message,
-			err
-		);
+		const info = this.#report(this.__errorViewFailed ? 'error-view' : phase, message, err);
 		if (this.__errorViewFailed) {
-			const marker = this.#plantFailurePlaceholder();
+			const marker = this.#vm?.plantFailurePlaceholder();
 			this.__errorViewFailed();
 			marker?.remove();
 			return;
@@ -1780,6 +2038,9 @@ export class PuzzleView {
 		this.#currentAnimation?.cancel();
 		this.#currentAnimation = null;
 		this.ctx.store?.unsubscribe(this);
+		// share() (D197): leave every sharer's list, and drop this view's own
+		this.#unwatch();
+		this.#shareSubs = null;
 		this.#vm?.clear();
 		// A view that never mounted (no outlet ever placed it) still owns the routed
 		// levels below it.
@@ -1798,27 +2059,22 @@ export class PuzzleView {
 			// D146: user code, fenced to committed params/route.
 			this.#withCommittedScope(() => this.destroyed());
 		} catch (err) {
-			reportError(
-				this.ctx,
-				err,
-				{ phase: 'unmount', view: this, route: this.route },
-				'[puzzle] destroyed hook error:',
-				err
-			);
+			this.#report('unmount', '[puzzle] destroyed hook error:', err);
 		}
 	}
 
 	// ---- hooks & overridables (SPEC §4 class contract) ---------------------------
 
 	/**
-	 * Component model. Compiled components and views override this.
+	 * Component model; defaults to the props, so a template reads `{ tone }`.
+	 * Takes one object (D197) — destructure what the view needs:
+	 * `data({ params, props, shared })`.
 	 *
-	 * @param {Record<string, any>} params
-	 * @param {Record<string, any>} props
+	 * @param {DataInput} input
 	 * @returns {any} the model object (or a promise of it)
 	 */
-	data(params, props) {
-		return {};
+	data({ props }) {
+		return props;
 	}
 
 	/**
@@ -2131,13 +2387,7 @@ export class PuzzleView {
 					try {
 						this.viewWillShow();
 					} catch (err) {
-						reportError(
-							this.ctx,
-							err,
-							{ phase: 'enter', view: this, route: this.route },
-							'[puzzle] enter hook failed during a visible-trigger reveal:',
-							err
-						);
+						this.#report('enter', '[puzzle] enter hook failed during a visible-trigger reveal:', err);
 					}
 					handle.play();
 				// handle.finished NEVER rejects — playAnimation normalises WAAPI's
@@ -2152,13 +2402,7 @@ export class PuzzleView {
 							try {
 								this.viewDidShow(); // skipped entirely if destroyed mid-enter
 							} catch (err) {
-								reportError(
-									this.ctx,
-									err,
-									{ phase: 'enter', view: this, route: this.route },
-									'[puzzle] enter hook failed during a visible-trigger reveal:',
-									err
-								);
+								this.#report('enter', '[puzzle] enter hook failed during a visible-trigger reveal:', err);
 							}
 						}
 					this.#settleEnter();
@@ -2240,77 +2484,41 @@ export class PuzzleView {
 		// Captured before #leaving is armed: #completeMount refuses to run on a
 		// leaving view, so this can never flip underneath the task below.
 		const shown = this.#mounted;
-		if (this.#outTask) {
-			// A restored view leaving for real. The out sequence is spent, so the
-			// animation must not replay — but D136's leave-inertness rule is about the
-			// LEAVE, not about the animation: re-arm #leaving and drop the subscription
-			// this view re-took during recovery, or it stays reactive on its way out.
-			//
-			// The HOOKS are not spent with it. viewWillHide/viewDidHide are lifecycle,
-			// not animation callbacks (D28), so a genuine departure fires them in order
-			// with zero-duration semantics — exactly the treatment a view declaring the
-			// hooks and no animation already gets. Without this, the only leave the user
-			// ever really made fired neither hook and went straight to destroyed().
-			// #outTask keeps naming the spent OUT so a third leave still skips the
-			// animation; #leaving names this interval and carries the hook bracket.
-			this.ctx.store?.unsubscribe(this);
-			let resolveLeaving;
-			let rejectLeaving;
-			this.#leaving = new Promise((resolve, reject) => {
-				resolveLeaving = resolve;
-				rejectLeaving = reject;
-			});
-			// An async task, not a bare call: a throwing user hook must REJECT the
-			// returned promise the way the full path does, never throw synchronously
-			// out of playOut() — #startOverlapLeave passes this straight into a
-			// Promise.all(), where a sync throw would escape its .catch entirely.
-			const spentTask = (async () => {
-				if (this.#destroyed || !shown) return;
-				this.viewWillHide();
-				await this.#runAnimation(undefined);
-				if (this.#destroyed || !this.#leaving) return;
-				this.viewDidHide();
-			})();
-			spentTask.then(resolveLeaving, rejectLeaving);
-			return this.#leaving;
-		}
+		// A restored view leaving for real finds its out sequence spent: the
+		// animation must not replay, but D136's leave-inertness and the D28 hide
+		// bracket still apply. #outTask keeps naming the spent OUT so a third leave
+		// still skips the animation; #leaving names this interval.
+		const spent = this.#outTask !== null;
 		let resolveLeaving;
 		let rejectLeaving;
 		this.#leaving = new Promise((resolve, reject) => {
 			resolveLeaving = resolve;
 			rejectLeaving = reject;
 		});
-		this.#outTask = this.#leaving;
+		if (!spent) this.#outTask = this.#leaving;
 		// Leaving views become inert immediately. Store.flush() snapshots its
 		// subscribers, so the method guards cover an already-snapshotted delivery;
 		// unsubscribing here prevents every later one. destroy() repeats this safely.
 		this.ctx.store?.unsubscribe(this);
-		// A new leave replaces any retained, finished out effect from an earlier
-		// run instead of accumulating another fill on the same root.
-		this._cancelOutAnimation();
-		const leavingTask = (async () => {
+		// A new leave replaces any retained, finished out effect from an earlier run.
+		if (!spent) this._cancelOutAnimation();
+		// An async task, not a bare call: a throwing user hook must REJECT the
+		// returned promise, never throw synchronously out of playOut() —
+		// #startOverlapLeave passes it straight into a Promise.all().
+		(async () => {
 			if (this.#destroyed) return;
-			// A held visible-trigger enter (D73) on this element must be unwound before
-			// the out animation runs on the same element — cancel the hold, proceed.
-			this.#abortEnter();
-			// …and #abortEnter only covers a VISIBLE-trigger enter. A mount-trigger enter
-			// still running is a live animation filling this same element (fill: 'both'),
-			// so the out spec would run CONCURRENTLY with it and #currentAnimation would
-			// simply be overwritten — the SPEC §12 one-animator rule. Cancel whatever
-			// still owns the element before the leave starts. That resolves the enter's
-			// finished promise (animate.js normalises WAAPI's cancel-time AbortError), so
-			// the awaiting playIn() resumes; its viewDidShow is suppressed by the #leaving
-			// check there.
-			this.#currentAnimation?.cancel();
-			this.#currentAnimation = null;
-			// Never shown: no hide bracket and no out animation (see the doc comment
-			// above). The view is already inert and unsubscribed; the caller's
-			// destroy() follows immediately.
+			if (!spent) {
+				// Unwind a held visible-trigger enter (D73), then cancel a still-running
+				// mount-trigger enter: it fills this same element, and the SPEC §12
+				// one-animator rule forbids running the out spec concurrently with it.
+				this.#abortEnter();
+				this.#currentAnimation?.cancel();
+				this.#currentAnimation = null;
+			}
+			// Never shown: no hide bracket and no out animation (see the doc comment).
 			if (!shown) return;
-			// A `trigger`/`triggerOffset`/`triggerAnchor` on the OUT spec is meaningless
-			// (leave is never scroll-gated) — warn once and ignore it; the leave path is
-			// unchanged (D73).
-			const out = this.animations?.out;
+			// Leave is never scroll-gated: an out-spec trigger is warned and ignored (D73).
+			const out = spent ? undefined : this.animations?.out;
 			if (
 				(typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) &&
 				out &&
@@ -2321,17 +2529,11 @@ export class PuzzleView {
 			}
 			this.viewWillHide();
 			await this.#runAnimation(out, { retainOut: true });
-			// Interrupted by destroy() — order preserved by it — or by
-			// _restoreFromLeaving(), which cancels the out animation and so RESOLVES the
-			// await above. A cleared #leaving means this view is back on screen, live and
-			// re-subscribed: firing its closing hook there would announce a departure
-			// that did not happen. The restore fires the SHOW bracket instead, and the
-			// eventual real leave re-arms #leaving and fires the full hide bracket
-			// through the spent-#outTask branch above.
+			// Interrupted by destroy(), or by _restoreFromLeaving(): a cleared #leaving
+			// means this view is back on screen, so its closing hook must not fire.
 			if (this.#destroyed || !this.#leaving) return;
 			this.viewDidHide();
-		})();
-		leavingTask.then(resolveLeaving, rejectLeaving);
+		})().then(resolveLeaving, rejectLeaving);
 		return this.#leaving;
 	}
 
@@ -2398,13 +2600,7 @@ export class PuzzleView {
 		try {
 			hook();
 		} catch (err) {
-			reportError(
-				this.ctx,
-				err,
-				{ phase: 'enter', view: this, route: this.route },
-				'[puzzle] show hook failed while restoring a stalled outgoing view:',
-				err
-			);
+			this.#report('enter', '[puzzle] show hook failed while restoring a stalled outgoing view:', err);
 		}
 	}
 
@@ -2430,13 +2626,7 @@ export class PuzzleView {
 			// leave-hook guard, router.js #startOverlapLeave). The destroyed-mid-playOut
 			// interrupt path resolves (never rejects), so its early-return / did-hook-skip
 			// semantics are untouched — only the throw path lands here.
-			reportError(
-				this.ctx,
-				err,
-				{ phase: 'leave', view: this, route: this.route },
-				'[puzzle] leave hook failed during teardown:',
-				err
-			);
+			this.#report('leave', '[puzzle] leave hook failed during teardown:', err);
 		}
 		this.destroy();
 	}
@@ -2466,30 +2656,37 @@ export class PuzzleView {
 	/**
 	 * @param {number} token the run token the result belongs to
 	 * @param {any} model the data() result
-	 * @param {number} [mark] the store flush sequence this run evaluated under
+	 * @param {number} [mark] the store's `_notifySeq` as this run's data() began
 	 */
 	#commit(token, model, mark = 0) {
 		// superseded, torn down, or LEAVING — see #completeMount for why removal is
 		// now asynchronous for any view declaring a hide hook (D136 §3).
 		if (token !== this.#runToken || this.#destroyed || this.#leaving) return;
-		// Flush-sequence stamp (D170). This run evaluated data() while the
-		// store was delivering the batch ending at `mark`, and it is committing, so
-		// every notification in that batch is already on screen. MAX, never plain
-		// assignment: the D161 settle loop has already stamped its own (higher)
-		// _notifySeq-based mark for an adapter app's settled pass, and a prepared
-		// D146 commit passes no mark at all — neither may be walked backwards.
+		// Notification stamp (see #refreshInner). MAX, never plain assignment: the
+		// D161 settle loop may already have stamped its committing pass's (higher)
+		// mark, and that must not be walked backwards.
 		if (mark > this._settleMark) this._settleMark = mark;
+		// The committing run's reads become the keys setState() watches (D23). The
+		// latest invocation is the committing one: the settle loop's last pass, or
+		// the prepare this commit belongs to. Closing it stops any proxy data()
+		// handed back inside its model from recording later reads.
+		if (this.#lastReads) {
+			this.#lastReads.open = false;
+			this.#dataReads = this.#lastReads;
+		}
 		// Two-layer state (Change C, SPEC §4). A successful data() result REPLACES the
-		// model layer wholesale — keys an earlier run returned but this one omits
-		// disappear (unless the local layer still holds them) — then #recompose()
-		// rebuilds the visible #data as { ...#local, ...#model }. A non-object result
+		// derived layer wholesale — keys an earlier run returned but this one omits
+		// disappear (unless the state layer still holds them) — then #recompose()
+		// rebuilds the visible #data as { ...#state, ...#derived }. A non-object result
 		// contributes no model (matching the pre-Change-C guard), yet still swaps
 		// loaded + renders. Superseded/rejected runs returned above, touching neither
 		// layer.
 		if (model && typeof model === 'object') {
-			this.#model = model;
+			this.#derived = model;
 			this.#recompose();
 		}
+		// share() (D197) runs before the render; the last line re-runs readers if nothing renders
+		const readers = typeof (/** @type {any} */ (this).share) === 'function' ? this.#publish() : undefined;
 		// Anti-flash hold (v1.20, D52). The FIRST data() result normally flips
 		// #loaded and swaps the skeleton for the real template. If a skeleton was
 		// actually shown and it has not yet been up for skeletonMinDuration ms,
@@ -2514,24 +2711,24 @@ export class PuzzleView {
 					}
 				}, this.#holdRemaining());
 			}
-			return;
-		}
-		this.#swapLoaded();
+		} else this.#swapLoaded(readers);
+		this.#rerunReaders(readers);
 	}
 
 	/**
 	 * Flip #loaded and render the real template — the loaded swap (v1.8, D39).
 	 * Reached immediately on the first commit (no hold), at hold expiry (v1.20,
 	 * D52), and on every post-load refresh.
+	 * @param {[PuzzleView, ReadRecord][]} [readers] the commit's share() readers (#publish)
 	 */
-	#swapLoaded() {
+	#swapLoaded(readers) {
 		// Reachable independently of #commit through the D52 hold timer, so it carries
 		// the leave guard in its own right (D136 §3): a min-duration hold expiring
 		// after the owner removed the view must not paint the real template over a
 		// subtree that is on its way out.
 		if (this.#destroyed || this.#leaving) return;
 		this.#loaded = true;
-		this.#renderNow();
+		this.#renderNow(undefined, readers);
 		// Anchor-race gate (Change A): a superseded initial async mount() deferred its
 		// mounted() until a first render actually committed — this is that commit, so
 		// complete the mount now (AFTER #renderNow, so mounted() sees the real
@@ -2544,38 +2741,32 @@ export class PuzzleView {
 			if (this.#enterPending) {
 				this.#enterPending = false;
 				Promise.resolve(this.playIn()).catch((err) =>
-					reportError(
-						this.ctx,
-						err,
-						{ phase: 'enter', view: this, route: this.route },
-						'[puzzle] child enter animation failed:',
-						err
-					)
+					this.#report('enter', '[puzzle] child enter animation failed:', err)
 				);
 			}
 		}
 	}
 
 	/**
-	 * Rebuild the visible #data from the two layers (Change C): { ...#local,
-	 * ...#model }. Mutates #data IN PLACE to keep it the one object setData writes to
+	 * Rebuild the visible #data from the two layers (Change C): { ...#state,
+	 * ...#derived }. Mutates #data IN PLACE to keep it the one object setState writes to
 	 * — drop keys no longer contributed by either layer, then assign the composition.
 	 */
 	#recompose() {
-		const composed = { ...this.#local, ...this.#model };
+		const composed = { ...this.#state, ...this.#derived };
 		for (const key of Object.keys(this.#data)) {
 			if (!(key in composed)) delete this.#data[key];
 		}
 		Object.assign(this.#data, composed);
 		// Layer-clobber diagnostic (D147 hazard 4, dev only). A bare bind writes the
-		// LOCAL layer, but the composition above puts the MODEL last — so a key data()
+		// STATE layer, but the composition above puts the DERIVED layer last — so a key data()
 		// also derives from a record or prop is reverted the moment data() commits, and
 		// the user's typing snaps back with nothing to explain it. The compiler cannot
 		// see this (data() is opaque bytes, D03), so catch it here, against what the
 		// commit ACTUALLY composed: a bind write's own commit compares equal in the
 		// legitimate echo idiom (data() reads its own local back out through getData()
 		// and returns it unchanged) and only differs when something really overwrote it.
-		// Testing `key in #model` instead would flag every echo view in the corpus.
+		// Testing `key in #derived` instead would flag every echo view in the corpus.
 		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
 			if (this.#bindPending) {
 				for (const [key, written] of this.#bindPending) {
@@ -2650,7 +2841,7 @@ export class PuzzleView {
 	 * `store.upsert('item', { listId: this.params.listId })` writes against a route
 	 * the user has not navigated to (and which may never commit).
 	 *
-	 * Fenced here: renders, DOM event dispatch, flushUpdates (the setData path),
+	 * Fenced here: renders, DOM event dispatch, flushUpdates (the setState path),
 	 * onStoreChange, refresh, and the mounted()/destroyed() lifecycle hooks
 	 * (beforeUpdate/afterUpdate run inside #renderNow, already fenced). NOT fenced,
 	 * and a known residue: app code that captures `this` into a setTimeout or a
@@ -2705,19 +2896,25 @@ export class PuzzleView {
 		return this.#withCommittedScope(fn);
 	}
 
-	/** @param {ViewNode} [preparedTree] a takeover's already-expanded tree */
-	#renderNow(preparedTree = undefined) {
+	/**
+	 * @param {ViewNode} [preparedTree] a takeover's already-expanded tree
+	 * @param {[PuzzleView, ReadRecord][]} [readers] share() readers to re-run after the patch
+	 */
+	#renderNow(preparedTree, readers) {
 		// D146: a render always draws COMMITTED state. A prepared data() run whose
 		// promise is suspended leaves #evalScope set, so a render that lands inside
 		// that window (a store-change refresh on this same view while the gate is
 		// open) would otherwise read the destination params/route through the getters
 		// and paint the route the router has not committed. Renders are synchronous,
 		// so clearing and restoring around the whole render is exact.
-		this.#withCommittedScope(() => this.#renderNowInner(preparedTree));
+		this.#withCommittedScope(() => this.#renderNowInner(preparedTree, readers));
 	}
 
-	/** @param {ViewNode} [preparedTree] */
-	#renderNowInner(preparedTree = undefined) {
+	/**
+	 * @param {ViewNode} [preparedTree]
+	 * @param {[PuzzleView, ReadRecord][]} [readers]
+	 */
+	#renderNowInner(preparedTree, readers) {
 		if (!this.#vm || this.#destroyed) return;
 		if (
 			(typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) &&
@@ -2725,18 +2922,19 @@ export class PuzzleView {
 		) {
 			return;
 		}
-		// A render is landing NOW with the current state, so any frame #scheduleRender
-		// armed is already satisfied — clear the flag so its rAF no-ops instead of
-		// repeating this render with byte-identical state (a synchronous refresh() after
-		// a setData used to render twice). Deliberately AFTER both bails: clearing above
-		// them would silently drop a legitimately pending local-state render. A setData
-		// later in this same tick sees the flag false and re-arms normally.
-		this.#updateScheduled = false;
+		// A render landing NOW satisfies the frame #scheduleRender armed, so its rAF
+		// no-ops instead of repeating it — unless that frame also owes the D23 data()
+		// re-run, which only the flush pays (a slot-only parent update or an older async
+		// commit renders without running data()). `&&=`: a re-run flagged with no frame
+		// armed never claims one. AFTER both bails, which must not drop a pending render;
+		// a setState later in this same tick re-arms if the flag cleared.
+		this.#updateScheduled &&= this.#rerunData;
+		this.#renderSeq++;
 		const isUpdate = this.#mounted;
 
 		if (isUpdate) this.beforeUpdate();
 		// Root dirty mask (D170) — computed AFTER beforeUpdate(), which is
-		// user code that may setData() into #data, and before render() reads it.
+		// user code that may setState() into #data, and before render() reads it.
 		// `Class.__roots` is emitted only when some loop body in this template reads
 		// a top-level data() key, so a template without loops (or whose loops read
 		// nothing from the parent scope) skips all of this and leaves the mask 0.
@@ -2754,20 +2952,20 @@ export class PuzzleView {
 			// trip the recursion guard). The wrapper is dev-only: production folds this
 			// branch out and calls the span directly.
 			try {
-				this.#renderSpan(preparedTree, showSkeleton);
+				this.#renderSpan(preparedTree, showSkeleton, readers);
 			} catch (error) {
-				devperfRenderCancel(this);
+				devperfRenderEnd(this);
 				throw error;
 			}
 		} else {
-			this.#renderSpan(preparedTree, showSkeleton);
+			this.#renderSpan(preparedTree, showSkeleton, readers);
 		}
 		// Timestamp the FIRST actual skeleton render so the hold measures from when
 		// the skeleton became visible, not from mount (v1.20, D52). Set once.
 		if (showSkeleton && this.#skeletonShownAt === 0) this.#skeletonShownAt = Date.now();
 		// afterUpdate(prev) (D178). The snapshot is taken HERE, as each render lands,
 		// and handed to the NEXT update — not at the start of that update — because
-		// the inputs move before the render that shows them: setData() writes #data
+		// the inputs move before the render that shows them: setState() writes #data
 		// at call time and refresh() swaps #props/#params/#route before data() even
 		// runs. #data is mutated in place, so it is copied; props, params and route
 		// are replaced wholesale on update and are referenced as they are. Only a
@@ -2842,8 +3040,9 @@ export class PuzzleView {
 	 *
 	 * @param {ViewNode | undefined} preparedTree
 	 * @param {boolean} showSkeleton
+	 * @param {[PuzzleView, ReadRecord][] | undefined} readers
 	 */
-	#renderSpan(preparedTree, showSkeleton) {
+	#renderSpan(preparedTree, showSkeleton, readers) {
 		// Static-cache accounting (D170 §3.3), dev-only: how many `__c` sites this
 		// instance held before the tree was built, so the span can report how many
 		// this render had to ALLOCATE. Both reads sit inside the probe, so
@@ -2892,6 +3091,8 @@ export class PuzzleView {
 			this.#vm.clear();
 			this.#vm.anchorAt(ref);
 		}
+		// share() (D197): re-run the readers inside this update, before afterUpdate()
+		this.#rerunReaders(readers);
 		// Rebuilt member-target diagnostic (D147, dev only). __bind collected the
 		// member objects this completed render actually used. Warn only when the
 		// object that received the write never returned, exactly one replacement did,
@@ -2939,17 +3140,18 @@ export class PuzzleView {
 	}
 
 	/**
-	 * Apply a scheduled setData re-render now. A throwing user hook never
+	 * Apply a scheduled setState re-render now. A throwing user hook never
 	 * wedges the scheduler (the flag clears first; the error is reported).
 	 */
 	flushUpdates() {
-		// D146: the setData re-render path re-enters from a rAF/timer callback, which
+		// D146: the setState re-render path re-enters from a rAF/timer callback, which
 		// can land inside a suspended prepared data()'s window. Fence the whole body
 		// (not just the render) so the error context and boundary funnel below read
 		// the committed route too.
 		this.#withCommittedScope(() => {
 			if (!this.#updateScheduled) return;
 			this.#updateScheduled = false;
+			if (this.#rerunData && !this.#rerunDataNow()) return;
 			try {
 				this.#renderNow();
 			} catch (err) {
@@ -2957,6 +3159,27 @@ export class PuzzleView {
 			}
 		});
 	}
-}
 
-export default PuzzleView;
+	/**
+	 * The automatic data() re-run (D23): a setState() since the last commit wrote
+	 * a key that data() read. Every write since the flush was armed is already in
+	 * the state layer, so one run covers the whole burst. A synchronous data()
+	 * commits and renders here, and the flush has nothing left to do. An async one
+	 * is still in flight, so the flush renders the written values now and the
+	 * commit renders again when data() resolves. A view mid-settle (D161) folds the
+	 * write into that run as one more pass instead of superseding it.
+	 * @returns {boolean} whether the flush still has to render
+	 */
+	#rerunDataNow() {
+		this.#rerunData = false;
+		if (this.#destroyed || this.#leaving) return true;
+		if (this._settlingToken !== 0) {
+			this._settleDirty = true;
+			return true;
+		}
+		const seq = this.#renderSeq;
+		// a sync data() throw has already destroyed the view through the D145 funnel
+		this.#refreshContained('[puzzle] data() failed during a setState() re-run:', 'refresh');
+		return seq === this.#renderSeq && !this.#destroyed;
+	}
+}

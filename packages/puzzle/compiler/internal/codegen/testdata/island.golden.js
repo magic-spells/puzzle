@@ -30,4 +30,3 @@ Editor.prototype.render = function () {
     ]),
   ]);
 };
-Editor.__pzlModule = 'island.pzl';

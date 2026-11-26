@@ -98,9 +98,6 @@
 			throw new TypeError('__PUZZLE_DEVTOOLS_HOOK__.onRequest expects a function');
 		}
 		handler = fn;
-		return function off() {
-			if (handler === fn) handler = null;
-		};
 	}
 
 	function respond(id, result) {

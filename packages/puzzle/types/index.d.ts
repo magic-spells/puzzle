@@ -21,9 +21,6 @@ export type { RouterMode };
 // Shared shapes
 // ----------------------------------------------------------------------------
 
-/** A field/record value — the framework never constrains model field types. */
-export type PuzzleValue = any;
-
 declare const puzzleAdapterCapabilityBrand: unique symbol;
 
 /** Opaque shape accepted only from the `@magic-spells/puzzle/adapter` export. */
@@ -63,9 +60,8 @@ export interface HeadTranslation {
 
 /**
  * A route definition (constellation/doc/DOC-SPEC.md §9). `view`/`layout` are
- * PuzzleView subclasses (constructors) or `lazy()` markers (D163). `.pzl`
- * default exports and compiled classes are typed `any` by the compiler shim, so
- * they still assign cleanly. Nested via `children` (D30).
+ * PuzzleView subclasses (constructors) or `lazy()` markers (D163). Nested via
+ * `children` (D30).
  */
 export interface Route {
 	path: string;
@@ -143,12 +139,35 @@ export type StaticPathsFn = (
 	context: StaticPathsContext
 ) => ReadonlyArray<StaticPathsEntry> | Promise<ReadonlyArray<StaticPathsEntry>>;
 
-/** A route guard (D87): allow, block, or redirect before navigation loads. */
+/** A route guard (D87): allow, block, or redirect (to a path or a named target, D196) before navigation loads. */
 export type GuardFn = (nav: {
 	to: RouteSnapshot;
 	from: RouteSnapshot | null;
 	ctx: PuzzleContext;
-}) => void | boolean | string | Promise<void | boolean | string>;
+}) => void | boolean | string | NamedRouteTarget | Promise<void | boolean | string | NamedRouteTarget>;
+
+/** A query value a named target writes (D196): an array repeats the key; null and undefined are left out. */
+export type RouteQueryValue = string | number | boolean | null | undefined;
+
+/**
+ * A route by name instead of by path (D196): `{ name: 'album', params: { id: 7 } }`.
+ * The router fills the route's `:param` segments (URI-encoded) from `params`,
+ * then adds `query` and `hash`. An unknown name or a missing param throws; in
+ * development so does a param the route does not have, or any other key.
+ */
+export interface NamedRouteTarget {
+	/** The route's `name` — any route in the table, parents and index children included. */
+	name: string;
+	/** Every `:param` the route's full path declares. */
+	params?: Record<string, string | number>;
+	/** Written as `?key=value`; an array repeats the key. */
+	query?: Record<string, RouteQueryValue | readonly RouteQueryValue[]>;
+	/** The fragment, with or without its `#`. */
+	hash?: string;
+}
+
+/** Where a navigation or link goes: a path (`'/albums/7'`) or a named target (D196). */
+export type RouteTarget = string | NamedRouteTarget;
 
 /** A route's `agent` field (D183). */
 export type RouteAgent = false | { name: string; about?: string; [key: string]: unknown };
@@ -248,6 +267,7 @@ export interface PuzzleErrorInfo {
 		| 'navigation'
 		| 'render'
 		| 'bind'
+		| 'submit'
 		| 'error-view'
 		| 'enter'
 		| 'leave'
@@ -272,7 +292,7 @@ export interface PuzzleErrorViewProps {
 	readonly retry: () => void | Promise<void>;
 }
 
-/** Constructor accepted by PuzzleAppConfig.errorView. */
+/** Any view class, typed props or not; annotate with this, not `typeof PuzzleView`. */
 export type PuzzleViewConstructor = new (ctx?: PuzzleContext) => PuzzleView;
 
 /**
@@ -283,8 +303,8 @@ export type PuzzleViewConstructor = new (ctx?: PuzzleContext) => PuzzleView;
  * so `prev.data.post` is the same live record: to catch an edit, return the
  * field from `data()` (`title: post.title`) and compare that.
  */
-export interface PrevViewState {
-	readonly props: any;
+export interface PrevViewState<Props = any> {
+	readonly props: Props;
 	readonly params: Record<string, string>;
 	readonly route: RouteSnapshot | null;
 	readonly data: Readonly<Record<string, any>>;
@@ -347,8 +367,24 @@ export interface ValidationResult {
 
 /** Options for `store.findMany(type, options)`. */
 export interface FindManyOptions {
+	/** Local predicate, applied after any query. */
 	filter?: (record: any) => boolean;
+	/**
+	 * Server params for this read (D193). Needs the adapter capability: the
+	 * query is passed to the model's `loadMany` as its options, and its canonical
+	 * spelling is the cache key, so each page or cursor is cached separately.
+	 * Values are strings, finite numbers, booleans or arrays of those; nullish
+	 * entries are dropped.
+	 */
+	query?: Record<string, string | number | boolean | Array<string | number | boolean> | null | undefined>;
 }
+
+/**
+ * What `findMany` returns: the records, plus (for a `query` read) the `meta`
+ * the server sent with them — a cursor, a total, a next page. `meta` is
+ * non-enumerable and survives only on this array, not on `filter`/`map` copies.
+ */
+export type FindManyResult<T = any> = T[] & { readonly meta?: Readonly<Record<string, any>> };
 
 /** Options for `store.request(type, path, options)` (D50). */
 export interface RequestOptions {
@@ -381,18 +417,6 @@ export type BeforeRequestHook = (
 	context: AdapterRequestContext
 ) => RequestInit | void;
 
-/** Store construction options (wired by `PuzzleApp` from its config). */
-export interface StoreOptions {
-	/** Storage-like object for opt-in persistence. */
-	storage?: any;
-	/** Persistence key (default `'puzzle-store'`). */
-	storageKey?: string;
-	/** Base URL for the server read/write path. */
-	apiURL?: string;
-	/** Adapter request hook (D91). */
-	beforeRequest?: BeforeRequestHook;
-}
-
 /**
  * The reactive datastore (constellation/doc/DOC-SPEC.md §8). Reachable in views
  * as `this.ctx.store`. Records are instances of the registered model classes;
@@ -422,7 +446,7 @@ export interface Store {
 	 * `this.ctx.store` inside `data()`, the collection loads once if it has not
 	 * already; the filter always runs locally (D161).
 	 */
-	findMany(type: string, options?: FindManyOptions): any[];
+	findMany(type: string, options?: FindManyOptions): FindManyResult;
 	/**
 	 * Observe every record of a type, or one record by primary key, from outside
 	 * a view (D184). `fn` runs with no arguments after the batched flush that
@@ -443,7 +467,6 @@ export interface Store {
 	// not have them (D98). They are attached by `installFixtures()` and declared
 	// through module augmentation in types/fixtures.d.ts, so they type-check only
 	// where `@magic-spells/puzzle/fixtures` is actually imported.
-	[key: string]: any;
 }
 
 // ----------------------------------------------------------------------------
@@ -467,10 +490,10 @@ export interface MorphHandler {
  * `this.ctx.router`. The public API is path-shaped in all router modes.
  */
 export interface Router {
-	/** Navigate to a path (push a history entry); resolves the outcome (D182). */
-	push(path: string): Promise<NavigationResult>;
-	/** Navigate to a path REPLACING the current history entry — no new entry, scroll left alone by default (D83); resolves the outcome (D182). */
-	replace(path: string): Promise<NavigationResult>;
+	/** Navigate to a path or a named target (D196) and push a history entry; resolves the outcome (D182). A bad named target throws. */
+	push(target: RouteTarget): Promise<NavigationResult>;
+	/** Navigate to a path or a named target (D196) REPLACING the current history entry — no new entry, scroll left alone by default (D83); resolves the outcome (D182). */
+	replace(target: RouteTarget): Promise<NavigationResult>;
 	/** Move `n` entries in history (negative = back). All modes (D42). */
 	go(n: number): void | Promise<void>;
 	/** Go back one entry. */
@@ -480,15 +503,24 @@ export interface Router {
 	/**
 	 * Path-shaped route in, mode-encoded href out (`'/x'` path mode, `'#/x'` hash, unchanged memory); strings not starting with `/` pass through (D79).
 	 * Under `i18n.routing: 'prefix'` the href carries the page's locale prefix; `{ locale: 'es' }` forces one locale, `{ locale: false }` skips the prefix for a file that exists once (D177).
+	 * A named target (`{ name, params, query, hash }`, D196) resolves through the route table first.
 	 */
-	url(path: string, options?: LinkOptions | null): string;
+	url(target: RouteTarget, options?: LinkOptions | null): string;
+	/**
+	 * Load the code a path's route needs — every `lazy()` view and layout in its
+	 * matched chain — without navigating (D195). No guard runs and no view is
+	 * built; a later navigation to the path runs warm. Resolves `true` once the
+	 * code is in memory (also for a route with none to load), `false` when
+	 * nothing matched or a load failed. Never rejects. A named target (D196)
+	 * resolves through the route table first; a bad one throws, as from `push()`.
+	 */
+	prefetch(target: RouteTarget): Promise<boolean>;
 	/** The current route snapshot, or null before the first navigation. */
 	readonly current: RouteSnapshot | null;
 	/** Every leaf route as frozen data (D183), built once on first read; the catch-all is left out. */
 	readonly views: readonly RouteView[];
 	/** Register the shared-element morph handler (D55); null unregisters. */
 	setMorphHandler(handler: MorphHandler | null): void;
-	[key: string]: any;
 }
 
 // ----------------------------------------------------------------------------
@@ -498,7 +530,7 @@ export interface Router {
 /**
  * A library function — a display-only value transform a template calls as
  * `name(value, …args)` (D176 §4). An app registers its own through the
- * `formatters` config map.
+ * `functions` config map.
  */
 export type Formatter = (...args: any[]) => any;
 
@@ -545,12 +577,13 @@ export type LinkOptions = { locale?: string | false };
  * the runtime (client-runtime/formatters/builtins.js, plus the registry-built
  * `link` and the i18n service's `t`). A value parameter is `unknown` because
  * every function coerces what it is given and prints a missing value as
- * nothing. Functions an app registers through the `formatters` config map are
+ * nothing. Functions an app registers through the `functions` config map are
  * not listed here.
  */
 export interface LibraryFunctions {
 	/**
-	 * The URL for an app path in the active routing mode (D79). Under
+	 * The URL for an app path in the active routing mode (D79), or for a named
+	 * target such as `{ name: 'album', params: { id } }` (D196). Under
 	 * `i18n.routing: 'prefix'` it adds the active locale's prefix; `locale`
 	 * forces one locale, and `locale: false` skips the prefix for a file that
 	 * exists once (D177).
@@ -694,20 +727,42 @@ export interface PuzzleLocale {
 // ----------------------------------------------------------------------------
 
 /**
- * Base class for every `.pzl` component, view, and layout
- * (constellation/doc/DOC-SPEC.md §4). Subclass it and implement `data()`;
- * the compiler attaches `render()` from the template. State lives in
- * `getData()`/`setData()`; reactive sources (store, props, route params) flow
- * through `data()`.
+ * The one object `data()` and `share()` receive (D197). Destructure only what
+ * the view needs: `data({ params, props, shared })`. `params`, `props` and
+ * `shared` are reserved names; later built-ins join this object.
  */
-export declare class PuzzleView {
+export interface DataInput<Props = any, Shared extends Record<string, any> = Record<string, any>> {
+	/** Route params of the navigation that mounted this view (empty off-router). */
+	params: Record<string, string>;
+	/** Props passed from the parent component. */
+	props: Props;
+	/**
+	 * What sharing ancestors pass down, grouped under each sharer's name in
+	 * camelCase (`Filter` → `shared.filter`), the nearest ancestor of a name
+	 * winning. Always an object, empty when no ancestor shares, so
+	 * `shared: { filter = {} }` never throws.
+	 */
+	shared: Shared;
+}
+
+/**
+ * Base class for every `.pzl` component, view, and layout
+ * (constellation/doc/DOC-SPEC.md §4). Subclass it and override `data()` when
+ * the model is more than the props;
+ * the compiler attaches `render()` from the template. Local state is written
+ * with `setState()` and read back with `getState()`; `getData()` is the merged
+ * model the template reads. Reactive sources (store, props, route params) flow
+ * through `data()`. `Props` types `this.props`:
+ * `class TodoItem extends PuzzleView<TodoItemProps>`.
+ */
+export declare class PuzzleView<Props = any> {
 	constructor(ctx?: PuzzleContext);
 
 	/** Framework services (store/router/formatters). */
 	ctx: PuzzleContext;
 
 	/** Props passed from the parent component (reactive). */
-	readonly props: any;
+	readonly props: Props;
 
 	/** Route params for the navigation that mounted this view. */
 	readonly params: Record<string, string>;
@@ -741,16 +796,42 @@ export declare class PuzzleView {
 
 	/**
 	 * The component model. Runs on mount and whenever a subscribed store query,
-	 * prop, or route param changes. May be async. Override in every view.
+	 * prop, route param, or shared value it read changes. May be async. Takes one
+	 * object (D197): `data({ params, props, shared })`. The base returns
+	 * `props`; override it when the model is more than the props.
 	 */
-	data(params?: Record<string, string>, props?: any): any | Promise<any>;
+	data(input: DataInput<Props>): any | Promise<any>;
 
-	/** Read the current component model. */
+	/**
+	 * Values and callbacks for nested views at any depth, slot content included
+	 * (D197). Runs after each `data()` commit with the same object `data()`
+	 * receives, so a nested sharer can build on its own `shared`. Descendants
+	 * read the result as `shared.<name>`, the camelCase component name, and only
+	 * those whose `data()` read a changed key re-run. A function value reaches
+	 * them as a stable wrapper that calls the newest one. Declared by the
+	 * subclass: the base class has none.
+	 */
+	share?(input: DataInput<Props>): Record<string, any>;
+
+	/**
+	 * What sharing ancestors pass down, for a handler: the same object `data()`
+	 * receives as `shared`. Reading it records nothing (D197).
+	 */
+	readonly shared: Record<string, any>;
+
+	/** Read the current component model: local state with data()'s values over it. */
 	getData<T = any>(): T;
 
-	/** Merge local UI state and schedule a re-render (does NOT re-run data()). */
-	setData(key: string, value: any): void;
-	setData(partial: Record<string, any>): void;
+	/** Read local state only (what setState() wrote), without data()'s values. */
+	getState<T = any>(): T;
+
+	/**
+	 * Merge local UI state and schedule a re-render. When the last data() run read
+	 * a written key through getData()/getState(), the render re-runs data() first
+	 * (once per burst of writes, D23).
+	 */
+	setState(key: string, value: any): void;
+	setState(partial: Record<string, any>): void;
 	/**
 	 * Wait for every pending store flush and scheduled view render to land,
 	 * including the ones they schedule (D188). Forces nothing, and does not await
@@ -788,7 +869,7 @@ export declare class PuzzleView {
 	mounted(): void;
 	beforeUpdate(): void;
 	/** After every update render; `prev` is what the previous render drew (D178). */
-	afterUpdate(prev: PrevViewState): void;
+	afterUpdate(prev: PrevViewState<Props>): void;
 	destroyed(): void;
 
 	// ---- enter/leave hooks (D28) ----
@@ -808,14 +889,17 @@ export declare class PuzzleView {
 /**
  * The request handed to an `adapter.mock.handler` (D95). `path` is
  * relative to `apiURL + endpoint` (`''` for the collection), `body` is the parsed
- * request body, and `collection` is the mock's LIVE state — a `Map` keyed by
- * primary key, so a handler can read and mutate it.
+ * request body, `headers` the request's headers after `beforeRequest` ran
+ * (lower-case names, so an auth mock reads `headers.authorization`), and
+ * `collection` is the mock's LIVE state — a `Map` keyed by primary key, so a
+ * handler can read and mutate it.
  */
 export interface AdapterMockRequest {
 	method: string;
 	url: string;
 	path: string;
 	body: any;
+	headers: Record<string, string>;
 	collection: Map<any, any>;
 }
 
@@ -974,8 +1058,9 @@ export interface PuzzleAppConfig {
 	/**
 	 * The app's own library functions (D176 §4), called bare from templates —
 	 * `{ specialFormat(product.title) }`. One named like a built-in overrides it.
+	 * The key was `formatters` before 0.10; that spelling throws (D199).
 	 */
-	formatters?: Record<string, Formatter>;
+	functions?: Record<string, Formatter>;
 	/** Base URL for the server read/write path. */
 	apiURL?: string;
 	/** Storage-like object for opt-in persistence. */
@@ -1017,6 +1102,16 @@ export interface PuzzleAppConfig {
 	 */
 	transitionMode?: 'sequential' | 'overlap';
 	/**
+	 * Link prefetch default (D195). `true` (the default): a link to a route with
+	 * `lazy()` code loads that code when it is hovered, touched or focused, so
+	 * the click runs warm; routes behind a guard are skipped. `false`: only
+	 * links that ask by name (`data-prefetch`, `data-prefetch="visible"`) and
+	 * `router.prefetch(path)` calls load early. A link's `data-prefetch="off"`
+	 * opts that link out. Nothing is prefetched under Save-Data or on a 2g-class
+	 * connection.
+	 */
+	prefetch?: boolean;
+	/**
 	 * App lifecycle hook (SPEC §34, D66): runs inside `mount()` after the
 	 * ctx services (store/router/formatters) are wired but BEFORE navigation #0,
 	 * and is awaited — store seeding here is visible to the first `data()`. A
@@ -1048,7 +1143,8 @@ export interface PuzzleAppConfig {
 	onError?: PuzzleErrorHandler;
 	/**
 	 * Ordinary compiled PuzzleView constructor used for framework-contained error
-	 * UI. A fresh instance replaces only the failed view and receives
+	 * UI. A fresh instance replaces only the failed view (on a first load, the
+	 * whole routed page, since nothing else is on screen yet) and receives
 	 * `{ error, info, retry }` props.
 	 */
 	errorView?: PuzzleViewConstructor;
@@ -1134,11 +1230,10 @@ export declare class ViewNode {
 	readonly isComponent: boolean;
 	readonly isSlot: boolean;
 	readonly isSnippet: boolean;
-	readonly isPortal: boolean;
 	readonly props: Record<string, any>;
 }
 
-/** Reserved tag marking a composition-marker (`<Children/>`/`<Slot/>`/`<Slot name>`) substitution point. */
+/** Reserved tag marking a composition-marker (`<Children/>`/`<Outlet/>`/`<Slot name>`) substitution point. */
 export declare const SLOT_TAG: string;
 
 /** Reserved tag carrying a caller-owned `<Snippet>…</Snippet>` declaration (D166). */

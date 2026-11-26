@@ -256,13 +256,4 @@ describe('page-hook: request correlation', () => {
 
 		expect(box.sent).toHaveLength(0);
 	});
-
-	it('unregisters cleanly', () => {
-		const off = box.window[HOOK_KEY].onRequest(() => ({ ok: true }));
-		off();
-
-		box.deliver({ source: SOURCE_PANEL, id: 10, message: envelope('snapshot:views') });
-
-		expect(box.sent[0].error).toBe('no-bridge');
-	});
 });

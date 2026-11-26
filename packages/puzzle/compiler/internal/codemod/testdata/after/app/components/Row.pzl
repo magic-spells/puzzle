@@ -1,0 +1,14 @@
+<puzzle-view>
+  <li>{#for item in items}<Children item={ item }/>{/for}</li>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import fns from '../functions';
+
+export default class Row extends PuzzleView {
+  data({ params: _params, props = {} }) {
+    return { items: props.items ?? [], title: fns.shout('rows') };
+  }
+}
+</script>

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile, access } from 'node:fs/promises';
+import { readFile } from 'node:fs/promises';
 
 // Static guards for the scrolling-content WRAPPER piece. The rAF loop, the
 // seamless wrap, the clone accounting, pause-on-hover and drag-to-scrub all live
@@ -23,20 +23,6 @@ test('the marquee manifest declares its file and dependency', async () => {
 	assert.deepEqual(piece.registryDependencies, []);
 	assert.deepEqual(piece.dependencies, [DEP]);
 	assert.equal(piece.targetDir, 'app/components/ui');
-	await access(new URL(FILE, import.meta.url));
-});
-
-test('registry.json mirrors the marquee manifest', async () => {
-	const [piece, registry] = await Promise.all([
-		readJSON('../registry/ui/marquee/piece.json'),
-		readJSON('../registry/registry.json'),
-	]);
-	const row = registry.pieces.find((p) => p.name === 'marquee');
-	assert.ok(row, 'registry.json has no marquee entry');
-	assert.equal(row.description, piece.description);
-	assert.deepEqual(row.files, piece.files);
-	assert.deepEqual(row.dependencies, piece.dependencies);
-	assert.equal(row.targetDir, piece.targetDir);
 });
 
 test('the package is imported dynamically, inside mounted(), and never at module scope', async () => {

@@ -1,6 +1,6 @@
 ---
 name: D164 — Playground compilation is parser+codegen-only WASM behind a worker protocol
-status: built
+status: verified
 connections:
   - DECISION-D46-INLINE-SVG
   - DECISION-D54-TYPESCRIPT-SCRIPTS
@@ -9,7 +9,8 @@ connections:
   - COMPONENT-ESBUILD-PLUGIN
   - FILE-PZL-WASM
   - DECISION-D59-SCOPED-STYLES
-  - RELEASE-V0-7-0
+verified_at: '2026-11-01T19:19:25.478Z'
+verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
 ---
 
 ## Context

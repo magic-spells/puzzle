@@ -1,6 +1,6 @@
 /**
- * ViewManager — render → diff → patch for ViewNode trees (constellation/doc/DOC-RUNTIME-KERNEL.md,
- * constellation/doc/DOC-APP-ANATOMY.md §4, D20).
+ * ViewManager — render → diff → patch for ViewNode trees (constellation/doc/DOC-VIEW-LIFECYCLE.md §1,
+ * constellation/component/COMPONENT-VIEW-MANAGER.md, D20).
  *
  * Rewritten from the prototype:
  * - DOM links (`el`) transfer from old to new tree on every patch, so updates
@@ -14,7 +14,7 @@
  *   leaking the old one.
  * - Insertion uses childNodes-accurate reference nodes (text siblings counted).
  *
- * Composition (constellation/doc/DOC-APP-ANATOMY.md §4): a component vnode (class `tag`) is not
+ * Composition (constellation/component/COMPONENT-VIEW-MANAGER.md, "Components"): a component vnode (class `tag`) is not
  * an element — the manager instantiates the child with the owner's `ctx`,
  * mounts it inline at the vnode's position (D20, no wrapper), reuses the
  * instance across re-renders (refresh only on prop change), and destroys it
@@ -186,13 +186,26 @@ export function moveManager(vm, container, ref) {
 	vm.container = container;
 }
 
+/**
+ * What a clone must carry to stay patchable: the live links of the vnode it
+ * replaces (fresh, unmounted vnodes just copy nulls).
+ * @param {ViewNode} from
+ * @param {ViewNode} to
+ */
+function carryLinks(from, to) {
+	to.el = from.el;
+	to.component = from.component;
+	to.instance = from.instance;
+	if (typeof __PUZZLE_TAKEOVER__ === 'undefined' || __PUZZLE_TAKEOVER__) {
+		to.takeoverPreloaded = from.takeoverPreloaded;
+		to.takeoverFailed = from.takeoverFailed;
+	}
+}
+
 /** @param {ViewNode} vnode */
 function keepOutgoing(vnode) {
 	const copy = new ViewNode(vnode.tag, vnode.attrs, vnode.children);
-	copy.key = vnode.key;
-	copy.el = vnode.el;
-	copy.component = vnode.component;
-	copy.instance = vnode.instance;
+	carryLinks(vnode, copy);
 	if (vnode.tag === HTML_TAG) copy.nodes = vnode.nodes;
 	else if (vnode.tag === PORTAL_TAG) copy.portal = vnode.portal;
 	else if ((typeof __PUZZLE_HAS_COMPONENT_SLOT__ === 'undefined' || __PUZZLE_HAS_COMPONENT_SLOT__) &&
@@ -231,7 +244,7 @@ export class ViewManager {
 	 * @param {Node} container host node this manager renders into (an element, or
 	 *   the parent node a component vnode mounts into)
 	 * @param {object} ctx owner's { store, router, formatters } — passed to
-	 *   any child components this tree instantiates (constellation/doc/DOC-APP-ANATOMY.md §4)
+	 *   any child components this tree instantiates (constellation/component/COMPONENT-VIEW-MANAGER.md, "Components")
 	 * @param {import('./PuzzleView.js').PuzzleView|null} owner view whose render tree this manager patches
 	 */
 	constructor(container, ctx = {}, owner = null) {
@@ -532,7 +545,7 @@ export class ViewManager {
  * Substitute the slot markers in `vnode`'s tree with the call-site content
  * captured in `slotChildren`. Named slots (v1.21, D53) partition the content
  * once per render (partitionSlots) by each direct child's stripped `slot`
- * attribute; <Children/> and the bare <Slot/> take the unattributed remainder.
+ * attribute; <Children/> and <Outlet/> take the unattributed remainder.
  * Snippet-free AND slot-attr-free call sites take the same fast path they
  * always did — the default bucket is the original `slotChildren` array (no
  * clones) and no vnode changes unless a marker is actually present. A bare
@@ -644,14 +657,7 @@ function stripSlotAttr(vnode) {
 		clone.slotEnd = vnode.slotEnd;
 	}
 	slotClones.set(vnode, clone);
-	clone.key = vnode.key;
-	clone.el = vnode.el;
-	clone.component = vnode.component;
-	clone.instance = vnode.instance;
-	if (typeof __PUZZLE_TAKEOVER__ === 'undefined' || __PUZZLE_TAKEOVER__) {
-		clone.takeoverPreloaded = vnode.takeoverPreloaded;
-		clone.takeoverFailed = vnode.takeoverFailed;
-	}
+	carryLinks(vnode, clone);
 	return clone;
 }
 
@@ -712,24 +718,9 @@ function expandNode(vnode, parts) {
 	if (!out) return vnode;
 
 	const clone = new ViewNode(vnode.tag, vnode.attrs, out);
-	clone.key = vnode.key;
+	carryLinks(vnode, clone);
 	if ((typeof __PUZZLE_HAS_COMPONENT_SLOT__ === 'undefined' || __PUZZLE_HAS_COMPONENT_SLOT__) &&
-		vnode.tag === COMPONENT_SLOT_TAG) {
-		clone.el = vnode.el;
-		clone.slotEnd = vnode.slotEnd;
-	}
-	if (vnode.isComponent) {
-		// Mirror stripSlotAttr's clone: preserve the live links so patch/teardown
-		// keep working if this vnode has already been mounted (fresh render-tree
-		// clones just copy nulls).
-		clone.el = vnode.el;
-		clone.component = vnode.component;
-		clone.instance = vnode.instance;
-		if (typeof __PUZZLE_TAKEOVER__ === 'undefined' || __PUZZLE_TAKEOVER__) {
-			clone.takeoverPreloaded = vnode.takeoverPreloaded;
-			clone.takeoverFailed = vnode.takeoverFailed;
-		}
-	}
+		vnode.tag === COMPONENT_SLOT_TAG) clone.slotEnd = vnode.slotEnd;
 	return clone;
 }
 
@@ -1087,10 +1078,11 @@ export function mount(vnode, parent, ref, ctx, owner = null) {
 					mount(child, el, null, ctx, owner);
 				}
 		}
-		// A <select>'s controlled `value` is applied by setAttr above, BEFORE its
-		// <option> children exist, so the browser silently falls back to the first
-		// option. Re-assert it now that the options are mounted (SPEC §5).
-		reassertSelectValue(el, vnode.attrs);
+		// A control's `value` is applied by setAttr above in authored order: a
+		// <select>'s BEFORE its <option> children exist (the browser silently falls
+		// back to the first option), a range's before a later `min`/`max`/`step` (the
+		// browser clamps it to the defaults). Re-assert it now that both are in (SPEC §5).
+		syncControl(el, vnode.attrs, owner);
 	}
 	// Insertion stays LAST: mount() builds detached and attaches the finished subtree
 	// in one move, so a throw leaves the container holding nothing this call put there.
@@ -1133,7 +1125,7 @@ function mountComponent(vnode, parent, ref, ctx, owner) {
 	// takeover-preloaded one, which is where a non-routed `instance` pin comes
 	// from) can be unmounted by a branch toggle — destroying its instance — and
 	// returned by the cache and mounted again later. Adopting the corpse would
-	// mount a view whose #destroyed latch makes mounted(), setData() and every
+	// mount a view whose #destroyed latch makes mounted(), setState() and every
 	// refresh inert, with no diagnostic.
 	// Construct fresh instead; `preloaded` follows, so the fresh instance runs its
 	// own created()/data() exactly as a first mount does.
@@ -1146,7 +1138,7 @@ function mountComponent(vnode, parent, ref, ctx, owner) {
 		(typeof __PUZZLE_TAKEOVER__ === 'undefined' || __PUZZLE_TAKEOVER__) && vnode.takeoverPreloaded;
 	/** @type {PuzzleView} */
 	const child = pinned ?? new vnode.tag(ctx);
-	child.__retryParent = owner;
+	child.__parent = owner;
 	vnode.component = child;
 	// A parked routed view (D30 conditional outlet) moves in instead of mounting.
 	if ((typeof __PUZZLE_HAS_CONDITIONAL_SLOT__ === 'undefined' || __PUZZLE_HAS_CONDITIONAL_SLOT__) && (placed(child), pinned?.element)) {
@@ -1209,7 +1201,7 @@ function mountComponent(vnode, parent, ref, ctx, owner) {
 				// holds this child. So the owner's next render, and the next render of
 				// every view above it that mounted it, walks its reused vnodes once
 				// (PuzzleView#__walk).
-				for (let view = owner; view; view = view.__retryParent) view.__walk = true;
+				for (let view = owner; view; view = view.__parent) view.__walk = true;
 				// Gated: ungated this would ADD the property outside the constructor in a
 				// non-takeover build — exactly the hidden-class transition the gate above
 				// exists to avoid.
@@ -1356,7 +1348,7 @@ export function patch(oldVnode, newVnode, parent, ctx, owner = null) {
 		// destroyed, with a bare comment left holding the position (mountComponent's
 		// rejection handler). There is no live instance to update — mount a FRESH one
 		// at the placeholder so a render that no longer throws yields a fully working
-		// component (mounted() fires, setData() re-renders), then drop the placeholder.
+		// component (mounted() fires, setState() re-renders), then drop the placeholder.
 		//
 		// TWO shapes reach here, because that handler runs in a microtask. Normally it
 		// nulled the links on the vnode that is still the tree node (`component ==
@@ -1471,9 +1463,10 @@ export function patch(oldVnode, newVnode, parent, ctx, owner = null) {
 
 	// The option list may have changed under a <select> whose controlled `value`
 	// was unchanged (patchAttrs skips it) or churned entirely — either way the
-	// selection can desync. Re-assert the controlled value after the children
-	// settle so option-list churn can't leave the wrong option selected (SPEC §5).
-	reassertSelectValue(el, newVnode.attrs);
+	// selection can desync — and a range's new `value` was clamped to its old
+	// `max` when a later attr raised it in this same pass. Re-assert the
+	// controlled value once attrs and children have settled (SPEC §5).
+	syncControl(el, newVnode.attrs, owner);
 }
 
 /**
@@ -1493,15 +1486,22 @@ export function patch(oldVnode, newVnode, parent, ctx, owner = null) {
  * while component state says otherwise — so compare the property (React/Vue
  * force-sync it every patch for exactly this reason). The per-keystroke echo
  * case (bound value already equals the live property) still writes NOTHING, so
- * the caret is preserved. Non-form elements carrying a plain `value` (<li>,
- * <progress>, <button>) never reach here and keep the vnode compare.
+ * the caret is preserved — and a number field already holding the bound number
+ * in another spelling ("10.0", "1e1", "007") is that echo too, as React treats
+ * it: rewriting it to "10" would drop the digits under the caret. Non-form
+ * elements carrying a plain `value` (<li>, <progress>, <button>) never reach
+ * here and keep the vnode compare.
  *
  * @param {HTMLInputElement | HTMLTextAreaElement} el
  * @param {unknown} value the bound value
  * @param {PuzzleView | null} owner
  */
 function syncControlValue(el, value, owner) {
-	if (el.value !== stringify(value, 0, ' ')) setAttr(el, 'value', value, owner);
+	if (
+		el.value !== stringify(value, 0, ' ') &&
+		(typeof value != 'number' || /** @type {HTMLInputElement} */ (el).valueAsNumber !== value)
+	)
+		setAttr(el, 'value', value, owner);
 }
 
 /**
@@ -1530,18 +1530,6 @@ function syncControlChecked(el, value, owner) {
 }
 
 /**
- * Re-assert every controlled value in ONE element's attrs — the element-level
- * composition of the three live-DOM comparisons the ordinary patch path runs
- * across patchAttrs and the post-children select re-assert.
- *
- * patchAttrs deliberately keeps its own per-attr dispatch instead of calling
- * this: hoisting the whole element to one call would move the `value`/`checked`
- * writes out of the attrs iteration order, and <select> must keep asserting its
- * controlled value AFTER its <option> children patch (see reassertSelectValue),
- * not during the attr pass. A cached subtree has no attr pass and no children
- * pass at all, so for it the order is this function's order.
- */
-/**
  * The three form tags whose `value`/`checked` the patcher re-asserts against the
  * LIVE DOM. The same predicate listBlock's `collectControls` walks with — a
  * `<li value="3">` or a `<progress value=…>` is not a control and keeps the
@@ -1555,6 +1543,11 @@ function isControlTag(tag) {
 }
 
 /**
+ * Re-assert every controlled value in ONE element's attrs against the live DOM.
+ * mount() and patch() run it once attrs and children have settled (a select's
+ * options, a range's min/max); the identity short-circuit runs it for a cached
+ * subtree, which has no attr or children pass of its own.
+ *
  * @param {Node} el a control's live element (dispatched on nodeName)
  * @param {Record<string, any>} attrs
  * @param {PuzzleView | null} owner
@@ -1617,7 +1610,7 @@ function reassertSelectValue(el, attrs) {
 /**
  * Same class + key: reuse the child instance (transferred onto newVnode). Push
  * new slot content always, and re-run the child's data() only when props
- * shallow-differ (constellation/doc/DOC-APP-ANATOMY.md §4 — the SPEC §4 prop-reactivity rule).
+ * shallow-differ (constellation/component/COMPONENT-VIEW-MANAGER.md, "Components" — the SPEC §4 prop-reactivity rule).
  * `vnode.el` tracks the child's live root so keyed sibling moves land right.
  *
  * @param {ViewNode} oldVnode
@@ -1683,7 +1676,7 @@ function sameNode(a, b) {
  * What is new (D170, record render revision) is the second test on each value:
  * a store record mutates IN PLACE, so `!==` can never see it change. A value
  * carrying a numeric RENDER_REV therefore also compares against the SNAPSHOT
- * the child wrote the last time props were applied (`child.__propRevs`), and an
+ * the child wrote as its last refresh began (`child.__propRevs`), and an
  * advanced revision counts as a changed prop. That is what finally makes
  * `<TodoItem todo={todo}/>` refresh on the record's own mutations instead of
  * relying on a freshly allocated callback prop to do it by accident.
@@ -1825,7 +1818,7 @@ function unmount(vnode, immediate = false) {
 		// timing every non-animating removal already has. playOut() carries the same
 		// rule for the router's leave paths, which never come through here.
 		if (!((typeof __PUZZLE_HAS_COMPONENT_SLOT__ === 'undefined' || __PUZZLE_HAS_COMPONENT_SLOT__) && immediateUnmount) &&
-			child.__isMounted && (child?.animations?.out || child?.__hasHideHooks)) {
+			child.__isMounted && (child.animations?.out || child.__hasHideHooks)) {
 			const leavingEl = child.element;
 			if (leavingEl && leavingEl.nodeType === 1 /* ELEMENT_NODE */) {
 				leavingEls.add(leavingEl);
@@ -1834,7 +1827,7 @@ function unmount(vnode, immediate = false) {
 				child.destroyAnimated();
 			}
 		} else {
-			child?.destroy();
+			child.destroy();
 		}
 		// Drop the links to the instance this vnode just gave up (D170, identity
 		// short-circuit). A vnode is no longer single-use: the same object can come
@@ -1983,23 +1976,13 @@ function patchAttrs(el, oldAttrs, newAttrs, owner = null) {
 			}
 			continue;
 		}
-		// Controlled property-backed attrs (`value` on an input/textarea, `checked`
-		// on a checkbox/radio) can drift from the live DOM through user interaction
-		// the app never mirrored back into state — typing into an input whose write
-		// commits on `change` (an author handler, or D147's synthesized
-		// '@change:bind'), clicking such a checkbox, or an in-flight IME composition
-		// whose write the bind guard is deliberately holding back. A later re-render whose BOUND value is
-		// unchanged would skip the write on a vnode-to-vnode compare (`'' === ''`),
-		// leaving the stale user text/state on screen while component state says
-		// otherwise. Compare against the LIVE DOM property instead so the controlled
-		// value is re-asserted regardless of vnode equality (React/Vue force-sync the
-		// property on every patch for exactly this reason). The per-keystroke echo case
-		// (bound value already equals the live property) still writes NOTHING — the
-		// caret is preserved. <select>'s `value` is (re)asserted AFTER its <option>
-		// children patch (reassertSelectValue); leave it to the generic path here since
-		// its options may not exist yet at attr-patch time. Non-form elements that carry
-		// a plain `value` (<li>, <progress>, <button>) keep the byte-identical vnode
-		// compare — they never drift out of band.
+		// A control's `value` (input/textarea) and `checked` (input) compare against
+		// the LIVE DOM, not the old vnode (see syncControlValue). syncControl at the
+		// end of patch() checks them again after children, but an island returns
+		// before it, so this pass must not skip them. Skipping them would also move
+		// the write after the element's other attrs, which shows (a radio's `checked`
+		// against a `name` patched in the same pass). A <select>'s `value` takes the
+		// generic path; it is re-asserted once its options have patched.
 		if (name === 'value' && (el.nodeName === 'INPUT' || el.nodeName === 'TEXTAREA')) {
 			syncControlValue(/** @type {HTMLInputElement | HTMLTextAreaElement} */ (el), value, owner);
 		} else if (name === 'checked' && el.nodeName === 'INPUT') {
@@ -2627,5 +2610,3 @@ function inSvgNamespace(tag, parent) {
 	if (tag === 'svg') return true;
 	return /** @type {Element} */ (parent).namespaceURI === SVG_NS && parent.nodeName.toLowerCase() !== 'foreignobject';
 }
-
-export default ViewManager;

@@ -15,7 +15,7 @@
         <p class="mt-3 text-body">
           Accessibility is the <strong class="font-medium text-ink">disclosure</strong> pattern, not
           menubar or menuitem roles: those promise a desktop-app keyboard model that links to pages
-          do not deliver. Every trigger is a real button the component wires with
+          do not deliver. Every trigger is a focusable role="button" element the component wires with
           <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">aria-expanded</code>,
           and every item is a real
           <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">{ '<a>' }</code>
@@ -76,14 +76,16 @@
                   <NavigationMenu.Link key={ row.href } href={ row.href } label={ row.label }/>
                 {/for}
 
-                <NavigationMenu.Item>
-                  <NavigationMenu.Trigger variant="card">By industry</NavigationMenu.Trigger>
-                  <NavigationMenu.Content opens="right" class="w-52">
-                    {#for row in industries}
-                      <NavigationMenu.Link key={ row.href } href={ row.href } label={ row.label }/>
-                    {/for}
-                  </NavigationMenu.Content>
-                </NavigationMenu.Item>
+                <ul>
+                  <NavigationMenu.Item>
+                    <NavigationMenu.Trigger variant="card">By industry</NavigationMenu.Trigger>
+                    <NavigationMenu.Content opens="right" class="w-52">
+                      {#for row in industries}
+                        <NavigationMenu.Link key={ row.href } href={ row.href } label={ row.label }/>
+                      {/for}
+                    </NavigationMenu.Content>
+                  </NavigationMenu.Item>
+                </ul>
               </NavigationMenu.Content>
             </NavigationMenu.Item>
 
@@ -202,13 +204,15 @@
                     <NavigationMenu.Link href="#about" label="About"/>
                     <NavigationMenu.Link href="#careers" label="Careers"/>
 
-                    <NavigationMenu.Item>
-                      <NavigationMenu.Trigger variant="card">Support</NavigationMenu.Trigger>
-                      <NavigationMenu.Content opens="right" class="w-48">
-                        <NavigationMenu.Link href="#contact" label="Contact us"/>
-                        <NavigationMenu.Link href="#help" label="Help center"/>
-                      </NavigationMenu.Content>
-                    </NavigationMenu.Item>
+                    <ul>
+                      <NavigationMenu.Item>
+                        <NavigationMenu.Trigger variant="card">Support</NavigationMenu.Trigger>
+                        <NavigationMenu.Content opens="right" class="w-48">
+                          <NavigationMenu.Link href="#contact" label="Contact us"/>
+                          <NavigationMenu.Link href="#help" label="Help center"/>
+                        </NavigationMenu.Content>
+                      </NavigationMenu.Item>
+                    </ul>
                   </NavigationMenu.Content>
                 </NavigationMenu.Item>
               </NavigationMenu>
@@ -226,9 +230,9 @@
         <section id="spacing" class="scroll-mt-20">
           <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Spacing and the hover bridge</h2>
           <p class="text-sm text-body">
-            Every panel opens 8px clear of what opened it: below its trigger, below the bar for a
-            wide panel, and beside its row for a submenu, lifted so the submenu's first link lines
-            up with that row. A hover-opened panel would close the moment the pointer left the
+            A downward panel opens 8px clear of what opened it: below its trigger, or below the bar
+            for a wide panel. A submenu opens beside its row, 3px clear of the parent panel's edge,
+            lifted so the submenu's first link lines up with that row. A hover-opened panel would close the moment the pointer left the
             trigger for that gap, so the core stylesheet draws an invisible, hit-testable wedge —
             the <span class="font-medium text-ink">hover bridge</span> — under a downward trigger and
             beside a submenu's, which keeps the pointer inside the menu on the way across.
@@ -391,13 +395,15 @@ const codeHero = `// A whole site header. The logo and the sign-in button are ba
     <NavigationMenu.Content class="w-60">
       <NavigationMenu.Link href="/startups" label="For startups" />
       …
-      <NavigationMenu.Item>
-        <NavigationMenu.Trigger variant="card">By industry</NavigationMenu.Trigger>
-        <NavigationMenu.Content opens="right" class="w-52">
-          <NavigationMenu.Link href="/retail" label="Retail" />
-          …
-        </NavigationMenu.Content>
-      </NavigationMenu.Item>
+      <ul>
+        <NavigationMenu.Item>
+          <NavigationMenu.Trigger variant="card">By industry</NavigationMenu.Trigger>
+          <NavigationMenu.Content opens="right" class="w-52">
+            <NavigationMenu.Link href="/retail" label="Retail" />
+            …
+          </NavigationMenu.Content>
+        </NavigationMenu.Item>
+      </ul>
     </NavigationMenu.Content>
   </NavigationMenu.Item>
 
@@ -428,16 +434,18 @@ const codeColumns = `// A flat run of links in a wide panel takes an explicit co
 
 const codeSubmenu = `// A submenu is just an Item nested in a Content with opens="right",
 // which moves the panel beside its trigger and rotates the hover
-// bridge onto the horizontal axis.
+// bridge onto the horizontal axis. An Item renders an <li>, so wrap it in a <ul>.
 <NavigationMenu.Content align="end" class="w-56">
   <NavigationMenu.Link href="/about" label="About" />
 
-  <NavigationMenu.Item>
-    <NavigationMenu.Trigger variant="card">Support</NavigationMenu.Trigger>
-    <NavigationMenu.Content opens="right" class="w-48">
-      <NavigationMenu.Link href="/contact" label="Contact us" />
-    </NavigationMenu.Content>
-  </NavigationMenu.Item>
+  <ul>
+    <NavigationMenu.Item>
+      <NavigationMenu.Trigger variant="card">Support</NavigationMenu.Trigger>
+      <NavigationMenu.Content opens="right" class="w-48">
+        <NavigationMenu.Link href="/contact" label="Contact us" />
+      </NavigationMenu.Content>
+    </NavigationMenu.Item>
+  </ul>
 </NavigationMenu.Content>`;
 
 const keyRows = [
@@ -476,7 +484,7 @@ const contentRows = [
   { name: 'wide', desc: 'A full-width mega panel spanning the <nav>, with mega padding and gutters.' },
   { name: 'opens', desc: "'down' (default) | 'right' for a submenu." },
   { name: 'align', desc: "'start' (default) | 'end'. end is left-auto right-0 — pure CSS, no measuring." },
-  { name: 'effect', desc: "'fade' | 'slide' | 'scale' | 'blur' | 'swing'. Needs the effects stylesheet." },
+  { name: 'effect', desc: "'fade' | 'slide' | 'scale' | 'blur' | 'bloom' | 'swing'. Needs the effects stylesheet." },
   { name: 'class', desc: 'Merged onto <dropdown-panel>, after the layout classes. Never overflow-hidden.' },
 ];
 

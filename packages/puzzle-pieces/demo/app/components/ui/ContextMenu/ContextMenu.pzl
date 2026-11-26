@@ -3,7 +3,6 @@
     class={ rootClass }
     menu={ true }
     trigger={ triggerMode }
-    effect={ effect }
     @show={ onShow }
     @hide={ onHide }
     @select={ onSelect }><Children/></DropdownPanel>
@@ -75,12 +74,11 @@ import DropdownPanel from '../DropdownPanel/index.js';
 //             leaves the component with no trigger to find; expect one
 //             "requires <dropdown-trigger>" console warning per disabled
 //             instance while it waits for children that are not coming.
-//   effect    'fade' | 'slide' | 'scale' | 'blur' | 'swing' (effects sheet only)
 //   class     merged onto <dropdown-component>, after `inline-block`
 // Callbacks
 //   @show()                 the menu opened
 //   @hide()                 the menu closed
-//   @select(value, event)   a row was activated, anywhere in the chain. Fires
+//   @select(value)          a row was activated, anywhere in the chain. Fires
 //             exactly once per activation; `value` is data-value, then value,
 //             then href, else null. Return false to keep the menu open.
 //
@@ -92,7 +90,7 @@ import DropdownPanel from '../DropdownPanel/index.js';
 const ROOT = 'inline-block';
 
 export default class ContextMenu extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     return {
       rootClass: [ROOT, props.class].filter(Boolean).join(' '),
       // `false` is the compiler's omit sentinel: no attribute at all, so the
@@ -100,14 +98,13 @@ export default class ContextMenu extends PuzzleView {
       // and never wires anything up. Nothing opens, and the native menu — which
       // only the contextmenu listener would have preventDefault'd — survives.
       triggerMode: props.disabled ? false : 'contextmenu',
-      effect: props.effect,
     };
   }
 
   events = {
     onShow: () => this.props.show?.(),
     onHide: () => this.props.hide?.(),
-    onSelect: (value, event) => this.props.select?.(value, event),
+    onSelect: (value) => this.props.select?.(value),
   };
 }
 </script>

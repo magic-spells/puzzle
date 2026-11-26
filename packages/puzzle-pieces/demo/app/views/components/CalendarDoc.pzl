@@ -164,7 +164,7 @@ const codeHero = `<Calendar value={ date } @change={ setDate } />
 
 // parent — Calendar never mutates value; it asks and you write it back
 events = {
-  setDate: (iso) => this.setData('date', iso),
+  setDate: (iso) => this.setState('date', iso),
 };`;
 
 const codeBounds = `// disabledDates: an ISO array, or a predicate (iso, date) => boolean
@@ -202,7 +202,7 @@ const codeMorph = `// Calendar is inline-only; DatePicker composes it behind a t
 
 export default class CalendarDoc extends PuzzleView {
   created() {
-    this.setData({
+    this.setState({
       date: '2026-07-16',
       boundedDate: '2026-07-16',
       mondayDate: '2026-07-16',
@@ -211,7 +211,7 @@ export default class CalendarDoc extends PuzzleView {
     });
   }
 
-  data(params, props) {
+  data() {
     return {
       ...this.getData(),
       installCmd,
@@ -238,11 +238,11 @@ export default class CalendarDoc extends PuzzleView {
   }
 
   events = {
-    setDate: (iso) => this.setData('date', iso),
-    setBoundedDate: (iso) => this.setData('boundedDate', iso),
-    setMondayDate: (iso) => this.setData('mondayDate', iso),
-    setEventDate: (iso) => this.setData('eventDate', iso),
-    setMorphDate: (iso) => this.setData('morphDate', iso),
+    setDate: (iso) => this.setState('date', iso),
+    setBoundedDate: (iso) => this.setState('boundedDate', iso),
+    setMondayDate: (iso) => this.setState('mondayDate', iso),
+    setEventDate: (iso) => this.setState('eventDate', iso),
+    setMorphDate: (iso) => this.setState('morphDate', iso),
   };
 }
 </script>

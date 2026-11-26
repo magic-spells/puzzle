@@ -1,7 +1,7 @@
 ---
 name: 'D29 — Loop counter binding: a trailing `, name` on `{#for}`'
 status: verified
-verified_at: '2026-07-15T08:17:25.000Z'
+verified_at: '2026-11-01T19:19:59.201Z'
 connections:
   - COMPONENT-TEMPLATE-PARSER
   - COMPONENT-CODEGEN
@@ -9,6 +9,7 @@ connections:
   - DOC-SPEC
   - DOC-SPEC-TEMPLATE
   - DECISION-D58-LIST-KEYING
+verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
 ---
 
 # D29 — Loop counter binding: a trailing `, name` on `{#for}`

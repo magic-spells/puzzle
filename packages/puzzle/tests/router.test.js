@@ -8,7 +8,7 @@ import { PuzzleModel, Puzzle } from '../client-runtime/model.js';
 import { back } from './helpers/history.js';
 
 // Hand-written stand-ins for what the compiler emits: a view/layout render()
-// returns a ViewNode tree, `<Slot/>` is a SLOT_TAG node, and a routed view is a
+// returns a ViewNode tree, `<Outlet/>` is a SLOT_TAG node, and a routed view is a
 // <puzzle-view> root element (D20).
 const h = (tag, attrs = {}, children = []) => new ViewNode(tag, attrs, children);
 const text = (value) => new ViewNode('text', { value });
@@ -25,7 +25,7 @@ const container = () => {
 
 const ctx = (store = null) => ({ store, router: null, formatters: null });
 
-// A layout with a single <Slot/> the routed view renders into.
+// A layout with a single <Outlet/> the routed view renders into.
 class DefaultLayout extends PuzzleView {
 	render() {
 		return h('puzzle-view', { class: 'layout' }, [
@@ -838,7 +838,7 @@ describe('Router — same-path push is a no-op (v-next)', () => {
 	it('/user/1 → /user/2 params-only refresh still works (only byte-identical short-circuits)', async () => {
 		let seen;
 		class UserView extends PuzzleView {
-			data(params) {
+			data({ params }) {
 				seen = params.id;
 				return { id: params.id };
 			}
@@ -1200,7 +1200,7 @@ describe('Router — matching', () => {
 	it('decodes URI-encoded param values', async () => {
 		let seen;
 		class UserView extends PuzzleView {
-			data(params) {
+			data({ params }) {
 				seen = params.id;
 				return { id: params.id };
 			}
@@ -1226,7 +1226,7 @@ describe('Router — params-only change (D19 §5)', () => {
 			created() {
 				created.push(this);
 			}
-			data(params) {
+			data({ params }) {
 				seenParams.push(params.id);
 				return { id: params.id };
 			}
@@ -1251,7 +1251,7 @@ describe('Router — params-only change (D19 §5)', () => {
 
 	it('a rejecting data() on a params-only change leaves the URL untouched (D19)', async () => {
 		class UserView extends PuzzleView {
-			async data(params) {
+			async data({ params }) {
 				if (params.id === 'bad') throw new Error('boom');
 				return { id: params.id };
 			}
@@ -1905,7 +1905,7 @@ describe('Router — skeleton views skip the data() gate (v1.8, D39)', () => {
 		expect(el.textContent).toContain('PLAIN');
 	});
 
-	it('a pending skeleton PARENT mounts its routed child when its real template (and <Slot/>) lands — and no missing-slot warning fires', async () => {
+	it('a pending skeleton PARENT mounts its routed child when its real template (and <Outlet/>) lands — and no missing-slot warning fires', async () => {
 		const gate = deferred();
 		class ShellView extends PuzzleView {
 			async data() {
@@ -1944,7 +1944,7 @@ describe('Router — skeleton views skip the data() gate (v1.8, D39)', () => {
 		expect(location.pathname).toBe('/shell/child');
 		expect(el.querySelector('.shell.is-loading')).not.toBeNull();
 		expect(el.querySelector('.child')).toBeNull(); // no slot in the skeleton yet
-		expect(warnSpy).not.toHaveBeenCalled(); // pending skeleton parent ≠ missing <Slot/>
+		expect(warnSpy).not.toHaveBeenCalled(); // pending skeleton parent ≠ missing <Outlet/>
 
 		gate.resolve('SHELL');
 		await tick();

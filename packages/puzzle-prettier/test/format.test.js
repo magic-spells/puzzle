@@ -13,14 +13,14 @@ const fixtures = readdirSync(fixturesDir).filter((f) => f.endsWith('.pzl'));
 describe('script formatting', () => {
 	it('formats a JS <script> body with babel', async () => {
 		const out = await format(read('js-scripts.pzl'));
-		expect(out).toContain('created() {\n    this.setData({ count: 0 });\n  }');
+		expect(out).toContain('created() {\n    this.setState({ count: 0 });\n  }');
 		expect(out).toContain('import { PuzzleView } from "@magic-spells/puzzle";');
 	});
 
 	it('formats a TS <script lang="ts"> body with typescript', async () => {
 		const out = await format(read('ts-scripts.pzl'));
 		expect(out).toContain('interface HomeModel {\n  title: string;\n  count: number;\n}');
-		expect(out).toContain('data(params: Record<string, string>): HomeModel {');
+		expect(out).toContain('data({ params }: DataInput): HomeModel {');
 		// the open tag with its lang attribute survives verbatim
 		expect(out).toContain('<script lang="ts">');
 	});
@@ -101,12 +101,12 @@ describe('gnarly template body is byte-preserved', () => {
 
 describe('paired composition markers (D141)', () => {
 	// The splitter works on section boundaries only — it never parses template
-	// tags — so paired <Slot>/<Children> bodies are just template bytes. This
+	// tags — so paired <Outlet>/<Children> bodies are just template bytes. This
 	// pins that: the whole <puzzle-view> body survives untouched for both the
 	// paired and the self-closing marker forms, and the script/style around it
 	// still format. Idempotency and the trailing-newline rule come free from
 	// the fixture sweeps below.
-	it('preserves paired <Slot>/<Children> fallback bodies byte-for-byte', async () => {
+	it('preserves paired <Outlet>/<Children> fallback bodies byte-for-byte', async () => {
 		const input = read('paired-markers.pzl');
 		const out = await format(input);
 		const a = sectionMap(input);
@@ -118,7 +118,7 @@ describe('paired composition markers (D141)', () => {
 		expect(out).toContain('<Slot name="header"><h2>{ capitalize(title) }</h2></Slot>');
 		expect(out).toContain('<Children>');
 		expect(out).toContain('</Children>');
-		expect(out).toContain("<Slot>{ number_with_delimiter(count) } remaining{#svg 'icons/empty.svg'}</Slot>");
+		expect(out).toContain("<Outlet>{ number_with_delimiter(count) } remaining{#svg 'icons/empty.svg'}</Outlet>");
 		expect(out).toContain('<Children/>');
 		expect(out).toContain('<Slot name="footer"/>');
 		// the surrounding script and style still got formatted
@@ -231,7 +231,7 @@ import Avatar from './Avatar.pzl';
 import PageCard from './PageCard.pzl';
 
 export default class Docs extends PuzzleView {
-  data(params, props) {
+  data() {
     // Pages I'm linking to (and not this one), newest first, capped at
     // three. Filtering/sorting live here, not in the template.
     const pages = this.ctx.store

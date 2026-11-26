@@ -161,7 +161,7 @@
     <main class="relative min-w-0 flex-1 overflow-y-auto overflow-x-hidden border-t border-panel-edge bg-surface-panel shadow-panel lg:rounded-tl-xl lg:border-l">
       <!-- pb-dock-clear below lg: the floating docs pill must not sit on the footer. -->
       <div class="px-gutter pt-10 pb-dock-clear lg:pb-10">
-        <Slot/>
+        <Outlet/>
 
         <footer class="mt-16 border-t border-border pt-6 text-sm text-muted">
           Puzzle Pieces · { pieceCount } copy-in components, rendered live from the registry · built with the Puzzle framework.
@@ -195,7 +195,7 @@ import { GETTING_STARTED, SECTIONS, COMPONENTS, THEMES, SCHEME_PANELS, ICONS } f
 // Rail items: the Sidebar piece takes hrefs, and the demo is hash-routed, so
 // every href is `#` + path and the active match is `#` + the current path.
 // Shown in the bar; bump with package.json (the bundler has no JSON import).
-const VERSION = '0.9.0';
+const VERSION = '0.10.0';
 
 const KEYS = { '/': 'introduction', '/components': 'components', '/theming': 'theming' };
 
@@ -231,7 +231,7 @@ const CURRENT = new Map([
 const NO_PAGE = { group: '', title: 'Menu' };
 
 export default class DefaultLayout extends PuzzleView {
-  data(params, props) {
+  data() {
     // this.route is the per-navigation snapshot (D47), readable here in data();
     // fall back to the live router when it isn't set yet.
     const path =
@@ -260,8 +260,7 @@ export default class DefaultLayout extends PuzzleView {
   }
 
   setMobileNav(open) {
-    this.setData({ mobileNavOpen: open });
-    this.refresh();
+    this.setState({ mobileNavOpen: open });
   }
 
   events = {
@@ -282,8 +281,7 @@ export default class DefaultLayout extends PuzzleView {
     // next pill press is a fresh open edge.
     closeMobileNav: () => {
       if (!this.getData().mobileNavOpen) return;
-      this.setData({ mobileNavOpen: false });
-      this.refresh();
+      this.setState({ mobileNavOpen: false });
     },
     // Any link in the sheet closes it; the router still follows the href. A
     // modified or non-primary click opens a new tab and leaves this page where
@@ -291,8 +289,7 @@ export default class DefaultLayout extends PuzzleView {
     onDrawerClick: (event) => {
       if (!event.target.closest('a[href]')) return;
       if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-      this.setData({ mobileNavOpen: false });
-      this.refresh();
+      this.setState({ mobileNavOpen: false });
     },
     // The sheet lists ~110 links; open it on the page being read rather than
     // on "Introduction". Runs once the entrance has settled.

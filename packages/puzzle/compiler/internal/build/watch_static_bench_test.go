@@ -33,7 +33,7 @@ app.mount();
 export default app;
 `,
 		"app/layouts/Default.pzl": `<puzzle-view>
-  <main><Slot/></main>
+  <main><Outlet/></main>
 </puzzle-view>
 <script>
 import { PuzzleView } from '@magic-spells/puzzle';

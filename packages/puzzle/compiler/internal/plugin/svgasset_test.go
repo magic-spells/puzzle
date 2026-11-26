@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/evanw/esbuild/pkg/api"
 	"github.com/magic-spells/puzzle/compiler/internal/codegen"
 )
 
@@ -105,5 +106,36 @@ func TestPluginSVGAssetLegitimateSpecifierStillResolves(t *testing.T) {
 	}
 	if !strings.Contains(string(res.OutputFiles[0].Contents), marker) {
 		t.Errorf("bundle is missing the resolved icon markup:\n%s", res.OutputFiles[0].Contents)
+	}
+}
+
+// TestPluginSVGAssetHashIgnoresAppLocation: esbuild folds a plugin namespace's
+// module path verbatim into [hash], so the same app built in two directories
+// must key its {#svg} module by an app-relative name to get one entry name (D181).
+func TestPluginSVGAssetHashIgnoresAppLocation(t *testing.T) {
+	var names []string
+	for range 2 {
+		root := writeApp(t, map[string]string{
+			"app/app.js":                 "import icon from '" + codegen.SVGAssetSpecifierPrefix + "icons/heart.svg';\nexport default icon;\n",
+			"app/assets/icons/heart.svg": `<svg viewBox="0 0 24 24"><path d="M0 0"/></svg>`,
+		})
+		res := api.Build(api.BuildOptions{
+			EntryPoints:   []string{filepath.Join(root, "app", "app.js")},
+			EntryNames:    "[name]-[hash]",
+			Outdir:        filepath.Join(root, "dist"),
+			AbsWorkingDir: root,
+			Bundle:        true,
+			Format:        api.FormatESModule,
+			External:      []string{"@magic-spells/puzzle"},
+			Plugins:       []api.Plugin{New(root).ESBuild()},
+			LogLevel:      api.LogLevelSilent,
+		})
+		if len(res.Errors) > 0 {
+			t.Fatalf("unexpected build errors: %v", res.Errors)
+		}
+		names = append(names, filepath.Base(res.OutputFiles[0].Path))
+	}
+	if names[0] != names[1] {
+		t.Errorf("the same app built in two directories got %s and %s", names[0], names[1])
 	}
 }

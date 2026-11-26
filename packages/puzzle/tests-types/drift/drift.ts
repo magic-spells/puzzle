@@ -34,6 +34,8 @@ import type * as RootRuntime from '../../client-runtime/index.js';
 import type * as RootTypes from '../../types/index.js';
 import type * as AdapterRuntime from '../../client-runtime/datastore/adapter.js';
 import type * as AdapterTypes from '../../types/adapter.js';
+import type * as FormsRuntime from '../../client-runtime/forms.js';
+import type * as FormsTypes from '../../types/forms.js';
 import type * as MorphRuntime from '../../client-runtime/morph.js';
 import type * as MorphTypes from '../../types/morph.js';
 import type * as RouterModesRuntime from '../../client-runtime/router/modes.js';
@@ -46,6 +48,8 @@ import type * as TestingRuntime from '../../client-runtime/testing/index.js';
 import type * as TestingTypes from '../../types/testing.js';
 import type * as FixturesRuntime from '../../client-runtime/fixtures/index.js';
 import type * as FixturesTypes from '../../types/fixtures.js';
+import type * as VitestRuntime from '../../client-runtime/vitest/index.js';
+import type * as VitestTypes from '../../types/vitest.js';
 
 declare function undeclared<Runtime, Types, Internal = never>(): Exclude<
 	keyof Runtime,
@@ -77,6 +81,11 @@ export const adapterUndeclared: never = undeclared<
 >();
 export const adapterUnimplemented: never = unimplemented<typeof AdapterRuntime, typeof AdapterTypes>();
 export const adapterMismatched: never = mismatched<typeof AdapterRuntime, typeof AdapterTypes>();
+
+// ---- `@magic-spells/puzzle/forms` ------------------------------------------
+export const formsUndeclared: never = undeclared<typeof FormsRuntime, typeof FormsTypes>();
+export const formsUnimplemented: never = unimplemented<typeof FormsRuntime, typeof FormsTypes>();
+export const formsMismatched: never = mismatched<typeof FormsRuntime, typeof FormsTypes>();
 
 // ---- `@magic-spells/puzzle/morph` ------------------------------------------
 export const morphUndeclared: never = undeclared<typeof MorphRuntime, typeof MorphTypes>();
@@ -129,3 +138,8 @@ export const fixturesUnimplemented: never = unimplemented<
 	typeof FixturesTypes
 >();
 export const fixturesMismatched: never = mismatched<typeof FixturesRuntime, typeof FixturesTypes>();
+
+// ---- `@magic-spells/puzzle/vitest` -----------------------------------------
+export const vitestUndeclared: never = undeclared<typeof VitestRuntime, typeof VitestTypes>();
+export const vitestUnimplemented: never = unimplemented<typeof VitestRuntime, typeof VitestTypes>();
+export const vitestMismatched: never = mismatched<typeof VitestRuntime, typeof VitestTypes>();

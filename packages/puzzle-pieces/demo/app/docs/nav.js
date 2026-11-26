@@ -1,4 +1,4 @@
-// Generated from registry/registry.json — regenerate when pieces are added.
+// Copied by hand from registry/registry.json — keep each entry in step with it.
 // One config drives the sidebar, the /components index, and page metadata.
 
 export const GETTING_STARTED = [
@@ -75,7 +75,7 @@ export const SECTIONS = [
 		{ name: "fader", title: "Fader", path: "/components/fader",
 			description: "Full-width fill slider — a flat, dial-style parameter control with an inline label, right-aligned value readout, interior ticks, and a bar handle" },
 		{ name: "field", title: "Field", path: "/components/field",
-			description: "Labeled text input with hint/error helper text, danger invalid state, and full ARIA wiring" },
+			description: "Labeled text input with hint/error helper text, danger invalid state, full ARIA wiring, and optional form + name wiring for @magic-spells/puzzle/forms" },
 		{ name: "input-group", title: "Input Group", path: "/components/input-group",
 			description: "Field-compatible input with fused prefix/suffix addon slots — group-level focus ring and error styling, full label/hint/error ARIA" },
 		{ name: "input-otp", title: "Input OTP", path: "/components/input-otp",
@@ -124,7 +124,7 @@ export const SECTIONS = [
 		{ name: "bottom-sheet", title: "Bottom Sheet", path: "/components/bottom-sheet",
 			description: "Native-dialog bottom sheet dragged, flicked and dismissed with a finger, with optional height snap points that settle on a velocity-aware spring, a pinned footer, inset mode and a dismissal-tracking scrim; wraps the @magic-spells/bottom-sheet web component rather than porting it" },
 		{ name: "command", title: "Command", path: "/components/command",
-			description: "Command palette with filtered, grouped, keyboard-driven quick actions and snippet-customizable option content" },
+			description: "Command palette with filtered, grouped, keyboard-driven quick actions and snippet-customizable option content; wraps the @magic-spells/dialog-panel web component for the overlay" },
 		{ name: "context-menu", title: "Context Menu", path: "/components/context-menu",
 			description: "Right-click context menu — a compound family over the shared dropdown-panel base that opens at the pointer, clamped and flipped into the viewport, with dropdown-menu's rows re-exported and a touch long-press gesture" },
 		{ name: "dialog", title: "Dialog", path: "/components/dialog",
@@ -138,7 +138,7 @@ export const SECTIONS = [
 		{ name: "menubar", title: "Menubar", path: "/components/menubar",
 			description: "Desktop-app-style horizontal menu bar — a compound family over the shared dropdown-panel base, with hover-switching menus, nested submenus, shortcut hints, separators, labels, link rows, and disabled and danger items" },
 		{ name: "navigation-menu", title: "Navigation Menu", path: "/components/navigation-menu",
-			description: "Horizontal site navigation with hover/click flyout panels of link cards — a compound family over the shared dropdown-panel base, with disclosure-pattern semantics, nested submenus, full-width mega panels, and per-link active state" },
+			description: "Horizontal site navigation with hover/click flyout panels of link cards — a compound family over the shared dropdown-panel base, with disclosure-pattern semantics, nested submenus, full-width mega panels with headed columns, and per-link active state" },
 		{ name: "popconfirm", title: "Popconfirm", path: "/components/popconfirm",
 			description: "Inline confirmation bubble anchored to a trigger — title, optional description, confirm/cancel actions and a danger variant, over the shared dropdown-panel base; wraps the @magic-spells/dropdown-panel web component rather than porting it" },
 		{ name: "popover", title: "Popover", path: "/components/popover",

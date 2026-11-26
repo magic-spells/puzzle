@@ -30,9 +30,11 @@ const svgAssetNamespace = "puzzle-svg-asset"
 // setupSVGAssets registers the OnResolve/OnLoad handlers for the {#svg} dedup
 // virtual modules. Called from setup().
 func (p *Plugin) setupSVGAssets(build api.PluginBuild) {
-	// Resolve `@magic-spells/puzzle/svg-asset/<src>` → the absolute svg path so
-	// esbuild dedups by file (Path + Namespace), collapsing every use of the same
-	// asset — even across .pzl files — onto one module.
+	// Resolve `@magic-spells/puzzle/svg-asset/<src>` → the svg's app-relative
+	// name so esbuild dedups by file (Path + Namespace), collapsing every use of
+	// the same asset — even across .pzl files — onto one module. The name is
+	// relative because esbuild hashes a plugin namespace's Path verbatim into
+	// [hash] (D181); OnLoad gets the absolute path as PluginData.
 	build.OnResolve(api.OnResolveOptions{Filter: "^" + escapeRegexp(codegen.SVGAssetSpecifierPrefix)}, func(args api.OnResolveArgs) (api.OnResolveResult, error) {
 		src := strings.TrimPrefix(args.Path, codegen.SVGAssetSpecifierPrefix)
 		p.mu.Lock()
@@ -43,8 +45,9 @@ func (p *Plugin) setupSVGAssets(build api.PluginBuild) {
 			return api.OnResolveResult{Errors: []api.Message{{Text: err.Error()}}}, nil
 		}
 		return api.OnResolveResult{
-			Path:      abs,
-			Namespace: svgAssetNamespace,
+			Path:       p.relName(abs),
+			Namespace:  svgAssetNamespace,
+			PluginData: abs,
 		}, nil
 	})
 
@@ -62,8 +65,8 @@ func (p *Plugin) setupSVGAssets(build api.PluginBuild) {
 		// error the codegen path already reports for the same file). The name is
 		// also codegen's memo key for this asset, so a build that already compiled
 		// a .pzl referencing this icon reuses that read + scan instead of a third.
-		name := p.relName(args.Path)
-		scanned := svgCache.Load(args.Path, name)
+		abs, name := args.PluginData.(string), args.Path
+		scanned := svgCache.Load(abs, name)
 		if scanned.ReadErr != nil {
 			return api.OnLoadResult{Errors: []api.Message{{Text: scanned.ReadErr.Error()}}}, nil
 		}
@@ -71,8 +74,8 @@ func (p *Plugin) setupSVGAssets(build api.PluginBuild) {
 		out, cerr := codegen.SVGAssetModuleFrom(scanned, name, viewNodeImport)
 		if cerr != nil {
 			return api.OnLoadResult{
-				Errors:     toMessages(cerr, name),
-				WatchFiles: []string{args.Path},
+				Errors:     toMessages(cerr, name, func(string) []byte { return scanned.Data }),
+				WatchFiles: []string{abs},
 			}, nil
 		}
 		return api.OnLoadResult{
@@ -82,7 +85,7 @@ func (p *Plugin) setupSVGAssets(build api.PluginBuild) {
 			// Editing the svg must regenerate this shared module: esbuild caches
 			// virtual-module OnLoad results, so list the source as a WatchFile to
 			// invalidate the cache on the next incremental rebuild (D46).
-			WatchFiles: []string{args.Path},
+			WatchFiles: []string{abs},
 		}, nil
 	})
 }

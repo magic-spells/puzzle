@@ -1,7 +1,7 @@
 ---
 name: .pzl files — user guide
 status: verified
-verified_at: '2026-07-15T08:17:25.000Z'
+verified_at: '2026-11-01T19:25:08.617Z'
 connections:
   - COMPONENT-PUZZLE-VIEW
   - DOC-SPEC
@@ -9,13 +9,15 @@ connections:
   - DOC-SPEC-VIEW
   - DOC-USER-GUIDE
   - DOC-DATASTORE
-  - DOC-COMPILATION-FLOW
   - DOC-ROUTER
+  - DOC-TEMPLATE-SYNTAX
+kind: guide
+verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
 ---
 
-What goes in a `.pzl` file and how its class works. The contract is [[DOC-SPEC-ANATOMY]] (§3 anatomy, §4 scripts, §10 context, §25 TypeScript, §29 scoped styles, §40 the `@` alias) and [[DOC-SPEC-VIEW]] (§12 animations, §16 skeletons).
-
 # `.pzl` files
+
+What goes in a `.pzl` file and how its class works. The contract is [[DOC-SPEC-ANATOMY]] (§3 anatomy, §4 scripts, §10 context, §25 TypeScript, §29 scoped styles, §40 the `@` alias) and [[DOC-SPEC-VIEW]] (§12 animations, §16 skeletons).
 
 A `.pzl` file bundles a template, its logic and optional styles:
 
@@ -61,30 +63,33 @@ The exported class extends `PuzzleView`:
 
 | Member | What it is |
 | --- | --- |
-| `data(params, props)` | Returns the model the template reads. May be `async`. |
+| `data({ params, props, shared })` | Returns the model the template reads. May be `async`. |
+| `share({ params, props, shared })` | Optional. Returns what nested views read under `shared` ([below](#sharing-with-nested-views)). Synchronous. |
 | `events` | A class field of arrow functions — the template's handlers ([[DOC-EVENTS]]). |
-| `created`, `mounted`, `beforeUpdate`, `afterUpdate`, `destroyed` | Lifecycle hooks, in that order. `viewWillShow`/`viewDidShow`/`viewWillHide`/`viewDidHide` bracket enter/leave animations. |
+| `created`, `mounted`, `beforeUpdate`, `afterUpdate(prev)`, `destroyed` | Lifecycle hooks, in that order. `viewWillShow`/`viewDidShow`/`viewWillHide`/`viewDidHide` bracket enter/leave animations. |
 | `animations` | A class field `{ in?, out? }` of Web Animations specs (§12). |
+| `this.renderTick()` | Resolves once no render is pending — the point to read `this.refs` or measure after `setState()` (§4). |
 | anything else | Your own helpers, called from hooks and handlers. |
 
-Class fields (`events`, `animations`) have no commas between them and other members. A few member names belong to the framework (`render`, `refresh`, `getData`, `setData`, `memo`, `refs`, and names starting `__`); the list is in §4.
+Class fields (`events`, `animations`) have no commas between them and other members. A few member names belong to the framework (`render`, `refresh`, `getData`, `getState`, `setState`, `memo`, `renderTick`, `refs`, and names starting `__`); the list is in §4.
 
 ### `this.ctx`
 
-Every view and component gets `this.ctx` with three services: `store` (records), `router` (`this.ctx.router.push('/home')`), and `formatters` (the function registry, rarely needed). `i18n` joins them when the app configures translations.
+Every view and component gets `this.ctx`: `store` (records), `router` (`this.ctx.router.push('/home')`), `formatters` (the function registry, rarely needed) and `idle()` (resolves when the app has gone quiet). `i18n` joins them when the app configures translations.
 
 ## `data()` and state
 
-`data(params, props)` answers "what does this component need?". It runs:
+`data({ params, props, shared })` answers "what does this component need?". It takes one object: route `params`, `props`, and `shared` (see [Sharing with nested views](#sharing-with-nested-views)). Destructure only what you use. It runs:
 
-1. on mount, with route params and props;
+1. on mount;
 2. when a prop changes;
 3. when route params change;
 4. when a store record it queried changes — any `findOne`/`findMany` inside `data()` subscribes automatically. On a model with an adapter, a query that misses fetches and `data()` re-runs until the data settles (§61), so `data()` can stay synchronous.
+5. when a `shared` key it read changes (below).
 
 ```js
 // UserProfile.pzl — re-runs whenever the userId prop changes
-data(params, props) {
+data({ props }) {
   return { user: this.ctx.store.findOne('user', props.userId) };
 }
 ```
@@ -92,11 +97,11 @@ data(params, props) {
 Two layers of state:
 
 - **The model** — each `data()` result **replaces** the last one.
-- **Local state** — `this.setData(key, value)` or `this.setData({ … })` writes a layer underneath that survives `data()` re-runs, and re-renders **without** re-running `data()`. When `data()` derives something from local state, call `this.refresh()` after `setData`.
+- **Local state** — `this.setState(key, value)` or `this.setState({ … })` writes a layer underneath that survives `data()` re-runs, and re-renders. When `data()` read a written key through `this.getData()` or `this.getState()`, the render re-runs `data()` first, so derived values follow without a `refresh()`. `this.getState()` reads that layer alone.
 
 ```js
 created() {
-  this.setData({ filter: 'all' });
+  this.setState({ filter: 'all' });
 }
 
 data() {
@@ -110,15 +115,58 @@ data() {
 }
 
 events = {
-  setFilter: (filter) => {
-    this.setData('filter', filter);
-    this.refresh();
-  },
+  setFilter: (filter) => this.setState('filter', filter), // data() reads filter, so it re-runs
   addTodo: () => this.ctx.store.createRecord('todo', { text: 'New todo' }), // subscribers re-run
 };
 ```
 
 A displayed expression reads what `data()` returns (the `<Component>` `is` module-binding exception is §67 / [[DOC-TEMPLATE-SYNTAX]]) — it has no `this`, so a helper method or getter on the class is out of its reach. Put the value in the model (a getter on a `PuzzleModel` works as a field: `{ user.fullName }`).
+
+## Sharing with nested views
+
+A parent can hand values and callbacks to every view it renders, at any depth, without threading props through each level. Define `share()` next to `data()`. It takes the same object and returns what nested views get ([[DECISION-D197-SHARE]]):
+
+```html
+<!-- Tabs.pzl -->
+<script>
+export default class Tabs extends PuzzleView {
+  created() {
+    this.setState({ active: 'one' });
+  }
+
+  share() {
+    const { active } = this.getData();
+    return {
+      active,
+      // the only way a child changes the parent: call its callback
+      select: (id) => this.setState({ active: id }),
+    };
+  }
+}
+</script>
+```
+
+```html
+<!-- Tab.pzl, used inside <Tabs> or slotted into it -->
+<script>
+export default class Tab extends PuzzleView {
+  data({ props, shared: { tabs = {} } }) {
+    return { label: props.label, open: tabs.active === props.id };
+  }
+
+  events = {
+    pick: () => this.shared.tabs?.select(this.props.id),
+  };
+}
+</script>
+```
+
+- **Where it lands:** under `shared.<camelCaseName>` of the sharing class, so `Tabs` → `shared.tabs` and `FilterPanel` → `shared.filterPanel`. `shared` is always an object (`{}` when no ancestor shares), so destructuring with a default never throws.
+- **Who sees it:** every view the sharer's template mounts, including children passed through a slot. The nearest same-named ancestor wins. The chain stops at a routed view, so a layout's `share()` does not reach its page.
+- **Nesting:** a view's own `share()` receives the `shared` it inherited, so a nested `Filter` can extend its parent's: `share({ shared: { filter } }) { return { chain: [...(filter?.chain ?? []), this.getData().value] }; }`.
+- **Reactivity:** `share()` re-runs after every `data()` commit and on a `setState()` of a key it read. Only the nested views whose `data()` read a changed key re-run. A function value reaches children as a stable wrapper that always calls the newest closure, so it never counts as a change.
+- **Handlers** read the same object through `this.shared`. There is no `setShared()`: children change the sharer's state only through the callbacks it shares.
+- `share()` is synchronous. Keep store queries in `data()` and read the result with `this.getData()`.
 
 ## Skeletons
 
@@ -133,7 +181,7 @@ A displayed expression reads what `data()` returns (the `<Component>` `is` modul
 - `min-duration` (ms, static) keeps a skeleton that has appeared on screen at least that long, so fast loads don't flash.
 - Only state seeded in `created()` is readable while it shows.
 - A routed view with a skeleton commits the navigation immediately and fills in; one without holds the previous page until its data is ready.
-- In a component, the skeleton needs a single plain root element; keep its tag equal to the template's root.
+- In a component, the skeleton needs a single plain root element; keep its tag equal to the template's root so the swap patches in place.
 - Load errors: return an error model from `data()` and branch in the template, or let the app's `errorView` handle it (§60).
 
 Full rules: [[DOC-SPEC-VIEW]] §16.

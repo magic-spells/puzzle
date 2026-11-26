@@ -5,10 +5,10 @@ import models from './models/index.js';
 import { seedStore } from './seed.js';
 import { loadState, saveState } from './storage.js';
 
-// Short month names for the date formatters below.
+// Short month names for the date functions below.
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-// Parse a full ISO datetime; returns null for junk so the formatters can degrade
+// Parse a full ISO datetime; returns null for junk so the functions can degrade
 // to '' instead of throwing inside a template.
 function isoDateTime(iso) {
   if (!iso) return null;
@@ -26,7 +26,7 @@ function clockTime(d) {
 }
 
 // The v1 config surface is intentionally small: target, routes, models,
-// formatters, apiURL — see constellation/doc/DOC-SPEC.md §2.
+// functions, apiURL — see constellation/doc/DOC-SPEC.md §2.
 const app = new PuzzleApp({
   target: '#app',
   routes,
@@ -38,10 +38,10 @@ const app = new PuzzleApp({
   // Point apiURL at a CDN/host later and the same endpoints follow it.
   apiURL: '',
 
-  // Display-only formatters (logic belongs in data(), per SPEC §8). These only
+  // Display-only functions (logic belongs in data(), per SPEC §8). These only
   // shape values for presentation — relative/absolute times and word forms.
   // Big counts use the built-in compact_number (847 -> "847", 3.4M). ChirpCard/NotificationRow/PostDetail lean on these heavily.
-  formatters: {
+  functions: {
     // Twitter-style relative time. 'now' (<60s), '5m', '2h', '3d' (<7d), then
     // 'Jul 3' for older-this-year, and 'Jul 3, 2025' when the year differs.
     // Degrades to '' on junk input so a bad timestamp never breaks a row.

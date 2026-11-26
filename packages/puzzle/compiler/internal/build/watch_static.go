@@ -10,9 +10,9 @@ package build
 // What makes static mode different, and why this file exists at all:
 //
 //   - A static build is THREE esbuild passes, not one — the browser app.js pass
-//     (which in this mode exists only to collect <style> and report compile
-//     errors; its output is discarded, exactly as the one-shot build discards
-//     staging/app.js), the node-platform prerender bundle, and the multi-entry
+//     (which in this mode collects <style> and reports compile errors; only its
+//     app.css can ship, for a public page that links it, exactly as in the
+//     one-shot build), the node-platform prerender bundle, and the multi-entry
 //     per-page pass whose entry set is not known until the prerender has run.
 //   - The output cannot be patched in place. Pages, page bundles, and the
 //     stylesheet must all appear together or not at all, so every rebuild
@@ -153,6 +153,9 @@ type StaticWatchBuilder struct {
 	// its files are written into each one; nothing needs pruning.
 	locales          *locales.Result
 	lastI18nWarnings string
+
+	// warnedCSS: the unloaded-CSS warning prints once per session, as WatchBuilder's does.
+	warnedCSS bool
 }
 
 // StaticWatchOptions configure the static dev builder.
@@ -294,9 +297,10 @@ func (b *StaticWatchBuilder) buildContexts() error {
 	// on so a since-un-imported .pzl's <style> can be pruned from the collector
 	// exactly as WatchBuilder.Rebuild does. Write is OFF: static output ships no
 	// app.js (the one-shot build deletes staging/app.js before the swap), so this
-	// pass exists purely to compile every view once — surfacing errors and
-	// filling the CSS collector — and its bytes are dropped.
-	appOpts := newBundleOptions(b.root, b.entry, filepath.Join(b.warm, "app"), b.appPl, bundleFlags{Dev: true, Takeover: false})
+	// pass compiles every view once — surfacing errors and filling the CSS
+	// collector — and only its app.css can ship (rebuildInto). Outdir is the warm
+	// root, at staging depth, so that file's source map matches a one-shot build's.
+	appOpts := newBundleOptions(b.root, b.entry, b.warm, b.appPl, bundleFlags{Env: b.cfg.Env, Dev: true, Takeover: false})
 	appOpts.Write = false
 	appOpts.Metafile = true
 	appCtx, ctxErr := api.Context(appOpts)
@@ -311,11 +315,11 @@ func (b *StaticWatchBuilder) buildContexts() error {
 		return err
 	}
 	preOpts := prerenderBundleOptions(
-		b.root, preStdin, filepath.Join(b.warm, prerenderDir, "prerender.mjs"), b.prePl,
+		b.root, preStdin, filepath.Join(b.warm, prerenderDir, "prerender.mjs"), b.prePl, b.cfg.Env,
 	)
 	// The prerender bundle's module graph is what tells a change apart from a
 	// render-wide one (route_deps.go): app.js, routes.js, the models registry and
-	// the formatters module live here and nowhere else.
+	// the functions module live here and nowhere else.
 	preOpts.Metafile = true
 	preCtx, ctxErr := api.Context(preOpts)
 	if ctxErr != nil {
@@ -382,7 +386,7 @@ func (b *StaticWatchBuilder) rebuild(changed []string, prof *PhaseProfile) error
 	// Which routes this save can reach, decided BEFORE the compile memo is
 	// evicted: the {#svg} edge classification depends on lives in that memo's
 	// asset index, and eviction is exactly what drops it.
-	endClassify := prof.phase("route classify")
+	endClassify := prof.Phase("route classify")
 	for _, p := range changed {
 		b.pending[p] = true
 	}
@@ -399,7 +403,7 @@ func (b *StaticWatchBuilder) rebuild(changed []string, prof *PhaseProfile) error
 	// its own; this eviction is what invalidates a .pzl whose bytes did NOT
 	// change but whose inlined {#svg} asset did (and it keeps the map from
 	// growing per save).
-	endEvict := prof.phase("cache evict")
+	endEvict := prof.Phase("cache evict")
 	b.cache.Evict(changed)
 	endEvict()
 
@@ -416,7 +420,7 @@ func (b *StaticWatchBuilder) rebuild(changed []string, prof *PhaseProfile) error
 	// a broken file keeps failing an unrelated later save until it is fixed. A
 	// broken file fails the rebuild and leaves the last good site serving.
 	if b.cfg.I18nEnabled() && (b.locales == nil || localesChanged(b.root, batch)) {
-		endLocales := prof.phase("locales")
+		endLocales := prof.Phase("locales")
 		res, err := locales.Load(b.root, b.cfg.I18n)
 		endLocales()
 		if err != nil {
@@ -436,7 +440,7 @@ func (b *StaticWatchBuilder) rebuild(changed []string, prof *PhaseProfile) error
 	// or deletes app/adapter.js, invalidates them, so rebuild before doing any
 	// work — still far cheaper than a cold build, and both cases are rare
 	// (EDITING that file is an ordinary graph input and changes nothing here).
-	endScan := prof.phase("usage scan")
+	endScan := prof.Phase("usage scan")
 	usage, err := scanUsageWith(b.root, b.scanner)
 	if err != nil {
 		endScan()
@@ -480,7 +484,7 @@ func (b *StaticWatchBuilder) rebuild(changed []string, prof *PhaseProfile) error
 		}
 	}
 
-	endSwap := prof.phase("staging swap")
+	endSwap := prof.Phase("staging swap")
 	swapErr := swapOutputWith(staging, b.outdir, b.workTmp, true)
 	endSwap()
 	if swapErr != nil {
@@ -520,7 +524,7 @@ func (b *StaticWatchBuilder) commitGraph() {
 // attempt assembles one complete staging tree for plan and returns it ready to
 // swap. Every failure path removes the tree it created, so the caller only ever
 // holds a directory it is about to swap in.
-func (b *StaticWatchBuilder) attempt(plan renderPlan, prof *buildProfile) (string, error) {
+func (b *StaticWatchBuilder) attempt(plan renderPlan, prof *PhaseProfile) (string, error) {
 	staging, err := os.MkdirTemp(b.workTmp, stagingPrefix+"*")
 	if err != nil {
 		return "", fmt.Errorf("creating build staging dir under %s: %w", b.workTmp, err)
@@ -547,14 +551,14 @@ func (e partialFallback) Unwrap() error { return e.cause }
 // rebuildInto assembles one complete static site inside staging. It mirrors the
 // one-shot pipeline's order and its guards; anything it returns discards
 // staging.
-func (b *StaticWatchBuilder) rebuildInto(staging string, prof *buildProfile, plan renderPlan) error {
+func (b *StaticWatchBuilder) rebuildInto(staging string, prof *PhaseProfile, plan renderPlan) error {
 	// Nothing this attempt captures is committed until its tree is swapped in, and
 	// a previous attempt's capture must never be: drop it up front so an early
 	// return here cannot leave one behind for commitGraph to adopt.
 	b.nextGraph = nil
 
 	// 1. The app pass — compile everything, collect <style>, report errors.
-	endBundle := prof.phase("browser bundle")
+	endBundle := prof.Phase("browser bundle")
 	appResult := b.appCtx.Rebuild()
 	endBundle()
 	if len(appResult.Errors) > 0 {
@@ -566,10 +570,21 @@ func (b *StaticWatchBuilder) rebuildInto(staging string, prof *buildProfile, pla
 		}
 	}
 	candidateCSS := b.appPl.CSS()
+	// The pass's app.css ships only for a public page that links it (prerenderStaticPages, step 5).
+	linkedCSS := shellHashSupport(b.root).appCSS
+	if linkedCSS {
+		for _, out := range appResult.OutputFiles {
+			if name := filepath.Base(out.Path); strings.HasPrefix(name, "app.css") {
+				if err := os.WriteFile(filepath.Join(staging, name), out.Contents, 0o644); err != nil {
+					return fmt.Errorf("writing %s: %w", name, err)
+				}
+			}
+		}
+	}
 
 	// 2. Public assets, into the private staging tree (plain writes, no atomic
 	//    dance: nothing can observe staging until the swap).
-	endPublic := prof.phase("public copy")
+	endPublic := prof.Phase("public copy")
 	publicFiles, err := copyPublic(b.root, staging, copyIntoStaging)
 	endPublic()
 	if err != nil {
@@ -585,7 +600,7 @@ func (b *StaticWatchBuilder) rebuildInto(staging string, prof *buildProfile, pla
 
 	// 3. The stylesheet, composed into staging rather than written over the
 	//    dist/styles.css the server is currently handing out.
-	endStyles := prof.phase("styles compose")
+	endStyles := prof.Phase("styles compose")
 	tailwindCSS := ""
 	if b.tailwind != nil {
 		tailwindCSS, err = b.tailwind()
@@ -601,22 +616,15 @@ func (b *StaticWatchBuilder) rebuildInto(staging string, prof *buildProfile, pla
 	}
 
 	// 4. The same reserved-name guards the one-shot build applies once public/
-	//    has landed: a public asset sitting at _puzzle/ or .puzzle-prerender/
-	//    would be silently consumed.
-	if pagesOut := filepath.Join(staging, staticPagesDir); dirExists(pagesOut) || FileExists(pagesOut) {
-		return fmt.Errorf(
-			"public asset would overwrite compiler output dist/%s (a reserved output name in static mode); rename or remove it",
-			staticPagesDir,
-		)
-	}
-	if err := checkPrerenderScratchCollision(b.root, staging, "--static"); err != nil {
+	//    has landed.
+	if err := checkStaticReserved(b.root, staging); err != nil {
 		return err
 	}
 
 	// 5. The node prerender bundle, then the render run itself. The bundle lands
 	//    in the warm tree (a stable Outfile the context can own); the render
 	//    writes its pages into staging.
-	endPrerenderBundle := prof.phase("prerender bundle")
+	endPrerenderBundle := prof.Phase("prerender bundle")
 	preResult := b.preCtx.Rebuild()
 	endPrerenderBundle()
 	if len(preResult.Errors) > 0 {
@@ -635,16 +643,13 @@ func (b *StaticWatchBuilder) rebuildInto(staging string, prof *buildProfile, pla
 			only = []string{}
 		}
 	}
-	renderArgs, argErr := prerenderOnlyArgs(only, plan.full)
-	if argErr != nil {
-		return partialFallback{argErr}
-	}
+	renderArgs := prerenderOnlyArgs(only, plan.full)
 
 	renderPhase := "prerender render"
 	if !plan.full {
 		renderPhase = fmt.Sprintf("partial render (%d/%d routes)", len(only), b.routeCount)
 	}
-	endRender := prof.phase(renderPhase)
+	endRender := prof.Phase(renderPhase)
 	payload, err := runPrerender(filepath.Join(b.warm, prerenderDir, "prerender.mjs"), staging, "--static", renderArgs...)
 	endRender()
 	if err != nil {
@@ -667,7 +672,7 @@ func (b *StaticWatchBuilder) rebuildInto(staging string, prof *buildProfile, pla
 	//     means this staging tree would ship incomplete, so the whole rebuild
 	//     restarts as a full render.
 	if !plan.full {
-		endReuse := prof.phase(fmt.Sprintf("page reuse (%d/%d)", countReused(summary), len(summary.Written)))
+		endReuse := prof.Phase(fmt.Sprintf("page reuse (%d/%d)", countReused(summary), len(summary.Written)))
 		reuseErr := b.reusePages(staging, summary)
 		endReuse()
 		if reuseErr != nil {
@@ -676,7 +681,7 @@ func (b *StaticWatchBuilder) rebuildInto(staging string, prof *buildProfile, pla
 	}
 
 	// 6. Per-page entries, and the page context that bundles them.
-	endEntries := prof.phase("page entries")
+	endEntries := prof.Phase("page entries")
 	entryFiles, err := b.syncPageEntries(summary)
 	endEntries()
 	if err != nil {
@@ -685,13 +690,19 @@ func (b *StaticWatchBuilder) rebuildInto(staging string, prof *buildProfile, pla
 
 	pagesMetafile := ""
 	if len(entryFiles) > 0 {
-		endPages := prof.phase("per-page bundles")
+		endPages := prof.Phase("per-page bundles")
 		var pagesErr error
 		pagesMetafile, pagesErr = b.bundlePages(staging, entryFiles)
 		endPages()
 		if pagesErr != nil {
 			return pagesErr
 		}
+		if err := linkStaticPages(staging, b.warm, pagesMetafile, summary.Written, false); err != nil {
+			return err
+		}
+	}
+	if !linkedCSS && !b.warnedCSS {
+		b.warnedCSS = warnUnloadedCSS(b.root, appResult.Metafile, pagesMetafile, b.warm)
 	}
 
 	// 7. Refresh the reverse dependency graph from the two metafiles this rebuild
@@ -700,13 +711,13 @@ func (b *StaticWatchBuilder) rebuildInto(staging string, prof *buildProfile, pla
 	//    filtered — so a partial rebuild leaves the next one just as well
 	//    informed. It is only STAGED here; commitGraph installs it once the swap
 	//    has put the matching tree in dist/.
-	endGraph := prof.phase("route graph")
+	endGraph := prof.Phase("route graph")
 	b.captureGraph(summary, pagesMetafile, preResult.Metafile)
 	endGraph()
 	b.nextCSS = candidateCSS
 	b.haveNextCSS = true
 
-	printStaticSummary(summary, len(entryFiles))
+	printStaticSummary(summary, len(entryFiles), false)
 	return nil
 }
 
@@ -780,15 +791,12 @@ func writtenRoutes(written []staticPage) int {
 // prerenderOnlyArgs renders the route filter as the generated prerender entry's
 // argv[4]. A full render passes nothing at all, so the node command line is
 // byte-identical to the pre-D155 one.
-func prerenderOnlyArgs(only []string, full bool) ([]string, error) {
+func prerenderOnlyArgs(only []string, full bool) []string {
 	if full {
-		return nil, nil
+		return nil
 	}
-	encoded, err := json.Marshal(only)
-	if err != nil {
-		return nil, fmt.Errorf("encoding the route filter: %w", err)
-	}
-	return []string{string(encoded)}, nil
+	encoded, _ := json.Marshal(only) // a []string always encodes
+	return []string{string(encoded)}
 }
 
 // countReused reports how many of a summary's pages were not rendered.
@@ -886,7 +894,7 @@ func (b *StaticWatchBuilder) reusePages(staging string, summary staticSummary) e
 // than re-reading and re-bundling every page on every save.
 func (b *StaticWatchBuilder) syncPageEntries(summary staticSummary) ([]string, error) {
 	modelsModule := findStaticModule(b.root, "app/models/index.js", "app/models/index.ts")
-	formattersModule := findStaticModule(b.root, "app/formatters.js", "app/formatters.ts")
+	functionsModule := findStaticModule(b.root, "app/functions.js", "app/functions.ts")
 	// b.adapterModule, not a fresh resolve: the summary being turned into entries
 	// was produced by a prerender entry built against THAT value, and the identity
 	// answer it reports is only about that module.
@@ -904,7 +912,7 @@ func (b *StaticWatchBuilder) syncPageEntries(summary staticSummary) ([]string, e
 	var entryFiles []string
 	live := map[string]bool{}
 	for _, page := range pages {
-		src, err := staticEntrySource(b.root, b.entry, page.staticPage, summary, modelsModule, formattersModule, adapterModule)
+		src, err := staticEntrySource(b.root, b.entry, page.staticPage, summary, modelsModule, functionsModule, adapterModule)
 		if err != nil {
 			return nil, err
 		}
@@ -959,9 +967,6 @@ func (b *StaticWatchBuilder) newPagesContext(entryFiles []string) (api.BuildCont
 	b.pagesPl = b.newPlugin(b.usage)
 	opts := staticPagesBundleOptions(b.root, entryFiles, filepath.Join(b.warm, staticPagesDir), b.cfg, true, b.pagesPl)
 	opts.Write = false
-	// One graph per route, rooted at that route's generated entry: the half of
-	// the reverse dependency graph that makes an edit attributable (route_deps.go).
-	opts.Metafile = true
 	ctx, err := api.Context(opts)
 	if err != nil {
 		return nil, fmt.Errorf("puzzle dev: creating per-page esbuild context: %s", err.Error())

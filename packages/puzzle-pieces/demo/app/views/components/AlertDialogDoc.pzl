@@ -166,16 +166,6 @@
           <h3 class="mb-2 mt-8 text-sm font-semibold text-ink">Known gaps</h3>
           <div class="space-y-3 text-sm text-body">
             <p>
-              A <strong class="font-medium text-ink">keyboard</strong> activation of either button
-              closes the prompt but reports result: null, so a confirm answered with Tab and Enter
-              is indistinguishable from Escape. A pointerless click carries coordinates of 0,0,
-              which dialog-panel reads as a click outside the panel before the delegated handler
-              runs. The piece already watches for that click so the button still closes against the
-              inert backdrop; recovering the result is pending upstream. Until it lands, write the
-              handler so a null result is treated as a cancel — which is what the examples on this
-              page do.
-            </p>
-            <p>
               role="alertdialog" requires an accessible name, so always pass title (or wire
               labelledby yourself). There is no runtime warning if you forget.
             </p>
@@ -214,7 +204,7 @@ const usageMarkup = `<AlertDialog
 
 // events = {
 //   finish: ({ result }) => {
-//     this.setData('open', false);
+//     this.setState('open', false);
 //     if (result === 'confirm') this.deleteProject();
 //   },
 // };
@@ -235,9 +225,9 @@ const codeHero = `<Button variant="destructive" @press={ openAlert }>Delete proj
   @hide={ closeAlert } />
 
 // events = {
-//   openAlert: () => this.setData('alertOpen', true),
+//   openAlert: () => this.setState('alertOpen', true),
 //   closeAlert: ({ result }) => {
-//     this.setData({ alertOpen: false, lastResult: result ?? 'dismissed' });
+//     this.setState({ alertOpen: false, lastResult: result ?? 'dismissed' });
 //     if (result === 'confirm') this.deleteProject();
 //   },
 // };
@@ -272,7 +262,7 @@ const codeDismiss = `<AlertDialog
 
 export default class AlertDialogDoc extends PuzzleView {
   created() {
-    this.setData({
+    this.setState({
       alertOpen: false,
       confirmOpen: false,
       policyOpen: false,
@@ -281,7 +271,7 @@ export default class AlertDialogDoc extends PuzzleView {
     });
   }
 
-  data(params, props) {
+  data() {
     return {
       ...this.getData(),
       installCmd,
@@ -319,10 +309,10 @@ export default class AlertDialogDoc extends PuzzleView {
   }
 
   events = {
-    openAlert: () => this.setData('alertOpen', true),
+    openAlert: () => this.setState('alertOpen', true),
     closeAlert: (detail) => {
       const result = detail?.result ?? null;
-      this.setData({ alertOpen: false, lastResult: result ?? 'dismissed' });
+      this.setState({ alertOpen: false, lastResult: result ?? 'dismissed' });
       if (result === 'confirm') {
         toast({
           title: 'Project deleted',
@@ -331,14 +321,14 @@ export default class AlertDialogDoc extends PuzzleView {
         });
       }
     },
-    openConfirm: () => this.setData('confirmOpen', true),
+    openConfirm: () => this.setState('confirmOpen', true),
     closeConfirm: (detail) => {
-      this.setData('confirmOpen', false);
+      this.setState('confirmOpen', false);
       if (detail?.result === 'confirm') toast({ message: 'Post published.', variant: 'success' });
     },
-    openPolicy: () => this.setData('policyOpen', true),
+    openPolicy: () => this.setState('policyOpen', true),
     closePolicy: (detail) =>
-      this.setData({ policyOpen: false, policyResult: detail?.result ?? 'dismissed' }),
+      this.setState({ policyOpen: false, policyResult: detail?.result ?? 'dismissed' }),
   };
 }
 </script>

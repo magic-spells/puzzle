@@ -7,8 +7,8 @@
           A controlled palette + style picker. Each theme card is a live miniature of the app
           shell painted in the palette it offers — a real surface scoped with
           <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-code text-ink">data-scheme</code>,
-          not a picture — and each style tile (Dark, Dim, Mixed, Light, plus System) is the
-          current palette painted in that style. It owns no state:
+          not a picture — and each style tile (Dark, Dim, Mixed, Light) is the current palette
+          painted in that style, beside a System tile that follows the OS. It owns no state:
           pass the current choice and hear
           <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-code text-ink">@change</code>.
         </p>
@@ -98,11 +98,13 @@ import { SCHEMES, current, set, subscribe } from '@/lib/appearance.js';
 
 const installCmd = 'puzzle add piece appearance-picker';
 const usageImport = `import AppearancePicker from '@/components/ui/AppearancePicker.pzl';
-import { current, set } from '@magic-spells/puzzle-pieces/appearance';`;
+import { current, set, subscribe } from '@magic-spells/puzzle-pieces/appearance';`;
 const usageMarkup = `<AppearancePicker scheme={ scheme } mode={ mode } @change={ apply }/>
 
-// data():   const { scheme, mode } = current();
-// events:   apply: (choice) => set(choice)   // { scheme, mode } — mode null = follow the OS`;
+// data():      const { scheme, mode } = current();
+// events:      apply: (choice) => set(choice)   // { scheme, mode } — mode null = follow the OS
+// mounted():   this._off = subscribe(() => this.refresh());   // current() is a module value
+// destroyed(): this._off();`;
 const codeHero = `<AppearancePicker scheme={ scheme } mode={ mode } @change={ apply }/>`;
 const codeControlled = `<AppearancePicker scheme={ draft.scheme } mode={ draft.mode } @change={ setDraft }/>
 <!-- nothing is persisted or painted until you decide to call set(draft) -->`;
@@ -159,8 +161,7 @@ export default class AppearancePickerDoc extends PuzzleView {
   events = {
     applyLive: (choice) => set(choice),
     applyLocal: (choice) => {
-      this.setData({ localScheme: choice.scheme, localMode: choice.mode });
-      this.refresh();
+      this.setState({ localScheme: choice.scheme, localMode: choice.mode });
     },
   };
 

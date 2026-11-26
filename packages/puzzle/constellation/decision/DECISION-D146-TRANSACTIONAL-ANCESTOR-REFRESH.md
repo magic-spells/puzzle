@@ -8,11 +8,12 @@ connections:
   - DECISION-D61-ATOMIC-LOCATION-COMMIT
   - DECISION-D39-SKELETON
   - DECISION-D145-ERROR-BOUNDARIES
+  - DECISION-D197-SHARE
   - COMPONENT-ROUTER
   - COMPONENT-PUZZLE-VIEW
   - COMPONENT-STORE
-verified_at: '2026-08-24T21:39:15.808Z'
-verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
+verified_at: '2026-11-24T18:05:31.213Z'
+verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
 code_refs:
   - client-runtime/views/PuzzleView.js
   - client-runtime/router/router.js
@@ -47,10 +48,12 @@ would no-op (destroyed, leaving, dev-profiler-blocked). The router pushes
 synchronously after `#state` is assigned, inside the `#committing` window.
 `commit()` swaps params/props/route, applies the held subscription reconcile,
 bumps `#runToken`, and re-renders from the computed model — `data()` runs once.
-Every non-committing exit calls `discard()` (gate catch, token supersession,
-SSG-takeover supersession, `#abandon`), and `#navigate` wraps the load phase
-and `#swap` in a `finally` that discards every handle, so even a user
-`render()`/`afterUpdate()` throw cannot strand holds. Handles are idempotent
+`#navigate` wraps the load phase and `#swap` in a `finally` that discards every
+handle. It covers every exit that does not commit, both supersession returns
+(token and SSG takeover) included, and even a user `render()`/`afterUpdate()`
+throw, so holds cannot strand. The data-failure catch also discards before its
+retry redraw awaits, and `#abandon` discards as it drops the fresh instances.
+Handles are idempotent
 (`settled`). A discard is invisible to the app: no render, hook, error view or
 `onStoreChange`; D145's `navigation` report is the only signal.
 
@@ -88,7 +91,7 @@ resurrected. `#withCommittedScope(fn)` nulls `#evalScope` for the dynamic
 extent of the outermost fence (`#fenceDepth`) and then restores the newest
 in-flight run. Fenced: renders, DOM event dispatch (the view manager wraps
 each patch-managed listener via `__withCommittedScope`), `flushUpdates`/
-`setData`, `refresh()`/`onStoreChange()`, and `mounted`/`destroyed`.
+`setState`, `refresh()`/`onStoreChange()`, and `mounted`/`destroyed`.
 
 **Ordering.** Skeleton leaves ([[DECISION-D39-SKELETON]]) commit through
 `#commitState` too. D47's `reuseLayout` refresh still runs last and sees
@@ -116,8 +119,9 @@ ancestors already on the new route.
 - Bump `#runToken` at prepare — suppresses correct mid-gate store refreshes.
 - Commit the prepared model unconditionally — clobbers a mid-gate store
   refresh with pre-edit data.
-- Pass the destination as an explicit `data()` argument — closes the closure
-  residual but breaks the D47 `data()` contract and every app's signature.
+- Rely on the `data({ params, props })` argument alone
+  ([[DECISION-D197-SHARE]]) — it carries no route, and `this.params` /
+  `this.route` reads inside `data()` would still see the committed route.
 
 ## Consequences
 

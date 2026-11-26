@@ -4,8 +4,8 @@
       <header class="mb-8">
         <h1 class="text-3xl font-semibold tracking-tight text-ink">Rating</h1>
         <p class="mt-2 text-body">
-          A star rating in two modes. Read-only
-          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">display</code>
+          A star rating in two modes. Read-only display
+          (<code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">readOnly</code>)
           supports half stars; interactive input is an accessible radiogroup with arrow-key navigation and a
           hover preview. It is controlled — the parent owns
           <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">value</code>
@@ -115,7 +115,7 @@ const codeHero = `<Rating value={ score } size="lg" @change={ setScore } />
 
 // parent — input mode commits whole-star values
 events = {
-  setScore: (v) => this.setData('score', v),
+  setScore: (v) => this.setState('score', v),
 };`;
 
 const codeDisplay = `// readOnly renders a static row; the value rounds to the nearest half.
@@ -141,10 +141,10 @@ const codeKeyboard = `<Rating value={ kbdScore } @change={ setKbd } />
 
 export default class RatingDoc extends PuzzleView {
   created() {
-    this.setData({ score: 3, formScore: 4, kbdScore: 2 });
+    this.setState({ score: 3, formScore: 4, kbdScore: 2 });
   }
 
-  data(params, props) {
+  data() {
     const d = this.getData();
     return {
       ...d,
@@ -173,16 +173,13 @@ export default class RatingDoc extends PuzzleView {
 
   events = {
     setScore: (v) => {
-      this.setData('score', v);
-      this.refresh();
+      this.setState('score', v);
     },
     setFormScore: (v) => {
-      this.setData('formScore', v);
-      this.refresh();
+      this.setState('formScore', v);
     },
     setKbd: (v) => {
-      this.setData('kbdScore', v);
-      this.refresh();
+      this.setState('kbdScore', v);
     },
   };
 }

@@ -1,9 +1,17 @@
 
+
+
+
+
+
+
+
+        
 import { PuzzleView } from '@magic-spells/puzzle';
 import SnippetList from './SnippetList.compiled.js';
 
 export default class Wrapper extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     return { users: props.users, group: props.group };
   }
 }
@@ -22,4 +30,3 @@ Wrapper.prototype.render = function () {
     ]),
   ]);
 };
-Wrapper.__pzlModule = 'Wrapper.pzl';

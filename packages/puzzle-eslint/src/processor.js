@@ -1,42 +1,35 @@
 // processor.js — the ESLint processor for .pzl files.
 //
 // Design: this is a PROCESSOR, not a parser. Puzzle .pzl files are not JS, but
-// their <script> body IS real JavaScript/TypeScript, byte-for-byte. Rather than
-// teach ESLint a new grammar, we extract the <script> body into one virtual JS
-// (or TS) file and let the user's existing ESLint rules — and any parser they
-// layer on, e.g. @typescript-eslint — lint it.
+// their <script> body IS real JavaScript/TypeScript, byte-for-byte, and their
+// <style> body is real CSS. Rather than teach ESLint a new grammar, we extract
+// each body into a virtual JS/TS or CSS file and let the user's existing
+// ESLint config (e.g. @typescript-eslint, @eslint/css) lint it.
 //
-// The virtual file is the ORIGINAL source with every code unit OUTSIDE the
-// <script> body replaced by a single space, preserving '\n' and '\r' exactly.
-// That keeps offsets, lines, and columns identical to the real file, so message
-// positions AND autofix ranges map 1:1 with no remapping. Fixes therefore only
-// ever touch bytes inside the <script> body; the rest of the .pzl is untouched.
+// Each virtual file is the ORIGINAL source up to the end of its body,
+// with every code unit before the body replaced by a single space, preserving
+// '\n' and '\r' exactly. That keeps offsets, lines, and columns identical to
+// the real file, so message positions AND autofix ranges map 1:1 with no
+// remapping. The blanked lead-in looks like stray whitespace to formatting
+// rules, so postprocess drops every message whose autofix starts before the
+// body: fixes only ever touch bytes inside it, and the rest of the .pzl is
+// untouched.
 //
 // Section-structure errors (missing <puzzle-view>, duplicate sections, illegal
 // section attributes, a body truncated by a stray close tag, …) are collected
 // during preprocess and injected as synthetic ESLint messages in postprocess,
 // keyed by filename through a module-level Map.
 
-import {
-	splitSections,
-	scanBraceGroup,
-	scanInlineComment,
-	isBlockCommentOpen,
-	scanBlockComment,
-	isBlockRawOpen,
-	scanBlockRaw,
-} from './split.js';
+import { splitSections, scanBraceGroup, skipBraceSpan, isBlockRawOpen, scanBlockRaw } from './split.js';
 import { Linter } from 'eslint';
 
-// Carries splitter errors from preprocess to postprocess, keyed by filename.
-const errorStore = new Map();
+// Carries each file's splitter errors and body starts from preprocess
+// to postprocess, and the component names its template renders to the
+// puzzle/uses-template-components rule, keyed by filename.
+const fileStore = new Map();
 
 // SECTION_RULE_ID is the synthetic rule id attached to injected section errors.
 const SECTION_RULE_ID = 'puzzle/no-invalid-sections';
-
-// Carries the component names each file's template renders, keyed by filename,
-// from preprocess to the puzzle/uses-template-components rule.
-const tagStore = new Map();
 
 // TAG_ROOT reads a tag name's root identifier after '<'. Tag names start like
 // the compiler lexer's startsTagName (ASCII letter, '_', or a non-ASCII
@@ -117,22 +110,6 @@ function matchAt(re, s, i) {
 	re.lastIndex = i;
 	const m = re.exec(s);
 	return m ? m[0] : '';
-}
-
-// skipBraceSpan steps over a template construct opening at s[i] === '{': an
-// inline {## } or block {#comment} comment, or a balanced {…} group. A
-// malformed group advances one char, leaving the rest for the compiler to
-// report, as findTemplateClose in split.js does.
-function skipBraceSpan(s, i) {
-	let res;
-	if (s.startsWith('{##', i)) {
-		res = scanInlineComment(s, i);
-	} else if (isBlockCommentOpen(s, i)) {
-		res = scanBlockComment(s, i);
-	} else {
-		res = scanBraceGroup(s, i);
-	}
-	return res.err ? i + 1 : res.end;
 }
 
 // skipQuotedValue steps from an attribute value's opening quote at s[open] to
@@ -241,7 +218,7 @@ function collectComponentTags(s, names) {
 
 // componentTags returns the root names of every component tag in the
 // template sections and the free names in <Component is={...}>. Markers
-// (Slot, Children, Snippet, Portal) come along too;
+// (Slot, Children, Outlet, Snippet, Portal) come along too;
 // they are never script bindings, so marking them used is a no-op.
 function componentTags(sections) {
 	const names = new Set();
@@ -251,16 +228,18 @@ function componentTags(sections) {
 	return names;
 }
 
-// blankOutside returns a copy of src with every char outside [start, end)
-// replaced by a space, except '\n' and '\r' which are preserved so line
-// structure is byte-identical, and a leading BOM (U+FEFF at index 0), which
-// is kept so ESLint strips it from the virtual text exactly as it strips it
-// from the physical file — otherwise every autofix range lands one code unit
-// early.
+// blankOutside returns src cut at end, with every char before start replaced
+// by a space, except '\n' and '\r' which are preserved so line structure is
+// byte-identical, and a leading BOM (U+FEFF at index 0), which is kept so
+// ESLint strips it from the virtual text exactly as it strips it from the
+// physical file — otherwise every autofix range lands one code unit early.
+// Nothing after the body is kept: a diff-based formatter (Prettier) would
+// align its output with that whitespace and split one edit across the body's
+// end, and postprocess could then apply only half of it.
 function blankOutside(src, start, end) {
-	const out = new Array(src.length);
-	for (let i = 0; i < src.length; i++) {
-		if (i >= start && i < end) {
+	const out = new Array(end);
+	for (let i = 0; i < end; i++) {
+		if (i >= start) {
 			out[i] = src[i];
 		} else {
 			const c = src[i];
@@ -273,42 +252,41 @@ function blankOutside(src, start, end) {
 export const processor = {
 	meta: {
 		name: '@magic-spells/eslint-plugin-puzzle/processor',
-		version: '0.1.0',
 	},
 
 	supportsAutofix: true,
 
 	preprocess(text, filename) {
 		const { sections, errors } = splitSections(text, filename);
-		errorStore.set(filename, errors);
-		tagStore.set(filename, componentTags(sections));
+		const { scripts, styles } = sections;
+		// One block per body: <script> as JS/TS, <style> as CSS. ESLint lints a
+		// block only when a config's `files` matches its name, so the CSS block
+		// is skipped until the user configures CSS.
+		const blocks = [];
+		if (scripts) blocks.push([scripts, `0_scripts.${scripts.lang === 'ts' ? 'ts' : 'js'}`]);
+		if (styles) blocks.push([styles, '1_styles.css']);
+		// Each body's start in fix-range offsets, which count from after a leading BOM.
+		const bom = text[0] === '\uFEFF' ? 1 : 0;
+		const starts = blocks.map(([section]) => section.contentStart - bom);
+		fileStore.set(filename, { errors, starts, tags: componentTags(sections) });
 
-		// No <script> section → nothing to lint as JS. Splitter errors are still
-		// surfaced in postprocess (which ESLint calls with an empty message set).
-		if (!sections.scripts) {
-			return [];
-		}
-
-		const { contentStart, contentEnd, lang } = sections.scripts;
-		const virtual = blankOutside(text, contentStart, contentEnd);
-		const ext = lang === 'ts' ? 'ts' : 'js';
-
-		return [{ text: virtual, filename: `0_scripts.${ext}` }];
+		// Splitter errors are surfaced in postprocess even with no blocks (ESLint
+		// then calls it with an empty message set).
+		return blocks.map(([section, name]) => ({
+			text: blankOutside(text, section.contentStart, section.contentEnd),
+			filename: name,
+		}));
 	},
 
 	postprocess(messages, filename) {
-		const injected = errorStore.get(filename) || [];
-		errorStore.delete(filename);
-		tagStore.delete(filename);
+		const { errors, starts } = fileStore.get(filename);
+		fileStore.delete(filename);
 
-		// messages is an array of per-block message arrays. Only block 0 exists
-		// (the extracted <script> body), but flatten defensively.
-		const flat = [];
-		for (const block of messages || []) {
-			for (const m of block) flat.push(m);
-		}
+		// One message list per block. A message whose fix reaches into its
+		// block's blanked lead-in goes, so --fix cannot delete it.
+		const flat = messages.flatMap((list, i) => list.filter((m) => !m.fix || m.fix.range[0] >= starts[i]));
 
-		for (const e of injected) {
+		for (const e of errors) {
 			flat.push({
 				ruleId: SECTION_RULE_ID,
 				severity: 2,
@@ -339,7 +317,7 @@ export const usesTemplateComponents = {
 	create(context) {
 		return {
 			Program() {
-				for (const name of tagStore.get(context.physicalFilename) || []) {
+				for (const name of fileStore.get(context.physicalFilename)?.tags || []) {
 					context.sourceCode.markVariableAsUsed(name);
 				}
 			},

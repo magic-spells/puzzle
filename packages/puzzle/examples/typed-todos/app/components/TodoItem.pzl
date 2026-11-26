@@ -16,7 +16,7 @@
 </puzzle-view>
 
 <script lang="ts">
-import { PuzzleView } from '@magic-spells/puzzle';
+import { PuzzleView, type DataInput } from '@magic-spells/puzzle';
 import type { TodoRecord } from '../models/todo';
 
 interface TodoItemProps {
@@ -25,17 +25,17 @@ interface TodoItemProps {
   remove: (event: Event) => void;
 }
 
-export default class TodoItem extends PuzzleView {
-  data(_params: unknown, props: TodoItemProps): { todo: TodoRecord } {
+export default class TodoItem extends PuzzleView<TodoItemProps> {
+  data({ props }: DataInput<TodoItemProps>): { todo: TodoRecord } {
     return { todo: props.todo };
   }
 
   events = {
     toggle: (event: Event): void => {
-      (this.props as TodoItemProps).toggle(event);
+      this.props.toggle(event);
     },
     remove: (event: Event): void => {
-      (this.props as TodoItemProps).remove(event);
+      this.props.remove(event);
     },
   };
 }

@@ -468,7 +468,7 @@ func TestDetectInstallContextFromExecutable(t *testing.T) {
 			}
 			stubGlobalRoots(t, roots)
 
-			ctx, err := detectInstallContext(filepath.Join(root, tt.executable))
+			ctx, err := detectInstallContext(filepath.Join(root, tt.executable), newGlobalRoots())
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -508,7 +508,7 @@ func TestDetectInstallContextPnpmHome(t *testing.T) {
 
 	executable := filepath.Join(owner, "node_modules", ".pnpm", "@magic-spells+puzzle@0.6.0",
 		"node_modules", "@magic-spells", platformPackageName(), "bin", platformBinaryName())
-	ctx, err := detectInstallContext(executable)
+	ctx, err := detectInstallContext(executable, newGlobalRoots())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -540,7 +540,7 @@ func TestDetectInstallContextResolvesSymlinkedBin(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	ctx, err := detectInstallContext(link)
+	ctx, err := detectInstallContext(link, newGlobalRoots())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -565,7 +565,7 @@ func TestDetectInstallContextIgnoresWorkingDirectory(t *testing.T) {
 
 	global := filepath.Join(prefix, "node_modules",
 		"@magic-spells", platformPackageName(), "bin", platformBinaryName())
-	ctx, err := detectInstallContext(global)
+	ctx, err := detectInstallContext(global, newGlobalRoots())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -610,6 +610,7 @@ func TestUpgradeCheckOnlyReports(t *testing.T) {
 	oldCacheDir := update.CacheDir
 	update.CacheDir = t.TempDir()
 	t.Cleanup(func() { update.CacheDir = oldCacheDir })
+	isolateUpgrade(t)
 
 	var stdout, stderr bytes.Buffer
 	if err := runUpgrade(&stdout, &stderr, plainPrinter(), "", true, emptyHomeEnvironment(t)); err != nil {
@@ -627,6 +628,7 @@ func TestUpgradeUpToDateOutput(t *testing.T) {
 	oldFetchLatest := fetchLatest
 	fetchLatest = func(time.Duration) (string, error) { return version.Version, nil }
 	t.Cleanup(func() { fetchLatest = oldFetchLatest })
+	isolateUpgrade(t)
 
 	var stdout bytes.Buffer
 	if err := runUpgrade(&stdout, &bytes.Buffer{}, plainPrinter(), "", true, emptyHomeEnvironment(t)); err != nil {
@@ -641,6 +643,8 @@ func TestUpgradeManualInstallInstructions(t *testing.T) {
 	oldFetchLatest := fetchLatest
 	fetchLatest = func(time.Duration) (string, error) { return testLatest, nil }
 	t.Cleanup(func() { fetchLatest = oldFetchLatest })
+
+	isolateUpgrade(t)
 
 	var stdout bytes.Buffer
 	binary := filepath.Join(realTempDir(t), "usr", "local", "bin", "puzzle")
@@ -755,8 +759,10 @@ func TestUpgradeCommandWithStubPackageManager(t *testing.T) {
 			if strings.TrimSpace(string(cwd)) != project {
 				t.Fatalf("command cwd = %q, want %q", strings.TrimSpace(string(cwd)), project)
 			}
-			want := "✓ upgraded @magic-spells/puzzle " + version.Version + " → " + testLatest + " in " + project
-			if !strings.Contains(stdout.String(), want) {
+			// The old version is the one installed on disk, read the same way for
+			// every scope; the row above the line names the directory.
+			want := "✓ upgraded this project 0.1.0 → " + testLatest
+			if !strings.Contains(stdout.String(), want) || !strings.Contains(stdout.String(), project+" ("+tt.manager+")") {
 				t.Fatalf("success output missing %q:\n%s", want, stdout.String())
 			}
 			cached, err := update.ReadCache()
@@ -772,8 +778,9 @@ func TestUpgradeCommandWithStubPackageManager(t *testing.T) {
 
 // TestUpgradeGlobalCLIFromInsideAProject is the launch-day regression, end to
 // end: a global CLI invoked while standing in a Puzzle app must run the GLOBAL
-// install command, confirm the GLOBAL package, and say so — the app's dependency
-// is npm's business, not the command's.
+// install command, confirm the GLOBAL package, and say so. The app is its own
+// scope: without a terminal it is reported with the command to run, and never
+// installed into.
 func TestUpgradeGlobalCLIFromInsideAProject(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("shell-script package-manager stub")
@@ -860,6 +867,10 @@ func TestUpgradeGlobalCLIFromInsideAProject(t *testing.T) {
 			want := "✓ upgraded the global CLI " + version.Version + " → " + testLatest
 			if !strings.Contains(stdout.String(), want) {
 				t.Fatalf("success output missing %q:\n%s", want, stdout.String())
+			}
+			hint := "! To upgrade this project, run npm install @magic-spells/puzzle@" + testLatest + " in " + project
+			if !strings.Contains(stdout.String(), hint) {
+				t.Fatalf("output missing the project's command %q:\n%s", hint, stdout.String())
 			}
 		})
 	}
@@ -1009,7 +1020,7 @@ func TestUpgradeSkillRefreshRunsUpgradedBinary(t *testing.T) {
 		t.Fatalf("prompt targets = %#v, want the two installed roots", asked)
 	}
 	want := []string{
-		"add", "skills", "--overwrite",
+		"add", "skills", "--force",
 		"--skill-root", filepath.Join(home, ".claude"),
 		"--skill-root", filepath.Join(home, ".cursor"),
 	}
@@ -1164,7 +1175,7 @@ func TestUpgradeSkillsUpToDateAndSymlinkAndEmptyHomes(t *testing.T) {
 			t.Fatalf("upgrade skills: %v", err)
 		}
 		out := buf.String()
-		if !strings.Contains(out, "up to date") || !strings.Contains(out, "puzzle add skills --overwrite") {
+		if !strings.Contains(out, "up to date") || !strings.Contains(out, "puzzle add skills --force") {
 			t.Errorf("expected an up-to-date line and the reinstall hint, got:\n%s", out)
 		}
 		if fsFileExists(filepath.Join(dest, "SKILL.md")) {
@@ -1219,6 +1230,13 @@ func TestUpgradeSkillsUpToDateAndSymlinkAndEmptyHomes(t *testing.T) {
 // node_modules/.bin/puzzle stub when a test needs a different one.
 func runUpgradeWithStubs(t *testing.T, home string, interactive bool, seedProject func(project string)) string {
 	t.Helper()
+	return runUpgradeWithStubsEnv(t, home, upgradeEnvironment{interactive: interactive}, seedProject)
+}
+
+// runUpgradeWithStubsEnv is runUpgradeWithStubs with the prompt-related
+// environment (interactive, yes) taken from env; homeDir is always home.
+func runUpgradeWithStubsEnv(t *testing.T, home string, env upgradeEnvironment, seedProject func(project string)) string {
+	t.Helper()
 
 	oldFetchLatest := fetchLatest
 	fetchLatest = func(time.Duration) (string, error) { return testLatest, nil }
@@ -1253,15 +1271,43 @@ func runUpgradeWithStubs(t *testing.T, home string, interactive bool, seedProjec
 				"printf '%s\\n' \"$@\" > \"$PUZZLE_TEST_SKILL_ARGS\"\n")
 	}
 
+	// A terminal run asks before it upgrades; these tests are about what follows
+	// the yes.
+	answerUpgrades(t, true)
+
 	var stdout, stderr bytes.Buffer
-	env := upgradeEnvironment{
-		homeDir:     func() (string, error) { return home, nil },
-		interactive: interactive,
-	}
+	env.homeDir = func() (string, error) { return home, nil }
 	if err := runUpgrade(&stdout, &stderr, plainPrinter(), executable, false, env); err != nil {
 		t.Fatalf("runUpgrade: %v\nstderr: %s", err, stderr.String())
 	}
 	return stdout.String()
+}
+
+// answerUpgrades answers the per-scope upgrade questions in order and returns
+// the titles asked. A question beyond the answers fails the test, so a run that
+// must not ask can pass none.
+func answerUpgrades(t *testing.T, answers ...bool) *[]string {
+	t.Helper()
+	var asked []string
+	previous := confirmUpgrade
+	confirmUpgrade = func(_ io.Reader, _ io.Writer, title string) (bool, error) {
+		asked = append(asked, title)
+		if len(asked) > len(answers) {
+			t.Errorf("unexpected question %q", title)
+			return false, nil
+		}
+		return answers[len(asked)-1], nil
+	}
+	t.Cleanup(func() { confirmUpgrade = previous })
+	return &asked
+}
+
+// isolateUpgrade keeps a run that reaches scope discovery off this machine: no
+// package manager answers for a global root, and the cwd is an empty folder.
+func isolateUpgrade(t *testing.T) {
+	t.Helper()
+	stubGlobalRoots(t, nil)
+	chdir(t, realTempDir(t))
 }
 
 func mustWriteExecutable(t *testing.T, path, body string) {
@@ -1412,7 +1458,7 @@ if [ "$1" = "root" ] && [ "$2" = "-g" ]; then
 fi
 printf '%s\n' "$@" > "$PUZZLE_TEST_ARGS"
 pwd > "$PUZZLE_TEST_CWD"
-target="$PWD/node_modules/@magic-spells/puzzle"
+target="${PUZZLE_TEST_INSTALL_DIR:-$PWD}/node_modules/@magic-spells/puzzle"
 for arg in "$@"; do
   case "$arg" in
     -g|--global) target="$PUZZLE_TEST_GLOBAL_ROOT/@magic-spells/puzzle" ;;
@@ -1420,6 +1466,7 @@ for arg in "$@"; do
 done
 mkdir -p "$target"
 printf '{"version":"%s"}\n' "$PUZZLE_TEST_VERSION" > "$target/package.json"
+echo "changed 1 package"
 `
 
 // upgradeStubs puts faithful npm/pnpm/yarn/bun stubs on PATH and returns a
@@ -1491,7 +1538,7 @@ func TestUpgradeNeverEscalatesALocalInstallToGlobal(t *testing.T) {
 			name:       "dependency declared in peerDependencies",
 			manifest:   `{"name":"app","peerDependencies":{"@magic-spells/puzzle":"^0.6.0"}}`,
 			wantArgs:   []string{"install", "@magic-spells/puzzle@" + testLatest},
-			wantStdout: []string{"✓ upgraded @magic-spells/puzzle"},
+			wantStdout: []string{"✓ upgraded this project"},
 		},
 		{
 			// `npm install --no-save`: present in node_modules, absent from the
@@ -1499,7 +1546,7 @@ func TestUpgradeNeverEscalatesALocalInstallToGlobal(t *testing.T) {
 			name:       "installed with --no-save",
 			manifest:   `{"name":"app","dependencies":{"lodash":"^4.0.0"}}`,
 			wantArgs:   []string{"install", "@magic-spells/puzzle@" + testLatest},
-			wantStdout: []string{"✓ upgraded @magic-spells/puzzle"},
+			wantStdout: []string{"✓ upgraded this project"},
 		},
 	}
 
@@ -1696,5 +1743,535 @@ func TestUpgradePnpmGlobalDirWithoutPnpmHome(t *testing.T) {
 	}
 	if !strings.Contains(stdout.String(), "upgraded the global CLI") {
 		t.Fatalf("a global upgrade must say so:\n%s", stdout.String())
+	}
+}
+
+// scopeFixture is a machine with an npm global CLI and a project at my-app, each
+// holding puzzle at the version given ("" leaves that copy out), faithful
+// package managers on PATH, and the cwd in the project. Every scope's version is
+// read from disk, so these versions are independent of version.Version.
+type scopeFixture struct {
+	globalRoot, project string
+	// global and local are the binaries of the two copies.
+	global, local string
+	argv          func() []string
+	cwd           func() string
+}
+
+func newScopeFixture(t *testing.T, latest, globalVersion, projectVersion string) scopeFixture {
+	t.Helper()
+	stubLatest(t)
+	fetchLatest = func(time.Duration) (string, error) { return latest, nil }
+	root := realTempDir(t)
+	platform := filepath.Join("@magic-spells", platformPackageName(), "bin", platformBinaryName())
+	f := scopeFixture{
+		globalRoot: filepath.Join(root, "opt", "homebrew", "lib", "node_modules"),
+		project:    filepath.Join(root, "my-app"),
+	}
+	f.global = filepath.Join(f.globalRoot, platform)
+	f.local = filepath.Join(f.project, "node_modules", platform)
+	if err := os.MkdirAll(f.globalRoot, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if globalVersion != "" {
+		mustWrite(t, f.globalPackage(), `{"version":"`+globalVersion+`"}`)
+	}
+	mustWrite(t, filepath.Join(f.project, "package.json"), `{"dependencies":{"@magic-spells/puzzle":"^0.9.0"}}`)
+	mustWrite(t, filepath.Join(f.project, "package-lock.json"), "")
+	if projectVersion != "" {
+		installPuzzlePackage(t, f.project, projectVersion)
+	}
+	f.argv, f.cwd = upgradeStubs(t, f.globalRoot)
+	t.Setenv("PUZZLE_TEST_VERSION", latest)
+	chdir(t, f.project)
+	return f
+}
+
+func (f scopeFixture) globalPackage() string {
+	return filepath.Join(f.globalRoot, "@magic-spells", "puzzle", "package.json")
+}
+
+func (f scopeFixture) projectPackage() string {
+	return filepath.Join(f.project, "node_modules", "@magic-spells", "puzzle", "package.json")
+}
+
+// run is runUpgrade from executable with env, failing the test on an error.
+func (f scopeFixture) run(t *testing.T, executable string, check bool, env upgradeEnvironment) string {
+	t.Helper()
+	env.homeDir = emptyHomeEnvironment(t).homeDir
+	var stdout, stderr bytes.Buffer
+	if err := runUpgrade(&stdout, &stderr, plainPrinter(), executable, check, env); err != nil {
+		t.Fatalf("runUpgrade: %v\nstdout: %s\nstderr: %s", err, stdout.String(), stderr.String())
+	}
+	return stdout.String()
+}
+
+func versionAt(t *testing.T, packageJSON string) string {
+	t.Helper()
+	v, err := update.PackageVersion(packageJSON)
+	if err != nil {
+		return ""
+	}
+	return v
+}
+
+const (
+	globalRow  = "  the global CLI  0.10.0 → 0.10.2  (npm)\n"
+	projectRow = "  this project    0.10.0 → 0.10.2  "
+)
+
+// TestUpgradeBothScopesAsksForEach is the owner's request end to end: a global
+// CLI run inside a project reports both, versions first, asks about each before
+// anything runs, and upgrades exactly the ones the person said yes to.
+func TestUpgradeBothScopesAsksForEach(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell-script package-manager stub")
+	}
+	for _, tt := range []struct {
+		name            string
+		global, project bool
+	}{
+		{"yes to both", true, true},
+		{"yes to the global CLI only", true, false},
+		{"yes to the project only", false, true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			f := newScopeFixture(t, "0.10.2", "0.10.0", "0.10.0")
+			asked := answerUpgrades(t, tt.global, tt.project)
+			out := f.run(t, f.global, false, upgradeEnvironment{interactive: true})
+
+			if want := []string{"Upgrade the global CLI?", "Upgrade this project in " + f.project + "?"}; !reflect.DeepEqual(*asked, want) {
+				t.Errorf("asked %#v, want %#v", *asked, want)
+			}
+			rows := globalRow + projectRow + f.project + " (npm)\n"
+			if !strings.HasPrefix(out, rows) {
+				t.Fatalf("output must open with both rows %q:\n%s", rows, out)
+			}
+			for _, scope := range []struct {
+				yes         bool
+				packageJSON string
+				line        string
+			}{
+				{tt.global, f.globalPackage(), "✓ upgraded the global CLI 0.10.0 → 0.10.2\n"},
+				{tt.project, f.projectPackage(), "✓ upgraded this project 0.10.0 → 0.10.2\n"},
+			} {
+				want := "0.10.0"
+				if scope.yes {
+					want = "0.10.2"
+				}
+				if got := versionAt(t, scope.packageJSON); got != want {
+					t.Errorf("%s = %s, want %s", scope.packageJSON, got, want)
+				}
+				if strings.Contains(out, scope.line) != scope.yes {
+					t.Errorf("result line %q present = %v, want %v:\n%s", scope.line, !scope.yes, scope.yes, out)
+				}
+			}
+			if strings.Contains(out, "breaking") {
+				t.Errorf("0.10.0 → 0.10.2 is not a breaking release:\n%s", out)
+			}
+		})
+	}
+}
+
+// TestUpgradeOneScope: with only one scope there is one row and one question,
+// and nothing is said about the scope that does not exist.
+func TestUpgradeOneScope(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell-script package-manager stub")
+	}
+	t.Run("global CLI outside any project", func(t *testing.T) {
+		f := newScopeFixture(t, "0.10.2", "0.10.0", "0.10.0")
+		chdir(t, realTempDir(t))
+		asked := answerUpgrades(t, true)
+		out := f.run(t, f.global, false, upgradeEnvironment{interactive: true})
+		if !reflect.DeepEqual(*asked, []string{"Upgrade the global CLI?"}) || strings.Contains(out, "this project") {
+			t.Fatalf("asked %#v, output:\n%s", *asked, out)
+		}
+		if got := versionAt(t, f.globalPackage()); got != "0.10.2" {
+			t.Errorf("global CLI = %s, want 0.10.2", got)
+		}
+	})
+	t.Run("project with no global CLI installed", func(t *testing.T) {
+		f := newScopeFixture(t, "0.10.2", "", "0.10.0")
+		asked := answerUpgrades(t, true)
+		out := f.run(t, f.local, false, upgradeEnvironment{interactive: true})
+		if !reflect.DeepEqual(*asked, []string{"Upgrade this project in " + f.project + "?"}) || strings.Contains(out, "the global CLI") {
+			t.Fatalf("asked %#v, output:\n%s", *asked, out)
+		}
+		if fsFileExists(f.globalPackage()) {
+			t.Error("a global CLI was installed where there was none")
+		}
+		if got := versionAt(t, f.projectPackage()); got != "0.10.2" {
+			t.Errorf("project = %s, want 0.10.2", got)
+		}
+	})
+}
+
+func TestUpgradeBothScopesUpToDate(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell-script package-manager stub")
+	}
+	f := newScopeFixture(t, "0.10.2", "0.10.2", "0.10.2")
+	answerUpgrades(t)
+	out := f.run(t, f.global, false, upgradeEnvironment{interactive: true})
+	if want := "✓ puzzle 0.10.2 is up to date (the global CLI and this project)\n"; out != want {
+		t.Fatalf("output = %q, want %q", out, want)
+	}
+	if got := f.argv(); got != nil {
+		t.Fatalf("a package manager ran: %#v", got)
+	}
+	if _, err := update.ReadCache(); err != nil {
+		t.Errorf("an up-to-date run records the check: %v", err)
+	}
+}
+
+// TestUpgradeCheckAndYes: --check prints the same rows and changes nothing;
+// --yes upgrades every scope that is behind without asking.
+func TestUpgradeCheckAndYes(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell-script package-manager stub")
+	}
+	t.Run("--check", func(t *testing.T) {
+		f := newScopeFixture(t, "0.10.2", "0.10.0", "0.10.0")
+		answerUpgrades(t)
+		out := f.run(t, f.global, true, upgradeEnvironment{interactive: true})
+		if want := globalRow + projectRow + f.project + " (npm)\n"; out != want {
+			t.Fatalf("output = %q, want %q", out, want)
+		}
+		if got := f.argv(); got != nil {
+			t.Fatalf("a package manager ran: %#v", got)
+		}
+		if _, err := update.ReadCache(); err == nil {
+			t.Error("--check must not write the update cache")
+		}
+	})
+	t.Run("--yes", func(t *testing.T) {
+		f := newScopeFixture(t, "0.10.2", "0.10.0", "0.10.0")
+		answerUpgrades(t)
+		f.run(t, f.global, false, upgradeEnvironment{yes: true})
+		if g, p := versionAt(t, f.globalPackage()), versionAt(t, f.projectPackage()); g != "0.10.2" || p != "0.10.2" {
+			t.Fatalf("global = %s, project = %s, want both 0.10.2", g, p)
+		}
+		if f.cwd() != f.project {
+			t.Errorf("the project install ran in %q, want %q", f.cwd(), f.project)
+		}
+	})
+}
+
+// TestUpgradeWithoutTerminalUpgradesOnlyTheRunningInstall: a script that runs
+// `puzzle upgrade` named the copy it ran, so that one moves; the other scope is
+// reported with the exact command, never upgraded behind the script's back.
+func TestUpgradeWithoutTerminalUpgradesOnlyTheRunningInstall(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell-script package-manager stub")
+	}
+	t.Run("global CLI", func(t *testing.T) {
+		f := newScopeFixture(t, "0.10.2", "0.10.0", "0.10.0")
+		answerUpgrades(t)
+		out := f.run(t, f.global, false, upgradeEnvironment{})
+		if got := versionAt(t, f.globalPackage()); got != "0.10.2" {
+			t.Errorf("global CLI = %s, want 0.10.2", got)
+		}
+		if got := versionAt(t, f.projectPackage()); got != "0.10.0" {
+			t.Errorf("the project moved to %s without being asked", got)
+		}
+		if want := "! To upgrade this project, run npm install @magic-spells/puzzle@0.10.2 in " + f.project + "\n"; !strings.Contains(out, want) {
+			t.Errorf("output missing %q:\n%s", want, out)
+		}
+	})
+	t.Run("project CLI", func(t *testing.T) {
+		f := newScopeFixture(t, "0.10.2", "0.10.0", "0.10.0")
+		answerUpgrades(t)
+		out := f.run(t, f.local, false, upgradeEnvironment{})
+		if got := versionAt(t, f.projectPackage()); got != "0.10.2" {
+			t.Errorf("project = %s, want 0.10.2", got)
+		}
+		if got := versionAt(t, f.globalPackage()); got != "0.10.0" {
+			t.Errorf("the global CLI moved to %s without being asked", got)
+		}
+		if want := "! To upgrade the global CLI, run npm install -g @magic-spells/puzzle@0.10.2\n"; !strings.Contains(out, want) {
+			t.Errorf("output missing %q:\n%s", want, out)
+		}
+	})
+}
+
+// TestUpgradeProjectAcrossABreakingRelease: the question says the project is
+// crossing a breaking release, and once it has, one line points at the notes
+// that ship in the package and at the migration command. The global CLI has no
+// app code to migrate, so its question stays plain.
+func TestUpgradeProjectAcrossABreakingRelease(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell-script package-manager stub")
+	}
+	f := newScopeFixture(t, "0.10.2", "0.9.1", "0.9.1")
+	asked := answerUpgrades(t, true, true)
+	out := f.run(t, f.global, false, upgradeEnvironment{interactive: true})
+	want := []string{"Upgrade the global CLI?", "Upgrade this project in " + f.project + "? 0.9.1 → 0.10.2 may have breaking changes"}
+	if !reflect.DeepEqual(*asked, want) {
+		t.Errorf("asked %#v, want %#v", *asked, want)
+	}
+	notes := filepath.Join(f.project, "node_modules", "@magic-spells", "puzzle", "CHANGELOG.md")
+	pointer := "✓ upgraded this project 0.9.1 → 0.10.2\n" +
+		"! 0.10.2 may have breaking changes: read \"Upgrading across versions\" in " + notes + " and run npx puzzle check --fix in the project\n"
+	if !strings.Contains(out, pointer) {
+		t.Fatalf("output missing %q:\n%s", pointer, out)
+	}
+	if strings.Count(out, "breaking changes:") != 1 {
+		t.Errorf("only the project gets the pointer:\n%s", out)
+	}
+}
+
+// TestUpgradeNamesAProjectAboveTheCurrentFolder: run from a subfolder, the
+// project is the package.json above it, and the install runs there. Its full
+// path is in the row and the question, and under --yes the row is out before
+// the package manager starts.
+func TestUpgradeNamesAProjectAboveTheCurrentFolder(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell-script package-manager stub")
+	}
+	for _, tt := range []struct {
+		name string
+		env  upgradeEnvironment
+		asks bool
+	}{
+		{"asked", upgradeEnvironment{interactive: true}, true},
+		{"--yes", upgradeEnvironment{yes: true}, false},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			f := newScopeFixture(t, "0.10.2", "0.10.2", "0.10.0")
+			sub := filepath.Join(f.project, "app", "views")
+			if err := os.MkdirAll(sub, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			chdir(t, sub)
+			asked := answerUpgrades(t, true)
+			out := f.run(t, f.global, false, tt.env)
+
+			var want []string
+			if tt.asks {
+				want = []string{"Upgrade this project in " + f.project + "?"}
+			}
+			if !reflect.DeepEqual(*asked, want) {
+				t.Errorf("asked %#v, want %#v", *asked, want)
+			}
+			row := projectRow + f.project + " (npm)\n"
+			if at, ran := strings.Index(out, row), strings.Index(out, "changed 1 package"); at < 0 || ran < 0 || at > ran {
+				t.Fatalf("the row %q must come before the install:\n%s", row, out)
+			}
+			if f.cwd() != f.project {
+				t.Errorf("the install ran in %q, want the project root %q", f.cwd(), f.project)
+			}
+			if got := versionAt(t, f.projectPackage()); got != "0.10.2" {
+				t.Errorf("project = %s, want 0.10.2", got)
+			}
+		})
+	}
+}
+
+// TestProjectAtStopsWhereThePackageManagerWould: the walk ends at the nearest
+// package.json, as npm's does, and never climbs past the home folder, even when
+// HOME ends in a separator. A package.json that does not parse is no project.
+func TestProjectAtStopsWhereThePackageManagerWould(t *testing.T) {
+	root := realTempDir(t)
+	declares := `{"devDependencies":{"@magic-spells/puzzle":"^0.9.0"}}`
+	home := filepath.Join(root, "home")
+	t.Setenv("HOME", home+string(filepath.Separator))
+	t.Setenv("USERPROFILE", home+string(filepath.Separator))
+	app := filepath.Join(home, "my-app")
+	mustWrite(t, filepath.Join(root, "package.json"), declares)
+	mustWrite(t, filepath.Join(app, "package.json"), declares)
+	mustWrite(t, filepath.Join(app, "tools", "package.json"), `{"type":"module"}`)
+	mustWrite(t, filepath.Join(app, "broken", "package.json"), `{"dependencies":`)
+	for _, tt := range []struct{ name, cwd, want string }{
+		{"the project itself", app, app},
+		{"a subfolder", filepath.Join(app, "src", "views"), app},
+		{"below a package.json that does not declare the CLI", filepath.Join(app, "tools", "bin"), ""},
+		{"a package.json that does not parse", filepath.Join(app, "broken"), ""},
+		{"a folder in home outside any project", filepath.Join(home, "notes"), ""},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := os.MkdirAll(tt.cwd, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if project, ok := projectAt(tt.cwd); ok != (tt.want != "") || project.dir != tt.want {
+				t.Fatalf("projectAt(%s) = %q, %v; want %q", tt.cwd, project.dir, ok, tt.want)
+			}
+		})
+	}
+}
+
+// TestUpgradeWorkspaceMember: a workspace keeps its lockfile and node_modules at
+// the root, so a member that declares the CLI takes its package manager and its
+// installed copy from there, while the install runs in the member, where the
+// dependency is declared.
+func TestUpgradeWorkspaceMember(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell-script package-manager stub")
+	}
+	for _, tt := range []struct {
+		manager, lockfile, command string
+		// copyIn is where the manager keeps the member's copy: npm hoists it to
+		// the root, pnpm links it into the member's own node_modules.
+		copyIn string
+	}{
+		{"npm", "package-lock.json", "install", "."},
+		{"pnpm", "pnpm-lock.yaml", "add", filepath.Join("packages", "app")},
+	} {
+		t.Run(tt.manager, func(t *testing.T) {
+			f := newScopeFixture(t, "0.10.2", "0.10.2", "")
+			mono := filepath.Join(realTempDir(t), "mono")
+			member := filepath.Join(mono, "packages", "app")
+			mustWrite(t, filepath.Join(mono, "package.json"), `{"private":true,"workspaces":["packages/*"]}`)
+			mustWrite(t, filepath.Join(mono, tt.lockfile), "")
+			mustWrite(t, filepath.Join(member, "package.json"), `{"dependencies":{"@magic-spells/puzzle":"^0.10.0"}}`)
+			copyDir := filepath.Join(mono, tt.copyIn)
+			installPuzzlePackage(t, copyDir, "0.10.0")
+			t.Setenv("PUZZLE_TEST_INSTALL_DIR", copyDir)
+			chdir(t, member)
+			answerUpgrades(t)
+			out := f.run(t, f.global, false, upgradeEnvironment{yes: true})
+
+			if row := projectRow + member + " (" + tt.manager + ")\n"; !strings.Contains(out, row) {
+				t.Errorf("output missing %q:\n%s", row, out)
+			}
+			if want := []string{tt.command, "@magic-spells/puzzle@0.10.2"}; !reflect.DeepEqual(f.argv(), want) || f.cwd() != member {
+				t.Errorf("ran %#v in %s, want %#v in %s", f.argv(), f.cwd(), want, member)
+			}
+			if !strings.Contains(out, "✓ upgraded this project 0.10.0 → 0.10.2\n") {
+				t.Errorf("missing the result line:\n%s", out)
+			}
+		})
+	}
+}
+
+// TestUpgradedBinaryFindsAGlobalFoundOnDisk: a global CLI the running binary is
+// not has no executable of its own, and under npx PATH reaches the project's
+// stale shim first, so the upgraded binary is found from the global copy. npm -g
+// nests the platform package in the copy's own node_modules; pnpm -g links it
+// beside the store copy that its global node_modules points at.
+func TestUpgradedBinaryFindsAGlobalFoundOnDisk(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell-script binaries")
+	}
+	reporting := func(v string) string { return "#!/bin/sh\necho 'puzzle version " + v + "'\n" }
+	shims := t.TempDir()
+	mustWriteExecutable(t, filepath.Join(shims, "puzzle"), reporting("0.9.0"))
+	t.Setenv("PATH", shims+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	root := realTempDir(t)
+	bin := filepath.Join(platformPackageName(), "bin", platformBinaryName())
+	npmCopy := filepath.Join(root, "lib", "node_modules", "@magic-spells", "puzzle")
+	store := filepath.Join(root, "pnpm", "global", "5", "node_modules", ".pnpm", "@magic-spells+puzzle@0.10.2", "node_modules", "@magic-spells")
+	pnpmCopy := filepath.Join(root, "pnpm", "global", "5", "node_modules", "@magic-spells", "puzzle")
+	mustWrite(t, filepath.Join(npmCopy, "package.json"), `{"version":"0.10.2"}`)
+	mustWrite(t, filepath.Join(store, "puzzle", "package.json"), `{"version":"0.10.2"}`)
+	if err := os.MkdirAll(filepath.Dir(pnpmCopy), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(store, "puzzle"), pnpmCopy); err != nil {
+		t.Fatal(err)
+	}
+	for _, tt := range []struct{ manager, pkg, want string }{
+		{"npm", npmCopy, filepath.Join(npmCopy, "node_modules", "@magic-spells", bin)},
+		{"pnpm", pnpmCopy, filepath.Join(store, bin)},
+	} {
+		mustWriteExecutable(t, tt.want, reporting("0.10.2"))
+		global := globalContext("", tt.manager, filepath.Join(tt.pkg, "package.json"))
+		if got, err := upgradedBinary([]installContext{global}, "0.10.2"); err != nil || got != tt.want {
+			t.Errorf("%s: upgradedBinary = %q, %v; want %q", tt.manager, got, err, tt.want)
+		}
+	}
+}
+
+// TestUpgradeProjectWithNothingInstalled: a fresh clone declares the CLI but has
+// no node_modules. Its declared range stands in for a version, and the upgrade
+// installs it, moving the declaration with it.
+func TestUpgradeProjectWithNothingInstalled(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell-script package-manager stub")
+	}
+	f := newScopeFixture(t, "0.10.2", "0.10.2", "")
+	asked := answerUpgrades(t, true)
+	out := f.run(t, f.global, false, upgradeEnvironment{interactive: true})
+	if row := "  this project    ^0.9.0 (not installed) → 0.10.2  " + f.project + " (npm)\n"; !strings.Contains(out, row) {
+		t.Errorf("output missing %q:\n%s", row, out)
+	}
+	if want := []string{"Upgrade this project in " + f.project + "? ^0.9.0 → 0.10.2 may have breaking changes"}; !reflect.DeepEqual(*asked, want) {
+		t.Errorf("asked %#v, want %#v", *asked, want)
+	}
+	if want := []string{"install", "@magic-spells/puzzle@0.10.2"}; !reflect.DeepEqual(f.argv(), want) {
+		t.Errorf("argv = %#v, want %#v", f.argv(), want)
+	}
+	if !strings.Contains(out, "✓ upgraded this project ^0.9.0 → 0.10.2\n") {
+		t.Errorf("missing the result line:\n%s", out)
+	}
+}
+
+// TestUpgradeRefusalsStillOfferTheGlobalCLI: each running copy the command will
+// not write to keeps its explanation, and no longer ends the command — the
+// global CLI is still reported, asked about and upgraded. A workspace or nested
+// copy holds the project's place, so a member folder is not offered on top of
+// the workspace note.
+func TestUpgradeRefusalsStillOfferTheGlobalCLI(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell-script package-manager stub")
+	}
+	platform := filepath.Join("@magic-spells", platformPackageName(), "bin", platformBinaryName())
+	for _, tt := range []struct {
+		name string
+		// build returns the running binary and the folder to stand in.
+		build  func(t *testing.T, root string) (executable, cwd string)
+		marker string
+	}{
+		{"manual build", func(t *testing.T, root string) (string, string) {
+			return filepath.Join(root, "usr", "local", "bin", "puzzle"), root
+		}, "go build -o puzzle ./cmd/puzzle"},
+		{"npx cache", func(t *testing.T, root string) (string, string) {
+			cache := filepath.Join(root, ".npm", "_npx", "9d3ab")
+			mustWrite(t, filepath.Join(cache, "package.json"), `{"dependencies":{"@magic-spells/puzzle":"^0.9.0"}}`)
+			installPuzzlePackage(t, cache, version.Version)
+			return filepath.Join(cache, "node_modules", platform), root
+		}, "npx cache"},
+		{"nested copy", func(t *testing.T, root string) (string, string) {
+			tool := filepath.Join(root, "app", "node_modules", "some-tool")
+			mustWrite(t, filepath.Join(root, "app", "package.json"), `{"dependencies":{"@magic-spells/puzzle":"^0.9.0"}}`)
+			installPuzzlePackage(t, tool, version.Version)
+			return filepath.Join(tool, "node_modules", platform), filepath.Join(root, "app")
+		}, "nested dependency"},
+		{"workspace root, standing in the member", func(t *testing.T, root string) (string, string) {
+			mono := filepath.Join(root, "mono")
+			mustWrite(t, filepath.Join(mono, "package.json"), `{"workspaces":["packages/*"]}`)
+			mustWrite(t, filepath.Join(mono, "package-lock.json"), "")
+			mustWrite(t, filepath.Join(mono, "packages", "app", "package.json"), `{"dependencies":{"@magic-spells/puzzle":"^0.9.0"}}`)
+			installPuzzlePackage(t, mono, version.Version)
+			return filepath.Join(mono, "node_modules", platform), filepath.Join(mono, "packages", "app")
+		}, "-w <member>"},
+		{"unresolved", func(t *testing.T, root string) (string, string) {
+			vendor := filepath.Join(root, "opt", "vendor")
+			mustWrite(t, filepath.Join(vendor, "package.json"), `{"name":"vendor"}`)
+			installPuzzlePackage(t, vendor, version.Version)
+			return filepath.Join(vendor, "node_modules", platform), root
+		}, "! Could not tell how"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			f := newScopeFixture(t, testLatest, "0.9.1", "")
+			executable, cwd := tt.build(t, realTempDir(t))
+			chdir(t, cwd)
+			asked := answerUpgrades(t, true)
+			out := f.run(t, executable, false, upgradeEnvironment{interactive: true})
+			for _, want := range []string{
+				"✨ puzzle " + testLatest + " available (current " + version.Version + ")\n",
+				tt.marker,
+				"  the global CLI  0.9.1 → " + testLatest + "  (npm)\n",
+				"✓ upgraded the global CLI 0.9.1 → " + testLatest + "\n",
+			} {
+				if !strings.Contains(out, want) {
+					t.Errorf("output missing %q:\n%s", want, out)
+				}
+			}
+			if !reflect.DeepEqual(*asked, []string{"Upgrade the global CLI?"}) {
+				t.Errorf("asked %#v, want only the global CLI", *asked)
+			}
+		})
 	}
 }

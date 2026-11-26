@@ -6,8 +6,22 @@ language: javascript
 summary: Failure-safe Web Animations API wrapper and reduced-motion handling.
 connections:
   - COMPONENT-ANIMATIONS
-verified_at: '2026-08-24T21:11:50.859Z'
-verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
+verified_at: '2026-11-21T18:49:58.010Z'
+verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
 ---
 
-Source binding for the owning component card. Behavioral intent stays in the connected component; this card anchors that plan to `client-runtime/views/animate.js`.
+# animate.js
+
+The Web Animations API wrapper behind enter and leave animations
+([[COMPONENT-ANIMATIONS]]). Imported by `PuzzleView.js`, and by `flip.js` for
+`prefersReducedMotion` only (FLIP moves call `el.animate` themselves); it
+imports nothing.
+
+- **Never throws.** Missing WAAPI (jsdom), a malformed spec or rejected keyframes
+  degrade to an instant finish; the element always ends visible.
+- **`finished` always resolves**, including on cancel (WAAPI rejects with
+  AbortError), so callers can await it once on navigation interrupts and
+  destroy-during-leave.
+- **Reduced motion zeroes durations but still resolves asynchronously**, so hook
+  order is identical either way.
+- Malformed-spec warnings are warn-once per spec object (WeakSet/WeakMap).

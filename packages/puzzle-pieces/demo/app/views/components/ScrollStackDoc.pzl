@@ -49,7 +49,7 @@
         </p>
         <CodeBlock code={ installCmd }/>
         <p class="mb-3 mt-4 text-sm text-body">
-          Unlike every other piece, this one has a runtime dependency: the web component it wraps.
+          This piece has a runtime dependency: the web component it wraps.
         </p>
         <CodeBlock code={ installDep }/>
         <p class="mb-3 mt-4 text-sm text-body">
@@ -82,7 +82,7 @@
         <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Item markup contract</h2>
         <p class="mb-3 text-sm text-body">
           Children are parent-authored and pass through the default slot untouched, so you write the
-          item elements yourself. Three rules:
+          item elements yourself. Four rules:
         </p>
         <ul class="space-y-1.5 text-sm text-body">
           <li>

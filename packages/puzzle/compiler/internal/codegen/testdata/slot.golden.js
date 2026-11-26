@@ -18,4 +18,3 @@ SlotLayout.prototype.render = function () {
     ]),
   ]);
 };
-SlotLayout.__pzlModule = 'slot.pzl';

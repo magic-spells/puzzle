@@ -197,7 +197,7 @@ describe('a cached vnode behind an unkeyed run', () => {
 		const view = await mountView(Tags);
 		handles.push(view);
 		for (const tags of [['a'], ['a', 'b'], []]) {
-			view.instance.setData('tags', tags);
+			view.instance.setState('tags', tags);
 			await settled();
 			expect(view.findAll('.badge')).toHaveLength(1);
 			expect(view.findAll('li').map((li) => li.textContent)).toEqual([...tags, 'badge add']);
@@ -253,7 +253,7 @@ describe('a cached vnode inside a fresh parent behind an unkeyed run', () => {
 				[['a', 'b', 'c'], 'btn'],
 				[[], 'btn'],
 			]) {
-				inst.setData({ tags, cls });
+				inst.setState({ tags, cls });
 				await settled();
 				const svg = view.find('.icon');
 				expect(view.findAll('span').map((s) => s.textContent)).toEqual(tags);
@@ -313,7 +313,7 @@ describe('a cached vnode inside a fresh parent behind an unkeyed run', () => {
 			[[], ['m1', 'm2'], 'box'],
 			[['n1'], [], 'box3'],
 		]) {
-			view.instance.setData({ notes, more, cls });
+			view.instance.setState({ notes, more, cls });
 			await settled();
 			expect(html()).toBe(expected(notes, more, cls));
 		}
@@ -364,7 +364,7 @@ describe('a cached vnode inside a fresh parent behind an unkeyed run', () => {
 				[true, 'f'],
 				[false, 'f'],
 			]) {
-				inst.setData({ open, cls });
+				inst.setState({ open, cls });
 				await settled();
 				const box = view.find('.a');
 				expect(view.findAll('p')).toHaveLength(open ? 2 : 0);
@@ -444,7 +444,7 @@ describe('a cached vnode inside a fresh parent behind an unkeyed run', () => {
 				[['a', 'b', 'c'], 'x'],
 				[[], 'x'],
 			]) {
-				view.instance.setData('items', [{ id: 1, parts, tone }]);
+				view.instance.setState('items', [{ id: 1, parts, tone }]);
 				await settled();
 				expect(view.find('li').innerHTML).toBe(
 					parts.map((p) => `<span>${p}</span>`).join('') + `<em class="${tone}"><b>t</b></em>`
@@ -497,7 +497,7 @@ describe('a cached vnode inside a fresh parent behind an unkeyed run', () => {
 
 		const view = await mountView(Mixed);
 		for (const tags of [['a'], ['a', 'b', 'c'], [], ['z']]) {
-			view.instance.setData('tags', tags);
+			view.instance.setState('tags', tags);
 			await settled();
 			expect(view.instance.element.innerHTML).toBe(
 				tags.map((t) => `<span>${t}</span>`).join('') +

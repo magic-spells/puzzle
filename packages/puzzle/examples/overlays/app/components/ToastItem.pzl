@@ -14,7 +14,7 @@ export default class ToastItem extends PuzzleView {
 
   // A toast record is written once and then only ever destroyed, so a plain
   // record prop is enough here — no id + re-query needed for liveness.
-  data(params, props) {
+  data({ props }) {
     const toast = props.toast;
     return {
       toastClass: 'toast toast-' + toast.kind,

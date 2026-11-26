@@ -1,11 +1,13 @@
 ---
 name: D169 — registry dependencies carry a version floor; `add piece` prints `name@range`
-status: built
+status: verified
 connections:
   - COMPONENT-COMPILER-CLI
   - DECISION-D32-CLI-TOOLING
   - DECISION-D167-COMPONENT-FAMILIES
   - FILE-PIECES
+verified_at: '2026-11-24T18:13:21.008Z'
+verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
 ---
 
 # D169 — registry dependencies carry a version floor; `add piece` prints `name@range`
@@ -17,10 +19,10 @@ verbatim: `npm install @magic-spells/collapsible-content@^1.2.0`.
 ## Context
 
 The registry is copy-in (D3: the CLI prints, never runs, the install), so the
-printed line is the only channel it has for telling an app what it needs. A bare
-name makes npm install **latest**, which silently breaks a wrapper piece built
-against a newer component (the accordion lost `<collapsible-group>` exclusivity
-this way).
+printed `npm install` line is the only channel it has for telling an app which
+packages it needs. A bare name makes npm install **latest**, which silently
+breaks a wrapper piece built against a newer component (the accordion lost
+`<collapsible-group>` exclusivity this way).
 
 ## Decision
 

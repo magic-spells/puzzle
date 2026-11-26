@@ -88,7 +88,7 @@ function parseBody(body) {
 }
 
 export default class ChirpCard extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     const post = props.post || null;
     const store = this.ctx.store;
 

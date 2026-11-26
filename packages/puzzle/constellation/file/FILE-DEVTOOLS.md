@@ -14,8 +14,14 @@ connections:
   - COMPONENT-ROUTER
   - COMPONENT-PUZZLE-VIEW
   - DOC-SPEC-BUILD
-verified_at: '2026-08-24T21:39:15.808Z'
-verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
+verified_at: '2026-11-24T18:13:21.008Z'
+verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
+notes:
+  - kind: state
+    text: >-
+      The extension's content-script relay reconnects with no retry cap: Chrome recycles an idle MV3
+      service worker about every 30 seconds, so a capped relay leaves a quiet tab's panel dark. Only
+      a dead extension context (`chrome.runtime.id` gone) ends the loop.
 ---
 
 # devtools.js

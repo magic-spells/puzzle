@@ -1,6 +1,8 @@
 package build
 
 import (
+	"encoding/json"
+
 	"github.com/magic-spells/puzzle/compiler/internal/config"
 	"github.com/magic-spells/puzzle/compiler/internal/locales"
 	"github.com/magic-spells/puzzle/compiler/internal/plugin"
@@ -19,6 +21,8 @@ import (
 // use it — its plugin is reused across rebuilds and must re-derive source facts
 // when files change.
 type passContext struct {
+	env map[string]json.RawMessage
+
 	// usage is the project-wide tree-shaking scan (formatter manifest seeds + the
 	// D85 flip bit). Immutable once built; every pass gets the same value, so the
 	// esbuild Define map and the virtual formatter manifest are identical across
@@ -36,6 +40,10 @@ type passContext struct {
 	// every pass serves. locales is nil without i18n.
 	i18n    *config.I18n
 	locales *locales.Result
+
+	// stripStamps is true for a production SPA build, which has no reader for
+	// the D81 module stamp. One value per build: the passes share one cache.
+	stripStamps bool
 }
 
 // newPassContext runs the once-per-build source scans.
@@ -54,6 +62,7 @@ func (pc *passContext) plugin(absRoot string) *plugin.Plugin {
 	pl := plugin.New(absRoot)
 	pl.SetUsage(pc.usage)
 	pl.SetCompileCache(pc.cache)
+	pl.SetStripStamps(pc.stripStamps)
 	applyI18n(pl, pc.i18n, pc.locales)
 	return pl
 }

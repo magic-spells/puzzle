@@ -59,7 +59,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 //
 //   // events = {
 //   //   finish: ({ result }) => {
-//   //     this.setData('open', false);
+//   //     this.setState('open', false);
 //   //     if (result === 'confirm') this.deleteProject();
 //   //   },
 //   // };
@@ -145,16 +145,16 @@ import { PuzzleView } from '@magic-spells/puzzle';
 //     of 0,0, which the rect-only outside-click check read as a backdrop tap
 //     before the delegated handler ran. The check now also requires the click
 //     to target the <dialog> itself, so the button's click bubbles through and
-//     carries its result. The capture-phase watch stays as belt-and-braces
-//     against an older installed dialog-panel; a handler that treats a null
-//     result as a cancel is still the safe shape for irreversible work.
+//     carries its result. A handler that treats a null result as a cancel is
+//     still the safe shape for irreversible work.
 //   * The `hidden` detail carries no reason, which is why Escape needs the
 //     capture-phase flag described above.
 let uid = 0;
 
-// The overlay. Same look the rest of the overlay family lands on (Sheet and
-// BottomSheet set the same pair through their components' custom properties).
-const OVERLAY = 'bg-black/50 backdrop-blur-sm';
+// The overlay. Same look the rest of the overlay family lands on (Sheet sets
+// the same pair through its component's custom properties). The scrim has zero
+// specificity, so a colour in backdropClass wins.
+const OVERLAY = '[:where(&)]:bg-scrim backdrop-blur-sm';
 
 // The panel, capped at max-w-md — a prompt is narrow. `m-auto` is not
 // decoration: a modal <dialog> is centred by the browser through `margin: auto`
@@ -177,11 +177,11 @@ const BTN_BASE =
   'inline-flex items-center justify-center gap-2 whitespace-nowrap select-none ' +
   'rounded-lg font-medium cursor-pointer transition-colors ' +
   'focus-visible:outline-2 focus-visible:outline-offset-2 outline-ring focus-visible:outline-ring ' +
-  'disabled:opacity-50 disabled:pointer-events-none h-9 px-4 text-sm';
-const BTN_PRIMARY = 'bg-brand text-brand-ink hover:bg-brand-dark';
-const BTN_DESTRUCTIVE = 'bg-danger-solid text-danger-solid-ink hover:bg-danger-solid-hover';
+  'disabled:opacity-50 disabled:cursor-not-allowed h-9 px-4 text-sm';
+const BTN_PRIMARY = 'bg-ink text-page not-disabled:hover:bg-ink/85';
+const BTN_DESTRUCTIVE = 'bg-danger-solid text-danger-solid-ink not-disabled:hover:bg-danger-solid-hover';
 const BTN_OUTLINE =
-  'border border-border bg-surface text-ink hover:border-border-strong hover:bg-surface-sunken';
+  'border border-border-strong text-ink not-disabled:hover:bg-ink/6';
 
 export default class AlertDialog extends PuzzleView {
   #id = `alert-dialog-${++uid}`;
@@ -190,11 +190,10 @@ export default class AlertDialog extends PuzzleView {
   #live = false;
   #ready = false;
   #lastOpen = false;
-  // Three one-macrotask facts the dismiss guard needs and the `beforeHide`
-  // detail cannot supply: the wrapper asked for this close, a close button
-  // asked for it without being able to say so, and Escape asked for it.
+  // Two one-macrotask facts the dismiss guard needs and the `beforeHide`
+  // detail cannot supply: the wrapper asked for this close, and Escape asked
+  // for it.
   #selfHiding = false;
-  #buttonHide = false;
   #escaping = false;
 
   // dialog-panel's events bubble, so a nested overlay's close would otherwise
@@ -223,7 +222,7 @@ export default class AlertDialog extends PuzzleView {
   // no trigger and no escape flag — is refused, and nothing is reported.
   #onBeforeHide = (event) => {
     if (!this.#mine(event)) return;
-    if (this.#selfHiding || this.#buttonHide || this.#escaping) return;
+    if (this.#selfHiding || this.#escaping) return;
     if (event.detail?.triggerElement) return;
     event.preventDefault();
   };
@@ -237,20 +236,7 @@ export default class AlertDialog extends PuzzleView {
     }, 0);
   };
 
-  // Capture phase, on the root — see KNOWN GAPS. Against a dialog-panel older
-  // than 2.0.2 a keyboard-activated button arrives at (0,0) and is read as a
-  // backdrop tap upstream, so this is the only place the intent is still
-  // legible, and without it the inert backdrop would swallow a keyboard
-  // answer entirely.
-  #onClickCapture = (event) => {
-    if (!event.target?.closest?.('[data-action-hide-dialog]')) return;
-    this.#buttonHide = true;
-    setTimeout(() => {
-      this.#buttonHide = false;
-    }, 0);
-  };
-
-  data(params, props) {
+  data({ props }) {
     const title = props.title || '';
     const description = props.description || '';
 
@@ -285,7 +271,6 @@ export default class AlertDialog extends PuzzleView {
     this.#panel?.addEventListener('shown', this.#onShown);
     this.#panel?.addEventListener('hidden', this.#onHidden);
     this.#panel?.addEventListener('beforeHide', this.#onBeforeHide);
-    this.#panel?.addEventListener('click', this.#onClickCapture, true);
     this.#dialog?.addEventListener('cancel', this.#onCancelCapture, true);
 
     import('@magic-spells/dialog-panel')
@@ -319,7 +304,6 @@ export default class AlertDialog extends PuzzleView {
     this.#panel?.removeEventListener('shown', this.#onShown);
     this.#panel?.removeEventListener('hidden', this.#onHidden);
     this.#panel?.removeEventListener('beforeHide', this.#onBeforeHide);
-    this.#panel?.removeEventListener('click', this.#onClickCapture, true);
     this.#dialog?.removeEventListener('cancel', this.#onCancelCapture, true);
     // Unbind FIRST: this close is a teardown, not an answer, and must not call
     // back into a parent that is being torn down with us — and with the guard

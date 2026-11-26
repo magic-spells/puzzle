@@ -10,8 +10,8 @@ connections:
   - COMPONENT-VIEW-MANAGER
   - COMPONENT-TEMPLATE-PARSER
   - COMPONENT-CODEGEN
-verified_at: '2026-08-24T21:39:15.808Z'
-verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
+verified_at: '2026-11-24T18:05:31.213Z'
+verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
 code_refs:
   - client-runtime/views/portal.js
   - client-runtime/app.js

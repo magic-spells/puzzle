@@ -14,4 +14,3 @@ PortalNamedSlot.prototype.render = function () {
     ]),
   ]);
 };
-PortalNamedSlot.__pzlModule = 'portal_named_slot.pzl';

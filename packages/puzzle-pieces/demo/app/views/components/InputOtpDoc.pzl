@@ -78,7 +78,7 @@
             <li><span class="font-medium text-ink">Backspace</span> — clears the current cell, or on an empty cell moves back and clears the previous one</li>
             <li><span class="font-medium text-ink">Delete</span> — clears the current cell in place</li>
             <li><span class="font-medium text-ink">Left / Right arrows</span> — move between cells</li>
-            <li><span class="font-medium text-ink">Home / End</span> — jump to the first or last cell</li>
+            <li><span class="font-medium text-ink">Home / End</span> — jump to the first cell, or to the last reachable one (the first empty cell until the code is full)</li>
           </ul>
           <ExampleBox code={ codeKeyboard }>
             <InputOtp value={ code } @change={ setCode } />
@@ -106,7 +106,7 @@ const codeHero = `<InputOtp value={ code } @change={ setCode } />
 
 // parent
 events = {
-  setCode: (v) => this.setData('code', v),
+  setCode: (v) => this.setState('code', v),
 };`;
 
 const codeGroups = `// groups={[3, 3]} inserts an aria-hidden separator between segments
@@ -122,7 +122,7 @@ const codeComplete = `<InputOtp value={ otp } @change={ setOtp } @complete={ onC
 
 // parent — @complete(value) fires once when value.length === length
 events = {
-  setOtp: (v) => this.setData('otp', v),
+  setOtp: (v) => this.setState('otp', v),
   onComplete: (v) => this.verify(v),
 };`;
 
@@ -130,10 +130,10 @@ const codeKeyboard = `<InputOtp value={ code } @change={ setCode } />`;
 
 export default class InputOtpDoc extends PuzzleView {
   created() {
-    this.setData({ code: '', grouped: '', alnum: '', badCode: '123', otp: '', confirmed: false });
+    this.setState({ code: '', grouped: '', alnum: '', badCode: '123', otp: '', confirmed: false });
   }
 
-  data(params, props) {
+  data() {
     return {
       ...this.getData(),
       installCmd,
@@ -159,29 +159,23 @@ export default class InputOtpDoc extends PuzzleView {
 
   events = {
     setCode: (v) => {
-      this.setData('code', v);
-      this.refresh();
+      this.setState('code', v);
     },
     setGrouped: (v) => {
-      this.setData('grouped', v);
-      this.refresh();
+      this.setState('grouped', v);
     },
     setAlnum: (v) => {
-      this.setData('alnum', v);
-      this.refresh();
+      this.setState('alnum', v);
     },
     setBadCode: (v) => {
-      this.setData('badCode', v);
-      this.refresh();
+      this.setState('badCode', v);
     },
     setOtp: (v) => {
       // A new edit that isn't yet complete clears the confirmation.
-      this.setData({ otp: v, confirmed: v.length === 6 ? this.getData().confirmed : false });
-      this.refresh();
+      this.setState({ otp: v, confirmed: v.length === 6 ? this.getData().confirmed : false });
     },
     onComplete: () => {
-      this.setData('confirmed', true);
-      this.refresh();
+      this.setState('confirmed', true);
     },
   };
 }

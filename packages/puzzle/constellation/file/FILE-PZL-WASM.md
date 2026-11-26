@@ -1,6 +1,6 @@
 ---
 name: playground WASM compiler entry
-status: built
+status: verified
 path: compiler/cmd/pzl-wasm/main.go
 language: go
 summary: >-
@@ -8,6 +8,8 @@ summary: >-
   worker protocol and its input guards.
 connections:
   - COMPONENT-PLAYGROUND-COMPILER
+verified_at: '2026-11-01T19:19:18.479Z'
+verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
 ---
 
 Source binding for the owning component card. Behavioral intent stays in the connected component; this card anchors that plan to `compiler/cmd/pzl-wasm/main.go`.

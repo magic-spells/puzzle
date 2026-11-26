@@ -336,7 +336,7 @@ import Avatar from './Avatar.pzl';
 import PageCard from './PageCard.pzl';
 
 export default class Docs extends PuzzleView {
-  data(params, props) {
+  data() {
     // Pages I'm linking to (and not this one), newest first, capped at
     // three. Filtering/sorting live here, not in the template.
     const pages = this.ctx.store

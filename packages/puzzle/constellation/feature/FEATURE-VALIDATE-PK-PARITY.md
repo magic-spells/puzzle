@@ -1,7 +1,7 @@
 ---
 name: "validate() / createRecord pk parity"
 status: verified
-verified_at: '2026-08-16T04:33:32.121Z'
+verified_at: '2026-11-01T19:19:25.478Z'
 connections:
   - DECISION-D48-SCHEMA-VALIDATION
   - DECISION-D05-SCHEMA-BUILDERS
@@ -9,8 +9,7 @@ connections:
   - COMPONENT-STORE
   - DOC-MODELS
   - DOC-SPEC-DATA
-verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
-release: RELEASE-V0-1-2
+verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
 change: fix
 ---
 

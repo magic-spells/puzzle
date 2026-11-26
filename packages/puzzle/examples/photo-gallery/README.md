@@ -13,7 +13,7 @@ unmounts as the overlay mounts, so the morph is a **cross-view capture flight**
 (D68 — the engine snapshots the leaving card and flies a clone into the arriving
 image). Opening a photo from an **album** (`/album/:slug` →
 `/album/:slug/photo/:id`) is a **nested child route** (D30): the album view stays
-mounted and only its `<Slot/>` swaps, so the grid card `<img>` and the fullscreen
+mounted and only its `<Outlet/>` swaps, so the grid card `<img>` and the fullscreen
 `<img>` coexist in the DOM — a **D55 live pair** the engine morphs with a real
 show/hide round trip, flying back into the still-mounted card on close/back.
 Same `PhotoView`, same `data-puzzle-morph="photo-<id>"` namespace, both shapes.
@@ -22,7 +22,7 @@ Same `PhotoView`, same `data-puzzle-morph="photo-<id>"` namespace, both shapes.
 
 - **Persistent sidebar chrome + a reactively-highlighted active route.** The
   sidebar lives in `DefaultLayout`, which every route reuses — so it stays
-  mounted while only the routed `<Slot/>` swaps (the one-animator rule means the
+  mounted while only the routed `<Outlet/>` swaps (the one-animator rule means the
   sidebar never animates). Its `data()` re-runs on every navigation and reads
   `this.route` (v1.15/D47) to know the current route: `routeName === 'gallery'`
   lights the "All Photos" row, and an `activeSlug` (the `:slug` param, null off
@@ -41,12 +41,12 @@ Same `PhotoView`, same `data-puzzle-morph="photo-<id>"` namespace, both shapes.
   whole opt-in. From **All Photos** the grid unmounts as the overlay mounts
   (sibling swap), so the router pairs them as a **D68 capture flight**. From an
   **album** the overlay mounts as a nested child inside the still-mounted album
-  view (`<Slot/>`), so both images coexist and the router pairs them as a **D55
+  view (`<Outlet/>`), so both images coexist and the router pairs them as a **D55
   live pair**. Same id namespace and same `PhotoView` in both — closing returns
   to whichever grid you came from, including via the browser back button.
 - **Nested child route for album photos (D30).** `/album/:slug` is a parent
   route with an empty index child (`path: ''`) and a `photo/:id` child; the
-  album view renders its matched child at `<Slot/>`. Keeping the album grid
+  album view renders its matched child at `<Outlet/>`. Keeping the album grid
   mounted beneath the fullscreen overlay is precisely what turns the album morph
   into a live pair — the card the fullscreen flew from is still in the DOM to
   fly back to. `PhotoCard` takes an optional `base` prop so its href is
@@ -67,14 +67,14 @@ Same `PhotoView`, same `data-puzzle-morph="photo-<id>"` namespace, both shapes.
 | -------------------------- | ------------ | ------------------------------------------------------------- |
 | `/`                        | `Gallery`    | Library "All Photos" grid                                     |
 | `/photo/:id`               | `PhotoView`  | Fullscreen overlay from All Photos → **D68 capture flight**   |
-| `/album/:slug`             | `Album`      | Grid filtered to one author (renders its child at `<Slot/>`)  |
+| `/album/:slug`             | `Album`      | Grid filtered to one author (renders its child at `<Outlet/>`)  |
 | `/album/:slug` (index)     | `AlbumIndex` | Index child (`path: ''`) — renders nothing; the grid is Album |
 | `/album/:slug/photo/:id`   | `PhotoView`  | Nested child overlay → **D55 live pair** (grid stays mounted) |
 | `*`                        | `NotFound`   | 404                                                           |
 
 `/album/:slug` is a **parent route** whose children are an empty index
 (`path: ''`, so the bare album URL matches) and the fullscreen photo
-(`path: 'photo/:id'`). `AlbumView` renders its matched child at `<Slot/>`;
+(`path: 'photo/:id'`). `AlbumView` renders its matched child at `<Outlet/>`;
 `PhotoView` is reused as both a top-level overlay and the nested album overlay
 (`params` merge down the chain, so `params.id` — and `params.slug` under an
 album — are present in both). `layout` stays a top-level-route field.
