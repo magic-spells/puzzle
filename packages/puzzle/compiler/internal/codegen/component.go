@@ -196,7 +196,7 @@ func (c *compiler) emitComponentSlot(node *parser.Component, ind int, scope scop
 			props = append(props, attr)
 		}
 	}
-	attrs, err := c.emitAttrs("", props, ind, len(props) > 1 || anyMixed(props), scope, true)
+	kvs, err := c.attrKVs("", props, scope, true)
 	if err != nil {
 		return "", err
 	}
@@ -209,5 +209,5 @@ func (c *compiler) emitComponentSlot(node *parser.Component, ind int, scope scop
 		return "", err
 	}
 	c.usesDynamicComponent = true
-	return "__dc(" + selector + ", " + attrs + ", " + array + ")", nil
+	return "__dc(" + selector + ", " + attrObject(kvs, ind, len(props) <= 1 && !anyMixed(props)) + ", " + array + ")", nil
 }

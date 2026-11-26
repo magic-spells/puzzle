@@ -787,11 +787,7 @@ func (c *compiler) emitElement(tagStr string, attrs []parser.Attr, children []pa
 	if err != nil {
 		return "", err
 	}
-	multiline, err := c.attrsMultiline(tag, attrs, tagStr, startCol, len(processed) == 0, scope, isComponent)
-	if err != nil {
-		return "", err
-	}
-	attrsSeg, err := c.emitAttrs(tag, attrs, ind, multiline, scope, isComponent)
+	attrsSeg, err := c.emitAttrs(tag, tagStr, attrs, ind, startCol, len(processed) == 0, scope, isComponent)
 	if err != nil {
 		return "", err
 	}
@@ -932,7 +928,7 @@ func (c *compiler) emitSlot(n *parser.Slot, ind int, scope scopeMap) (string, er
 	if len(n.Args) > 0 {
 		kvs := make([]string, 0, len(n.Args))
 		for _, arg := range n.Args {
-			kv, err := c.attrKV("", arg, scope, false, true)
+			kv, err := c.attrKV("", arg, scope, false)
 			if err != nil {
 				return "", err
 			}
@@ -1602,93 +1598,62 @@ func dropReservedLiteralAttrs(attrs []parser.Attr) []parser.Attr {
 // <puzzle-view> root breaks to multi-line. 120 separates them.
 const printWidth = 120
 
-// attrsMultiline decides whether the attribute object breaks onto its own
-// lines: always when there are ≥2 attributes or any mixed (template-literal)
-// value; for a single simple attribute, only when the inline first line would
+// emitAttrs emits an element's attribute object (tagStr is the quoted tag, or a
+// component's identifier). It breaks onto its own lines when there are ≥2
+// attributes or any mixed (template-literal) value; a single simple attribute
+// stays inline unless the element's first line, starting at startCol, would
 // exceed printWidth.
-func (c *compiler) attrsMultiline(tag string, attrs []parser.Attr, tagStr string, startCol int, emptyChildren bool, scope scopeMap, isComponent bool) (bool, error) {
-	attrs = dropReservedLiteralAttrs(attrs)
-	bind := detectAutoBind(tag, attrs, scope)
-	attrCount := len(attrs)
-	if bind != nil {
-		attrCount++
-	}
-	if attrCount == 0 {
-		return false, nil
-	}
-	if attrCount >= 2 || anyMixed(attrs) {
-		return true, nil
-	}
-	kv, err := c.attrKV(tag, attrs[0], scope, isComponent, false)
+func (c *compiler) emitAttrs(tag, tagStr string, attrs []parser.Attr, ind, startCol int, emptyChildren bool, scope scopeMap, isComponent bool) (string, error) {
+	kvs, err := c.attrKVs(tag, attrs, scope, isComponent)
 	if err != nil {
-		return false, err
+		return "", err
 	}
 	childrenTok := "["
 	if emptyChildren {
 		childrenTok = "[])"
 	}
-	firstLine := "new ViewNode(" + tagStr + ", { " + kv + " }, " + childrenTok
-	return startCol+len(firstLine) > printWidth, nil
+	inline := len(kvs) == 1 && !anyMixed(attrs) &&
+		startCol+len("new ViewNode("+tagStr+", { "+kvs[0]+" }, "+childrenTok) <= printWidth
+	return attrObject(kvs, ind, inline), nil
 }
 
-// emitAttrs emits the attribute object either inline `{ k: v }` or multi-line
-// (one attribute per line, trailing comma), per the precomputed decision.
-func (c *compiler) emitAttrs(tag string, attrs []parser.Attr, ind int, multiline bool, scope scopeMap, isComponent bool) (string, error) {
+// attrKVs compiles an attribute list to its `key: value` pairs in source order,
+// followed by the listener of an implicit two-way binding (D147).
+func (c *compiler) attrKVs(tag string, attrs []parser.Attr, scope scopeMap, isComponent bool) ([]string, error) {
 	attrs = dropReservedLiteralAttrs(attrs)
 	if !isComponent {
 		if err := c.checkSrcdoc(tag, attrs); err != nil {
-			return "", err
+			return nil, err
 		}
 	}
-	bind := detectAutoBind(tag, attrs, scope)
-	attrCount := len(attrs)
-	if bind != nil {
-		attrCount++
-	}
-	if attrCount == 0 {
-		return "{}", nil
-	}
-	if !multiline {
-		kvs := make([]string, 0, attrCount)
-		for _, a := range attrs {
-			kv, err := c.attrKV(tag, a, scope, isComponent, true)
-			if err != nil {
-				return "", err
-			}
-			kvs = append(kvs, kv)
-		}
-		if bind != nil {
-			kvs = append(kvs, autoBindKV(bind, scope))
-		}
-		return "{ " + strings.Join(kvs, ", ") + " }", nil
-	}
-	var b strings.Builder
-	b.WriteString("{\n")
+	kvs := make([]string, 0, len(attrs)+1)
 	for _, a := range attrs {
-		kv, err := c.attrKV(tag, a, scope, isComponent, true)
+		kv, err := c.attrKV(tag, a, scope, isComponent)
 		if err != nil {
-			return "", err
+			return nil, err
 		}
-		b.WriteString(sp(ind + 2))
-		b.WriteString(kv)
-		b.WriteString(",\n")
+		kvs = append(kvs, kv)
 	}
-	if bind != nil {
-		b.WriteString(sp(ind + 2))
-		b.WriteString(autoBindKV(bind, scope))
-		b.WriteString(",\n")
+	if bind := detectAutoBind(tag, attrs, scope); bind != nil {
+		kvs = append(kvs, autoBindKV(bind, scope))
 	}
-	b.WriteString(sp(ind))
-	b.WriteString("}")
-	return b.String(), nil
+	return kvs, nil
 }
 
-// attrKV compiles a single attribute to a `key: value` pair. `emit` distinguishes
-// the REAL emission pass (emitAttrs) from the attrsMultiline width-measurement
-// trial: only the real pass advances the D62 handler-cache counter, so the trial
-// reads the SAME site index the real emission will use (matching bytes for the
-// width decision) without consuming it.
-func (c *compiler) attrKV(tag string, a parser.Attr, scope scopeMap, isComponent bool, emit bool) (string, error) {
+// attrObject lays out compiled attribute pairs: `{}` when there are none, else
+// inline `{ k: v }`, or one pair per line with a trailing comma.
+func attrObject(kvs []string, ind int, inline bool) string {
+	switch {
+	case len(kvs) == 0:
+		return "{}"
+	case inline:
+		return "{ " + strings.Join(kvs, ", ") + " }"
+	}
+	return "{\n" + sp(ind+2) + strings.Join(kvs, ",\n"+sp(ind+2)) + ",\n" + sp(ind) + "}"
+}
+
+// attrKV compiles a single attribute to a `key: value` pair.
+func (c *compiler) attrKV(tag string, a parser.Attr, scope scopeMap, isComponent bool) (string, error) {
 	switch at := a.(type) {
 	case *parser.StaticAttr:
 		// LiteralName means the name came from authored-literal markup rather than
@@ -1745,13 +1710,10 @@ func (c *compiler) attrKV(tag string, a parser.Attr, scope scopeMap, isComponent
 		// one cached closure — a cached callback prop shallow-compares equal across
 		// parent re-renders, so the child stops re-running data() on phantom prop
 		// changes. Non-cacheable sites (loop/data captures) fall through
-		// byte-identical to v1.28. The counter advances only on the real emit pass
-		// (see attrKV's `emit` doc); the width-trial peeks the same index.
+		// byte-identical to v1.28.
 		if cacheable {
 			val = fmt.Sprintf("((this.__h ??= {})[%d] ??= %s)", c.handlerSites, val)
-			if emit {
-				c.handlerSites++
-			}
+			c.handlerSites++
 		} else if ev.rowCacheable && c.rowStableRefs(ev.refs, scope) {
 			// A handler capturing ONLY loop locals is identity-stable for the
 			// life of the row once the locals are read off the row scope at fire
@@ -1762,9 +1724,7 @@ func (c *compiler) attrKV(tag string, a parser.Attr, scope scopeMap, isComponent
 			// every parent render.
 			if site := c.rowScope(); site != nil {
 				val = fmt.Sprintf("(%s.h%d ??= %s)", site.scope, site.handlerSites, val)
-				if emit {
-					site.handlerSites++
-				}
+				site.handlerSites++
 			}
 		}
 		// DOM listener → '@name' key; component callback prop → bare `name`

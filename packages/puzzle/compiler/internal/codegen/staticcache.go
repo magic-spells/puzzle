@@ -48,7 +48,7 @@ const minCachedVnodes = 3
 //
 // The wrapper is a pure PREFIX on the subtree's first line with a single ')'
 // suffix on its closing line; inner lines keep their indentation, and the
-// prefix counts toward startCol in the attrsMultiline width decision, so the
+// prefix counts toward startCol in the emitAttrs width decision, so the
 // wrapped element wraps its attributes exactly as the fixture does — the D170
 // emission contract; the hand-written todos fixtures under tests/fixtures/todos/
 // are the byte contract.
