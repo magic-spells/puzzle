@@ -473,6 +473,26 @@ describe('Router fragment pop — over a pop still loading', () => {
 		expect(savedY(slowState)).toBe(100); // not /about's 200 under /slow's key
 	});
 
+	// The guard's redirect re-enters as a replace, but it continues the Back, so
+	// Forward home cancels it exactly as it would the Back itself.
+	it('Back onto a guard that redirects, then Forward before the redirect lands, stays on the committed page', async () => {
+		const { router, el } = await boot([...SLOW_ROUTES, { path: '/old', view: HomeView, guard: () => '/slow' }]);
+		const homeState = history.state;
+		await router.push('/about');
+		const aboutState = history.state;
+
+		gate = deferred();
+		traverseTo(homeState, '/old'); // Back — redirected to /slow, whose data() is held
+		await tick();
+		traverseTo(aboutState, '/about'); // Forward, home to the committed entry
+		gate.resolve();
+		await tick();
+
+		expect(location.pathname).toBe('/about');
+		expect(router.current.path).toBe('/about');
+		expect(el.textContent).toBe('ABOUT');
+	});
+
 	it("a push over a loading pop files no position under the popped entry's key", async () => {
 		const { router } = await boot(SLOW_ROUTES, undefined, '/slow');
 		const slowState = history.state;
