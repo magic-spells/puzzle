@@ -614,7 +614,7 @@ type compiler struct {
 // item is a processed child: either a coalesced text run (textOK), a structural
 // node kept for indent-aware emission, or a synthetic placeholder (`placeholder`)
 // injected by the conditional-arity padding to keep `{#if}`/`{#case}` branches the
-// same static length (see padItems / condStaticLen).
+// same static length (see branches / condStaticLen).
 type item struct {
 	text        string // JS value expression when textOK
 	textOK      bool
@@ -850,7 +850,7 @@ func (c *compiler) emitArray(items []item, elemIndent int, scope scopeMap) (stri
 func (c *compiler) emitItem(it item, ind int, scope scopeMap) (string, error) {
 	if it.placeholder {
 		// Arity-padding placeholder: an empty comment vnode holding a stable index
-		// slot so a conditional's branches stay the same length (see padItems).
+		// slot so a conditional's branches stay the same length (see branches).
 		return "new ViewNode('#')", nil
 	}
 	if it.textOK {
@@ -1021,39 +1021,15 @@ func (c *compiler) emitIf(n *parser.If, ind int, scope scopeMap) (string, error)
 	f := c.factSink()
 	cond := c.cond(n.CondAST, scope, f)
 	c.absorb(f, scope)
-	thenItems, err := c.processChildren(n.Then, scope)
+	branches, _, _, err := c.branches(condBodies(n), scope)
 	if err != nil {
 		return "", err
 	}
-	var elseItems []item
-	if n.Else != nil {
-		elseItems, err = c.processChildren(n.Else, scope)
-		if err != nil {
-			return "", err
-		}
-	}
-	thenLen, thenStable, err := c.condStaticLen(thenItems, scope)
+	thenArr, err := c.emitArray(branches[0], ind+6, scope)
 	if err != nil {
 		return "", err
 	}
-	elseLen, elseStable, err := c.condStaticLen(elseItems, scope)
-	if err != nil {
-		return "", err
-	}
-	maxLen := thenLen
-	if elseLen > maxLen {
-		maxLen = elseLen
-	}
-	if thenStable && elseStable {
-		thenItems = padItems(thenItems, maxLen-thenLen)
-		elseItems = padItems(elseItems, maxLen-elseLen)
-	}
-
-	thenArr, err := c.emitArray(thenItems, ind+6, scope)
-	if err != nil {
-		return "", err
-	}
-	elsePart, err := c.emitArray(elseItems, ind+6, scope)
+	elsePart, err := c.emitArray(branches[1], ind+6, scope)
 	if err != nil {
 		return "", err
 	}
@@ -1062,13 +1038,52 @@ func (c *compiler) emitIf(n *parser.If, ind int, scope scopeMap) (string, error)
 		sp(ind+2) + ": " + elsePart + ")", nil
 }
 
-// padItems appends n arity-padding placeholder items to items (n<=0 is a no-op,
-// returning items unchanged so a balanced branch emits byte-identically).
-func padItems(items []item, n int) []item {
-	for i := 0; i < n; i++ {
-		items = append(items, item{placeholder: true})
+// condBodies lists an `{#if}`'s or `{#case}`'s branch bodies in emission order;
+// a missing {:else} is an empty branch.
+func condBodies(n parser.Node) [][]parser.Node {
+	switch n := n.(type) {
+	case *parser.If:
+		return [][]parser.Node{n.Then, n.Else}
+	case *parser.Case:
+		bodies := make([][]parser.Node, 0, len(n.Clauses)+1)
+		for _, cl := range n.Clauses {
+			bodies = append(bodies, cl.Body)
+		}
+		return append(bodies, n.Else)
 	}
-	return items
+	return nil
+}
+
+// branches processes a conditional's branch bodies and reports the longest
+// one's static vnode count and whether every branch has provably fixed
+// occupancy (condStaticLen). When every branch does, each shorter one is padded
+// with placeholders to that count, so toggling between branches cannot shift
+// and remount trailing siblings.
+func (c *compiler) branches(bodies [][]parser.Node, scope scopeMap) ([][]item, int, bool, error) {
+	items := make([][]item, len(bodies))
+	lens := make([]int, len(bodies))
+	maxLen, stable := 0, true
+	for i, body := range bodies {
+		branch, err := c.processChildren(body, scope)
+		if err != nil {
+			return nil, 0, false, err
+		}
+		l, branchStable, err := c.condStaticLen(branch, scope)
+		if err != nil {
+			return nil, 0, false, err
+		}
+		items[i], lens[i] = branch, l
+		maxLen = max(maxLen, l)
+		stable = stable && branchStable
+	}
+	if stable {
+		for i := range items {
+			for n := lens[i]; n < maxLen; n++ {
+				items[i] = append(items[i], item{placeholder: true})
+			}
+		}
+	}
+	return items, maxLen, stable, nil
 }
 
 // condStaticLen reports both the static vnode count and whether a processed child
@@ -1101,17 +1116,13 @@ func (c *compiler) condStaticLen(items []item, scope scopeMap) (int, bool, error
 			stable = false
 		case *parser.Snippet:
 			stable = false
-		case *parser.If:
-			m, childStable, err := c.ifStaticLen(node, scope)
-			if err != nil {
-				return 0, false, err
-			}
-			n += m
-			if !childStable {
-				stable = false
-			}
-		case *parser.Case:
-			m, childStable, err := c.caseStaticLen(node, scope)
+		case *parser.If, *parser.Case:
+			// Arity analysis only: emitIf/emitCase process these bodies again
+			// when they emit them, so this pass's facts are suppressed (see
+			// forBodyRoot).
+			c.analyzing++
+			_, m, childStable, err := c.branches(condBodies(node), scope)
+			c.analyzing--
 			if err != nil {
 				return 0, false, err
 			}
@@ -1127,79 +1138,6 @@ func (c *compiler) condStaticLen(items []item, scope scopeMap) (int, bool, error
 	return n, stable, nil
 }
 
-// ifStaticLen reports a nested `{#if}`'s max branch length and whether every
-// branch is stable, matching emitIf's padding gate.
-func (c *compiler) ifStaticLen(n *parser.If, scope scopeMap) (int, bool, error) {
-	// Arity analysis only: this pass re-processes children whose emitted form is
-	// produced later by emitIf, so its facts are suppressed (see forBodyRoot).
-	c.analyzing++
-	defer func() { c.analyzing-- }()
-	thenItems, err := c.processChildren(n.Then, scope)
-	if err != nil {
-		return 0, false, err
-	}
-	thenLen, thenStable, err := c.condStaticLen(thenItems, scope)
-	if err != nil {
-		return 0, false, err
-	}
-	maxLen := thenLen
-	stable := thenStable
-	if n.Else != nil {
-		elseItems, err := c.processChildren(n.Else, scope)
-		if err != nil {
-			return 0, false, err
-		}
-		elseLen, elseStable, err := c.condStaticLen(elseItems, scope)
-		if err != nil {
-			return 0, false, err
-		}
-		stable = stable && elseStable
-		if elseLen > maxLen {
-			maxLen = elseLen
-		}
-	}
-	return maxLen, stable, nil
-}
-
-// caseStaticLen reports a nested `{#case}`'s max branch length and whether every
-// clause plus the optional/implicit else is stable, matching emitCase's gate.
-func (c *compiler) caseStaticLen(n *parser.Case, scope scopeMap) (int, bool, error) {
-	// Arity analysis only; see ifStaticLen.
-	c.analyzing++
-	defer func() { c.analyzing-- }()
-	maxLen := 0
-	stable := true
-	for _, cl := range n.Clauses {
-		items, err := c.processChildren(cl.Body, scope)
-		if err != nil {
-			return 0, false, err
-		}
-		l, branchStable, err := c.condStaticLen(items, scope)
-		if err != nil {
-			return 0, false, err
-		}
-		stable = stable && branchStable
-		if l > maxLen {
-			maxLen = l
-		}
-	}
-	if n.Else != nil {
-		items, err := c.processChildren(n.Else, scope)
-		if err != nil {
-			return 0, false, err
-		}
-		l, branchStable, err := c.condStaticLen(items, scope)
-		if err != nil {
-			return 0, false, err
-		}
-		stable = stable && branchStable
-		if l > maxLen {
-			maxLen = l
-		}
-	}
-	return maxLen, stable, nil
-}
-
 // emitCase compiles a `{#case}/{:when}` block to a spread IIFE that binds the
 // case expression to a temp (`__c`) ONCE, then chains strict-`===` ternaries —
 // one per clause, its OR-matched values joined with `||` — falling through to
@@ -1211,45 +1149,12 @@ func (c *compiler) caseStaticLen(n *parser.Case, scope scopeMap) (int, bool, err
 func (c *compiler) emitCase(n *parser.Case, ind int, scope scopeMap) (string, error) {
 	caseExpr := c.value(n.ExprAST, scope)
 
-	// Pre-process every clause body + the else and compute the max static arity.
 	// Padding applies only when every branch has provably fixed occupancy; an
 	// item-form loop, explicit-key range loop, or slot marker makes the whole case
 	// emit unpadded. Nested conditionals still decide their own padding independently.
-	clauseItems := make([][]item, len(n.Clauses))
-	clauseLens := make([]int, len(n.Clauses))
-	maxLen := 0
-	stable := true
-	for i, cl := range n.Clauses {
-		items, err := c.processChildren(cl.Body, scope)
-		if err != nil {
-			return "", err
-		}
-		l, branchStable, err := c.condStaticLen(items, scope)
-		if err != nil {
-			return "", err
-		}
-		stable = stable && branchStable
-		clauseItems[i] = items
-		clauseLens[i] = l
-		if l > maxLen {
-			maxLen = l
-		}
-	}
-	var elseItems []item
-	if n.Else != nil {
-		items, err := c.processChildren(n.Else, scope)
-		if err != nil {
-			return "", err
-		}
-		elseItems = items
-	}
-	elseLen, elseStable, err := c.condStaticLen(elseItems, scope)
+	branches, _, _, err := c.branches(condBodies(n), scope)
 	if err != nil {
 		return "", err
-	}
-	stable = stable && elseStable
-	if elseLen > maxLen {
-		maxLen = elseLen
 	}
 
 	var b strings.Builder
@@ -1260,11 +1165,7 @@ func (c *compiler) emitCase(n *parser.Case, ind int, scope scopeMap) (string, er
 			conds[k] = "__c === (" + c.value(v, scope) + ")"
 		}
 		condStr := strings.Join(conds, " || ")
-		items := clauseItems[i]
-		if stable {
-			items = padItems(items, maxLen-clauseLens[i])
-		}
-		arr, err := c.emitArray(items, ind+8, scope)
+		arr, err := c.emitArray(branches[i], ind+8, scope)
 		if err != nil {
 			return "", err
 		}
@@ -1275,10 +1176,7 @@ func (c *compiler) emitCase(n *parser.Case, ind int, scope scopeMap) (string, er
 		}
 		b.WriteString(sp(ind+4) + "? " + arr + "\n")
 	}
-	if stable {
-		elseItems = padItems(elseItems, maxLen-elseLen)
-	}
-	elseArr, err := c.emitArray(elseItems, ind+8, scope)
+	elseArr, err := c.emitArray(branches[len(n.Clauses)], ind+8, scope)
 	if err != nil {
 		return "", err
 	}
