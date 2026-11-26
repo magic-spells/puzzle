@@ -123,7 +123,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 export default class T extends PuzzleView {}
 </script>
 `)
-	if !strings.Contains(got, "keyOf(") {
+	if !strings.Contains(got, "key: ViewNode.keyOf") {
 		t.Errorf("synthetic {#for} key was suppressed by a literal raw key:\n%s", got)
 	}
 	// Two `key:` spellings now: the site meta's resolver and the row root's

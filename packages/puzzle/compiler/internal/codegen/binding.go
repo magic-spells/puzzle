@@ -68,8 +68,7 @@ func classifyBindExpr(n expr.Node, scope scopeMap) (target, field string, bare, 
 }
 
 // detectAutoBind inspects the whole element (conditions are sibling-aware) and
-// returns nil when nothing binds. Pure; safe to call from both the width trial
-// and the real pass. Consumes no compiler state.
+// returns nil when nothing binds. Pure: consumes no compiler state.
 func detectAutoBind(tag string, attrs []parser.Attr, scope scopeMap) *autoBind {
 	tag = strings.ToLower(tag)
 	if tag != "input" && tag != "textarea" && tag != "select" {

@@ -9,7 +9,7 @@ export default class InlineSvg extends PuzzleView {
 
 import { ViewNode, listRows as __l } from '@magic-spells/puzzle';
 
-const __L0 = { key: (item) => ViewNode.keyOf(item) };
+const __L0 = { key: ViewNode.keyOf };
 
 InlineSvg.prototype.render = function () {
   const __d = this.getData();

@@ -31,15 +31,11 @@ LazyCardHost.prototype.render = function () {
       }, [
         new ViewNode('text', { value: 'Custom' }),
       ]),
-      ...(__d.show
-        ? [
-            new ViewNode('b', { class: 'lazy-card-shown' }, [
-              new ViewNode('text', { value: 'shown' }),
-            ]),
-          ]
-        : [
-            new ViewNode('#'),
-          ]),
+      __d.show
+        ? new ViewNode('b', { class: 'lazy-card-shown' }, [
+            new ViewNode('text', { value: 'shown' }),
+          ])
+        : new ViewNode('#'),
     ]),
   ]);
 };

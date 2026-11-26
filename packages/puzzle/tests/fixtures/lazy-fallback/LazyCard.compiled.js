@@ -22,30 +22,28 @@ export default class LazyCard extends PuzzleView {
 
 import { ViewNode, SLOT_TAG, displayValue as __s, listRows as __l } from '@magic-spells/puzzle';
 
-const __L0 = { key: (tip) => ViewNode.keyOf(tip) };
+const __L0 = { key: ViewNode.keyOf };
 
 LazyCard.prototype.render = function () {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
+  const __f = this.ctx.formatters;
 
   return new ViewNode('div', { class: 'lazy-card' }, [
     new ViewNode('h3', {}, [
       new ViewNode(SLOT_TAG, { name: 'label', fallback: () => [
         new ViewNode('em', { class: 'lazy-card-fallback' }, [
-          new ViewNode('text', { value: __s((__f["probe"] || __f.__missing("probe"))(__d.label), typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'probe(label)' : 0) }),
+          new ViewNode('text', { value: __s(__f.get("probe")(__d.label), typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'probe(label)' : 0) }),
         ]),
       ] }),
     ]),
-    new ViewNode(SLOT_TAG, { fallback: () => [
-      ...__l(this, this, 0, __d.tips, (s) =>
-        new ViewNode('i', {
-          key: s.k,
-          class: 'lazy-tip',
-        }, [
-          new ViewNode('text', { value: __s(s.item, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'tip' : 0) }),
-        ])
-      , __L0),
-    ] }),
+    new ViewNode(SLOT_TAG, { fallback: () => __l(this, this, 0, __d.tips, (s) =>
+      new ViewNode('i', {
+        key: s.k,
+        class: 'lazy-tip',
+      }, [
+        new ViewNode('text', { value: __s(s.item, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'tip' : 0) }),
+      ])
+    , __L0) }),
     new ViewNode('input', { class: 'lazy-card-input' }, []),
   ]);
 };

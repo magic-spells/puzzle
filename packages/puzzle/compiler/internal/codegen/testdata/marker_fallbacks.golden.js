@@ -16,28 +16,24 @@ import { ViewNode, SLOT_TAG, displayValue as __s } from '@magic-spells/puzzle';
 
 MarkerFallbacks.prototype.render = function () {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
+  const __f = this.ctx.formatters;
 
   return new ViewNode('puzzle-view', { class: 'fallbacks' }, [
     new ViewNode(SLOT_TAG, { fallback: () => [
       new ViewNode('p', { class: 'pzl-test-fallback' }, [
-        new ViewNode('text', { value: __s((__f["number"] || __f.__missing("number"))(__d.n), typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'number(n)' : 0) }),
+        new ViewNode('text', { value: __s(__f.get("number")(__d.n), typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'number(n)' : 0) }),
       ]),
     ] }),
     new ViewNode(SLOT_TAG, { name: 'control', fallback: () => [
-      ...(__d.show
-        ? [
-            new ViewNode('button', {
-              ref: this.__ref("fallbackButton"),
-              '@click': ((this.__h ??= {})[0] ??= (event) => this.events.activate(event)),
-            }, [
-              new ViewNode('text', { value: 'Ready' }),
-            ]),
-          ]
-        : [
-            new ViewNode('span', {}, [
-              new ViewNode('text', { value: 'Waiting' }),
-            ]),
+      __d.show
+        ? new ViewNode('button', {
+            ref: this.__ref("fallbackButton"),
+            '@click': ((this.__h ??= {})[0] ??= (event) => this.events.activate(event)),
+          }, [
+            new ViewNode('text', { value: 'Ready' }),
+          ])
+        : new ViewNode('span', {}, [
+            new ViewNode('text', { value: 'Waiting' }),
           ]),
     ] }),
     new ViewNode(SLOT_TAG, { name: 'component', fallback: () => [

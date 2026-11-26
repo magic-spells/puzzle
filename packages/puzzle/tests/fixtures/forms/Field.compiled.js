@@ -111,18 +111,14 @@ Field.prototype.render = function () {
   const __d = this.getData();
 
   return new ViewNode('div', { class: __d.rootClass }, [
-    ...(__d.label
-      ? [
-          new ViewNode('label', {
-            for: __d.id,
-            class: 'mb-1.5 block text-sm font-medium text-ink',
-          }, [
-            new ViewNode('text', { value: __s(__d.label, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'label' : 0) }),
-          ]),
-        ]
-      : [
-          new ViewNode('#'),
-        ]),
+    __d.label
+      ? new ViewNode('label', {
+          for: __d.id,
+          class: 'mb-1.5 block text-sm font-medium text-ink',
+        }, [
+          new ViewNode('text', { value: __s(__d.label, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'label' : 0) }),
+        ])
+      : new ViewNode('#'),
     new ViewNode('input', {
       id: __d.id,
       type: __d.type,
@@ -139,28 +135,20 @@ Field.prototype.render = function () {
       '@blur': ((this.__h ??= {})[1] ??= (event) => this.events.handleBlur(event)),
       '@focus': ((this.__h ??= {})[2] ??= (event) => this.events.handleFocus(event)),
     }, []),
-    ...(__d.error
-      ? [
-          new ViewNode('p', {
-            id: __d.descId,
-            class: 'mt-1.5 text-sm text-danger',
-          }, [
-            new ViewNode('text', { value: __s(__d.error, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'error' : 0) }),
-          ]),
-        ]
-      : [
-          ...(__d.hint
-            ? [
-                new ViewNode('p', {
-                  id: __d.descId,
-                  class: 'mt-1.5 text-sm text-muted',
-                }, [
-                  new ViewNode('text', { value: __s(__d.hint, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'hint' : 0) }),
-                ]),
-              ]
-            : [
-                new ViewNode('#'),
-              ]),
-        ]),
+    __d.error
+      ? new ViewNode('p', {
+          id: __d.descId,
+          class: 'mt-1.5 text-sm text-danger',
+        }, [
+          new ViewNode('text', { value: __s(__d.error, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'error' : 0) }),
+        ])
+      : __d.hint
+          ? new ViewNode('p', {
+              id: __d.descId,
+              class: 'mt-1.5 text-sm text-muted',
+            }, [
+              new ViewNode('text', { value: __s(__d.hint, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'hint' : 0) }),
+            ])
+          : new ViewNode('#'),
   ]);
 };

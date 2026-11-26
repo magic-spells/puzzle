@@ -9,11 +9,11 @@ export default class ExprHandlers extends PuzzleView {
 
 import { ViewNode, displayValue as __s, listRows as __l } from '@magic-spells/puzzle';
 
-const __L0 = { key: (item) => ViewNode.keyOf(item), fields: ['done', 'name'] };
+const __L0 = { key: ViewNode.keyOf, fields: ['done', 'name'] };
 
 ExprHandlers.prototype.render = function () {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
+  const __f = this.ctx.formatters;
 
   return new ViewNode('puzzle-view', { class: 'handlers' }, [
     new ViewNode('button', { '@click': ((this.__h ??= {})[0] ??= (event) => this.events.clear(event)) }, [
@@ -40,7 +40,7 @@ ExprHandlers.prototype.render = function () {
       new ViewNode('text', { value: 'Pick' }),
     ]),
     new ViewNode('button', {
-      '@click': (event) => this.events.notify((__f["t"] || __f.__missing("t"))('saved', { name: __d.user?.name })),
+      '@click': (event) => this.events.notify(__f.get("t")('saved', { name: __d.user?.name })),
     }, [
       new ViewNode('text', { value: 'Notify' }),
     ]),
@@ -49,17 +49,15 @@ ExprHandlers.prototype.render = function () {
     }, [
       new ViewNode('text', { value: 'Purge' }),
     ]),
-    new ViewNode('ul', {},
-      __l(this, this, 0, __d.items, (s) =>
-        new ViewNode('li', {
-          key: s.k,
-          '@click': (s.h0 ??= (event) => this.events.select(s.item?.id, s.i)),
-          '@dblclick': (s.h1 ??= (event) => this.events.edit(s.item, event.detail)),
-          '@keydown:enter': (s.item?.done) ? (event) => this.events.undo(s.item) : null,
-        }, [
-          new ViewNode('text', { value: __s(s.item?.name, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'item.name' : 0) }),
-        ])
-      , __L0)
-    ),
+    new ViewNode('ul', {}, __l(this, this, 0, __d.items, (s) =>
+      new ViewNode('li', {
+        key: s.k,
+        '@click': (s.h0 ??= (event) => this.events.select(s.item?.id, s.i)),
+        '@dblclick': (s.h1 ??= (event) => this.events.edit(s.item, event.detail)),
+        '@keydown:enter': (s.item?.done) ? (event) => this.events.undo(s.item) : null,
+      }, [
+        new ViewNode('text', { value: __s(s.item?.name, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'item.name' : 0) }),
+      ])
+    , __L0)),
   ]);
 };

@@ -50,15 +50,15 @@ func TestLibraryCallInEveryValuePosition(t *testing.T) {
   <p class="x {#if on}{ capitalize(label) }{/if}">y</p>`))
 	wantAll(t, got,
 		// A brace-only attribute: a guarded library call.
-		`title: (__f["currency"] || __f.__missing("currency"))(__d.price),`,
+		`title: __f.get("currency")(__d.price),`,
 		// `||` stays logical OR.
 		`'data-or': __d.a || __d.b,`,
 		// A component prop: a library call over a method.
-		`items: (__f["truncate"] || __f.__missing("truncate"))(__d.list?.join(', '), 20)`,
+		`items: __f.get("truncate")(__d.list?.join(', '), 20)`,
 		// An interpolation inside an attribute value's inline {#if} branch.
-		`(__f["capitalize"] || __f.__missing("capitalize"))(__d.label)`,
+		`__f.get("capitalize")(__d.label)`,
 		// The registry read the calls need.
-		"const __f = this.ctx.formatters.getAll();",
+		"const __f = this.ctx.formatters;",
 	)
 	if regexp.MustCompile(`[^|]\| __[df]\.`).MatchString(got) {
 		t.Errorf("a pipe compiled to a bitwise OR:\n%s", got)
@@ -75,10 +75,10 @@ func TestConditionHeadersKeepJavaScriptOr(t *testing.T) {
   {#case status || 'none'}{:when 'a'}<b>d</b>{/case}
   <p class="x {#if on || off}on{/if}">y</p>`))
 	wantAll(t, got,
-		"...(__d.tags || __d.others",
-		"...(__d.a || __d.b",
-		"...(!(__d.user || __d.guest)",
-		"])(__d.status || 'none')),",
+		"    __d.tags || __d.others\n",
+		": __d.a || __d.b\n",
+		"    !(__d.user || __d.guest)\n",
+		")(__d.status || 'none'),",
 		"class: `x ${__d.on || __d.off ? 'on' : ''}`",
 	)
 	if strings.Contains(got, "__f") {
@@ -123,11 +123,11 @@ func TestTernaryConditionIsGrouped(t *testing.T) {
   <p class="y {#if on}a{#if p ? q : r}b{/if}{/if}">z</p>
   {#if x ?? y}<b>c</b>{/if}`))
 	wantAll(t, got,
-		"...((__d.mode === 'edit' ? __d.canEdit : __d.canView)\n",
-		"...((__d.a ? __d.b : __d.c)\n",
+		"    (__d.mode === 'edit' ? __d.canEdit : __d.canView)\n",
+		": (__d.a ? __d.b : __d.c)\n",
 		"${(__d.m ? __d.e : __d.v) ? 'on' : ''}",
 		"((__d.p ? __d.q : __d.r) ? 'b' : '')",
-		"...(__d.x ?? __d.y\n",
+		"    __d.x ?? __d.y\n",
 	)
 	nodeCheck(t, got)
 }
@@ -142,7 +142,7 @@ func TestTransformedFormValueIsOneWay(t *testing.T) {
 	}
 	wantAll(t, got,
 		`value: __d.name?.toUpperCase()`,
-		`value: (__f["capitalize"] || __f.__missing("capitalize"))(__d.name)`,
+		`value: __f.get("capitalize")(__d.name)`,
 	)
 }
 
@@ -156,7 +156,7 @@ func TestLibraryLoopKeyKeepsMap(t *testing.T) {
 	}
 	wantAll(t, got,
 		"__e(__d.items).map((item) =>",
-		`key: (__f["slugify"] || __f.__missing("slugify"))(item?.id)`,
+		`key: __f.get("slugify")(item?.id)`,
 	)
 }
 
@@ -168,7 +168,7 @@ func TestLooseEqualityKeepsJavaScriptMeaning(t *testing.T) {
 	got := compileSrc(t, coreSrc(`  {#if count == '1'}<b>a</b>{/if}
   <p data-x={ a != null }>{ x == null ? 'none' : x }</p>`))
 	wantAll(t, got,
-		"...(__d.count == '1'",
+		"    __d.count == '1'\n",
 		"'data-x': __d.a != null",
 		"__s(__d.x == null ? 'none' : __d.x,",
 	)
@@ -202,11 +202,11 @@ func TestObjectLiteralFunctionArgumentsCompile(t *testing.T) {
   <Card label={ t(key, { nested: { deep: n }, 'x-y': 1 }) } />
   {#for item in items}<li>{ t('row', { item, i: item.id }) }</li>{/for}`))
 	wantAll(t, got,
-		`(__f["t"] || __f.__missing("t"))('cart.count', { count: __d.n })`,
-		`(__f["resize"] || __f.__missing("resize"))(__d.photo, { height: 480, fit: __d.fit })`,
-		`(__f["t"] || __f.__missing("t"))('alt', { name: __d.user?.name })`,
-		`(__f["t"] || __f.__missing("t"))(__d.key, { nested: { deep: __d.n }, 'x-y': 1 })`,
-		`(__f["t"] || __f.__missing("t"))('row', { item: s.item, i: s.item?.id })`,
+		`__f.get("t")('cart.count', { count: __d.n })`,
+		`__f.get("resize")(__d.photo, { height: 480, fit: __d.fit })`,
+		`__f.get("t")('alt', { name: __d.user?.name })`,
+		`__f.get("t")(__d.key, { nested: { deep: __d.n }, 'x-y': 1 })`,
+		`__f.get("t")('row', { item: s.item, i: s.item?.id })`,
 	)
 	if strings.Contains(got, "__d.count:") || strings.Contains(got, "__d.height") {
 		t.Errorf("an object literal key was scoped:\n%s", got)
@@ -230,7 +230,7 @@ func TestLoopGuardImports(t *testing.T) {
 	mapped := compileSrc(t, coreSrc(`  <Card><Snippet rows>{#for r in rows}<li>{ r.name }</li>{/for}</Snippet></Card>`))
 	wantAll(t, mapped,
 		"loopItems as __e",
-		"...__e(rows).map((r) =>",
+		"(__e(rows).map((r) =>",
 	)
 	if strings.Contains(mapped, "loopRange") {
 		t.Errorf("no range loop, no loopRange import:\n%s", mapped)
@@ -291,7 +291,7 @@ func TestExpressionLanguageInEveryPosition(t *testing.T) {
 		name, body, want string
 	}{
 		{"method in text", "  <p>{ name.toUpperCase() }</p>", "__s(__d.name?.toUpperCase(),"},
-		{"library function in text", "  <p>{ currency(price) }</p>", `__s((__f["currency"] || __f.__missing("currency"))(__d.price),`},
+		{"library function in text", "  <p>{ currency(price) }</p>", `__s(__f.get("currency")(__d.price),`},
 		{"Math", "  <p>{ Math.round(x) }</p>", "__s(Math.round(__d.x),"},
 		{"at(-1)", "  <p>{ items.at(-1) }</p>", "__d.items?.at(-1)"},
 		{"brace attribute", "  <button disabled={ !draft.trim() }>x</button>", "disabled: !__d.draft?.trim()"},
@@ -300,14 +300,14 @@ func TestExpressionLanguageInEveryPosition(t *testing.T) {
 		{"component prop with an arrow", "  <Card items={ list.filter(x => x.on) } />", "items: __d.list?.filter((x) => x?.on)"},
 		{"marker argument", `  <Slot name="row" item={ rows.at(0) } />`, "item: __d.rows?.at(0)"},
 		{"key", "  {#for t in todos}<li key={ t.id.toString() }>x</li>{/for}", "key: (t) => t?.id?.toString()"},
-		{"if subject", "  {#if items.includes(x)}<b>a</b>{/if}", "...(__d.items?.includes(__d.x)"},
-		{"case subject", "  {#case kind.trim()}{:when 'a'}<b>d</b>{/case}", "])(__d.kind?.trim()))"},
+		{"if subject", "  {#if items.includes(x)}<b>a</b>{/if}", "    __d.items?.includes(__d.x)\n"},
+		{"case subject", "  {#case kind.trim()}{:when 'a'}<b>d</b>{/case}", ")(__d.kind?.trim()),"},
 		{"when value", "  {#case kind}{:when modes.at(0)}<b>d</b>{/case}", "__c === (__d.modes?.at(0))"},
 		{"for collection", "  {#for t in todos.filter(t => !t.done)}<li>x</li>{/for}", "__l(this, this, 0, __d.todos?.filter((t) => !t?.done), (s) =>"},
 		{"range bound", "  {#for 1...Math.max(n, 1)}<li>x</li>{/for}", "__r(1, Math.max(__d.n, 1))"},
 		{"template literal", "  <p>{ `${a} ${b}` }</p>", "__s(`${__d.a} ${__d.b}`,"},
 		{"length", "  <p>{ items.length }</p>", "__s(__d.items?.length,"},
-		{"length condition", "  {#if items.length}<b>a</b>{/if}", "...(__d.items?.length\n"},
+		{"length condition", "  {#if items.length}<b>a</b>{/if}", "    __d.items?.length\n"},
 		{"nullish fallback", "  <p>{ name ?? 'anon' }</p>", "__s(__d.name ?? 'anon',"},
 		{"handler condition", "  <button @click={ items.some(i => i.on) ? save : null }>x</button>", "(__d.items?.some((i) => i?.on)) ? (event) => this.events.save(event) : null"},
 		{"handler arguments", "  <button @click={ save(x.trim(), items.length) }>x</button>", "this.events.save(__d.x?.trim(), __d.items?.length)"},
@@ -346,7 +346,7 @@ func TestCalledLoopKeyKeepsMap(t *testing.T) {
 	}
 	wantAll(t, got,
 		"__e(__d.items).map((item) =>",
-		`key: (__f["slugify"] || __f.__missing("slugify"))(item?.id)`,
+		`key: __f.get("slugify")(item?.id)`,
 	)
 }
 
@@ -355,7 +355,7 @@ func TestCalledLoopKeyKeepsMap(t *testing.T) {
 func TestSizeIsAnOrdinaryField(t *testing.T) {
 	got := compileSrc(t, coreSrc(`  <p>{ file.size } { items.length }</p>
   {#if items.length > 0}<b>a</b>{/if}`))
-	wantAll(t, got, "__d.file?.size", "__d.items?.length", "...(__d.items?.length > 0")
+	wantAll(t, got, "__d.file?.size", "__d.items?.length", "    __d.items?.length > 0\n")
 	if strings.Contains(got, "sizeOf") || strings.Contains(got, "__z") {
 		t.Errorf("no module imports a size helper:\n%s", got)
 	}

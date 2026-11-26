@@ -51,15 +51,13 @@ SnippetList.prototype.render = function () {
         new ViewNode('text', { value: 'Fallback heading' }),
       ] }),
     ]),
-    new ViewNode('ul', {},
-      __l(this, this, 0, __d.users, (s) =>
-        new ViewNode('li', { key: s.k }, [
-          new ViewNode(SLOT_TAG, { name: 'row', args: { user: s.item, group: __d.group }, fallback: () => [
-            new ViewNode('text', { value: __s(s.item?.name, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'user.name' : 0) }),
-          ] }),
-        ])
-      , __L0)
-    ),
+    new ViewNode('ul', {}, __l(this, this, 0, __d.users, (s) =>
+      new ViewNode('li', { key: s.k }, [
+        new ViewNode(SLOT_TAG, { name: 'row', args: { user: s.item, group: __d.group }, fallback: () => [
+          new ViewNode('text', { value: __s(s.item?.name, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'user.name' : 0) }),
+        ] }),
+      ])
+    , __L0)),
     new ViewNode('p', { class: 'snippet-default' }, [
       new ViewNode(SLOT_TAG, { args: { group: __d.group }, fallback: () => [
         new ViewNode('text', { value: 'Fallback default' }),

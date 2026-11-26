@@ -27,14 +27,14 @@ import { hashRouter, memoryRouter } from '../client-runtime/router/modes.js';
 const h = (tag, attrs = {}, children = []) => new ViewNode(tag, attrs, children);
 const text = (value) => new ViewNode('text', { value });
 
-// Renders hrefs the way compiled render code does: through the formatter map, so
+// Renders hrefs the way compiled render code does: through the registry, so
 // the built-in `link` formatter (bound to router.url) is the thing under test.
 class Nav extends PuzzleView {
 	render() {
-		const __f = this.ctx.formatters.getAll();
+		const __f = this.ctx.formatters;
 		return h('nav', {}, [
-			h('a', { href: __f.link('/about') }, [text('About')]),
-			h('a', { href: __f.link('https://example.com') }, [text('External')]),
+			h('a', { href: __f.get('link')('/about') }, [text('About')]),
+			h('a', { href: __f.get('link')('https://example.com') }, [text('External')]),
 		]);
 	}
 }

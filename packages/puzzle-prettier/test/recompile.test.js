@@ -160,8 +160,8 @@ describe.skipIf(!canRun)('formatted corpus still compiles with pzlc', () => {
 				// as written.
 				for (const literal of [
 					'new ViewNode(Frame.Wrapper',
-					'(__f["truncate"] || __f.__missing("truncate"))(__d.name?.trim(), 20)',
-					'label: (__f["compact_number"] || __f.__missing("compact_number"))(__d.followers)',
+					'__f.get("truncate")(__d.name?.trim(), 20)',
+					'label: __f.get("compact_number")(__d.followers)',
 					"('cart.count', { count: __d.items?.length, unit: __d.unit })",
 					"(__d.total, { digits: 2, close: '}' })",
 					'`${__d.items?.filter((n) => n > 1)?.length} of ${__d.items?.length} }`',
@@ -200,7 +200,7 @@ describe.skipIf(!canRun)('formatted corpus still compiles with pzlc', () => {
 				// Brace strings inside interpolations and an object-literal argument.
 				for (const literal of [
 					"__d.name === '}' ? 'yes' : 'no'",
-					"(__f[\"truncate\"] || __f.__missing(\"truncate\"))('{' + __d.name + '}', 8)",
+					"__f.get(\"truncate\")('{' + __d.name + '}', 8)",
 					"('k', { close: '}', count: __d.items?.length })",
 				]) {
 					expect(readFileSync(outOrig, 'utf8'), literal).toContain(literal);

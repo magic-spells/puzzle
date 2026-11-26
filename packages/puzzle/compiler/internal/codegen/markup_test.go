@@ -42,7 +42,7 @@ func TestMarkupInterpolationLowersToLiveHTML(t *testing.T) {
 	for _, want := range []string{
 		// The markup call's argument compiles as a text interpolation's value
 		// does; the markup function itself never reaches the registry.
-		`new ViewNode('#html', { value: __s((__f["truncate"] || __f.__missing("truncate"))(__d.body, 40), typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'raw(truncate(body, 40))' : 0) })`,
+		`new ViewNode('#html', { value: __s(__f.get("truncate")(__d.body, 40), typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'raw(truncate(body, 40))' : 0) })`,
 		`new ViewNode('#html', { value: __s(__d.note, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'newline_to_br(note)' : 0), br: true })`,
 		// The markup node splits the coalesced text run the way an element does.
 		`new ViewNode('text', { value: 'Before ' + __s(__d.lead, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'lead' : 0) + ' ' })`,
@@ -52,7 +52,7 @@ func TestMarkupInterpolationLowersToLiveHTML(t *testing.T) {
 			t.Errorf("missing %s in:\n%s", want, got)
 		}
 	}
-	for _, forbidden := range []string{`__f["raw"]`, `__f["newline_to_br"]`, `"raw"`} {
+	for _, forbidden := range []string{`__f.get("raw")`, `__f.get("newline_to_br")`, `"raw"`} {
 		if strings.Contains(got, forbidden) {
 			t.Errorf("markup function reached the registry (%s):\n%s", forbidden, got)
 		}

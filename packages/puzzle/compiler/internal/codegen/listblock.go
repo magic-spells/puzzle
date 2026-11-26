@@ -17,7 +17,7 @@ import (
 // array — cached row vnodes for rows whose inputs did not change:
 //
 //	import { ViewNode, listRows as __l } from '@magic-spells/puzzle';
-//	const __L0 = { key: (todo) => ViewNode.keyOf(todo) };
+//	const __L0 = { key: ViewNode.keyOf };
 //	…
 //	__l(this, this, 0, __d.filteredTodos, (s) =>
 //	  new ViewNode(TodoItem, { key: s.k, todo: s.item, … }, [])
@@ -65,7 +65,7 @@ type loopSite struct {
 	item    string // the loop variable name (for attributing item reads)
 	counter string // the counter name, "" when the loop declares none
 
-	keyArrow    string // the meta's `key:` function, always emitted
+	keyFn       string // the meta's `key:` function, always emitted
 	counterRead bool   // the body reads the counter → `counter: true`
 	ctrl        bool   // the body holds a controlled form value → `ctrl: true`
 	rootBits    int    // bitmask over the file's `__roots` → `roots: <int>`
@@ -258,7 +258,7 @@ func (c *compiler) rowStableRefs(refs []string, scope scopeMap) bool {
 // emitListCall emits the lowered item-form loop. The call replaces the `.map(…)`
 // expression in place and keeps its surrounding layout: the body at ind+2 and
 // the `, __L<id>)` closer at the call's own column (D170 emission contract).
-func (c *compiler) emitListCall(f *parser.For, ind int, scope scopeMap, keyArrow string) (string, error) {
+func (c *compiler) emitListCall(f *parser.For, ind int, scope scopeMap, keyFn string) (string, error) {
 	depth := len(c.loops)
 	owner := "this"
 	if depth > 0 {
@@ -267,14 +267,14 @@ func (c *compiler) emitListCall(f *parser.For, ind int, scope scopeMap, keyArrow
 	name := scopeName(depth)
 
 	site := &loopSite{
-		id:       len(c.listSites),
-		depth:    depth,
-		scope:    name,
-		item:     f.Item,
-		counter:  f.Counter,
-		keyArrow: keyArrow,
-		ctrl:     forBodyHasControl(f.Body),
-		fields:   map[string]bool{},
+		id:      len(c.listSites),
+		depth:   depth,
+		scope:   name,
+		item:    f.Item,
+		counter: f.Counter,
+		keyFn:   keyFn,
+		ctrl:    forBodyHasControl(f.Body),
+		fields:  map[string]bool{},
 	}
 	c.listSites = append(c.listSites, site)
 
@@ -300,23 +300,24 @@ func (c *compiler) emitListCall(f *parser.For, ind int, scope scopeMap, keyArrow
 		sp(ind) + ", __L" + strconv.Itoa(site.id) + ")", nil
 }
 
-// listKeyArrow builds the site meta's `key:` function and reports whether the
+// listKeyFn builds the site meta's `key:` function and reports whether the
 // site can be lowered at all.
 //
-// The synthetic key is the D58 resolver, hoisted verbatim. An explicit
+// The synthetic key is the D58 resolver itself: listRows calls `key(item, i)`
+// bare, and the static keyOf reads neither `this` nor the index. An explicit
 // `key={ … }` moves into the meta with the loop locals left BARE (they are the
 // arrow's own parameters), which is only possible while the expression reads
 // nothing that lives inside render(): the const sits at module scope, where
 // `__d` and `__f` do not exist. A key that reads either keeps today's
 // `.map(…)` emission for the whole site rather than emitting an arrow
 // that throws on its first call.
-func (c *compiler) listKeyArrow(f *parser.For, scope scopeMap) (arrow string, lowerable bool, err error) {
+func (c *compiler) listKeyFn(f *parser.For, scope scopeMap) (fn string, lowerable bool, err error) {
 	root, explicitKey, err := c.forBodyRoot(f, scope)
 	if err != nil {
 		return "", false, err
 	}
 	if !explicitKey {
-		return "(" + f.Item + ") => ViewNode.keyOf(" + f.Item + ")", true, nil
+		return "ViewNode.keyOf", true, nil
 	}
 
 	// The arrow's scope is its OWN parameters, not the enclosing render scope.
@@ -513,7 +514,7 @@ func (c *compiler) emitListMetaConsts() string {
 		b.WriteString("const __L")
 		b.WriteString(strconv.Itoa(site.id))
 		b.WriteString(" = { key: ")
-		b.WriteString(site.keyArrow)
+		b.WriteString(site.keyFn)
 		// Non-default fields only, in the fixed order of the D170 emission
 		// contract; the runtime reads the rest with defaults (false, 0, []).
 		if site.counterRead {

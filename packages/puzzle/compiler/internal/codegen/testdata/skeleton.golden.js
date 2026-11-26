@@ -27,14 +27,12 @@ Skeleton.prototype.renderSkeleton = function () {
   const __d = this.getData();
 
   return new ViewNode('puzzle-view', { class: 'post-detail' }, [
-    new ViewNode('div', { class: 'animate-pulse' },
-      [1, 2, 3].map((n) =>
-        new ViewNode('div', {
-          key: n,
-          class: 'bg-skeleton h-4',
-          'data-row': n,
-        }, [])
-      )
-    ),
+    new ViewNode('div', { class: 'animate-pulse' }, [1, 2, 3].map((n) =>
+      new ViewNode('div', {
+        key: n,
+        class: 'bg-skeleton h-4',
+        'data-row': n,
+      }, [])
+    )),
   ]);
 };

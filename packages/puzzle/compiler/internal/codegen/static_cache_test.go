@@ -70,7 +70,7 @@ func TestStaticCacheWrapperLayout(t *testing.T) {
 	}
 }
 
-// The prefix counts toward startCol in the attrsMultiline width decision, so a
+// The prefix counts toward startCol in the emitAttrs width decision, so a
 // wrapped element wraps its attributes where an unwrapped one would not.
 func TestStaticCachePrefixCountsTowardWidth(t *testing.T) {
 	cls := strings.Repeat("x", 70)

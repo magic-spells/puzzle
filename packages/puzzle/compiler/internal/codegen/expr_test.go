@@ -103,10 +103,10 @@ func TestLowering(t *testing.T) {
 		{"method", "name.trim()", nil, "__d.name?.trim()"},
 		{"method result", "name.trim().length", nil, "__d.name?.trim()?.length"},
 		{"method with args", "tags.join(', ')", nil, "__d.tags?.join(', ')"},
-		{"library function", "currency(price, '$')", nil, `(__f["currency"] || __f.__missing("currency"))(__d.price, '$')`},
+		{"library function", "currency(price, '$')", nil, `__f.get("currency")(__d.price, '$')`},
 		{"nested library functions", "truncate(capitalize(title), 20)", nil,
-			`(__f["truncate"] || __f.__missing("truncate"))((__f["capitalize"] || __f.__missing("capitalize"))(__d.title), 20)`},
-		{"library result member", "json(x).length", nil, `(__f["json"] || __f.__missing("json"))(__d.x)?.length`},
+			`__f.get("truncate")(__f.get("capitalize")(__d.title), 20)`},
+		{"library result member", "json(x).length", nil, `__f.get("json")(__d.x)?.length`},
 		{"Math function", "Math.round(x * 100) / 100", nil, "Math.round(__d.x * 100) / 100"},
 		{"bare global", "Number(x) + parseInt(y)", nil, "Number(__d.x) + parseInt(__d.y)"},
 		{"URI global", "'/search?q=' + encodeURIComponent(q)", nil, "'/search?q=' + encodeURIComponent(__d.q)"},
@@ -153,14 +153,14 @@ func TestLowering(t *testing.T) {
 		{"array", "[a, b.c]", nil, "[__d.a, __d.b?.c]"},
 		{"array member", "[a, b][0]", nil, "[__d.a, __d.b]?.[0]"},
 		{"object keys stay keys", "t('k', { height: 480, width: w })", nil,
-			`(__f["t"] || __f.__missing("t"))('k', { height: 480, width: __d.w })`},
-		{"object shorthand expands", "t('k', { count })", nil, `(__f["t"] || __f.__missing("t"))('k', { count: __d.count })`},
+			`__f.get("t")('k', { height: 480, width: __d.w })`},
+		{"object shorthand expands", "t('k', { count })", nil, `__f.get("t")('k', { count: __d.count })`},
 		{"object quoted key", "t('k', { 'cart.count': n, 'ok': 1 })", nil,
-			`(__f["t"] || __f.__missing("t"))('k', { 'cart.count': __d.n, ok: 1 })`},
+			`__f.get("t")('k', { 'cart.count': __d.n, ok: 1 })`},
 		{"object keyword keys", "t('k', { default: a, class: c })", nil,
-			`(__f["t"] || __f.__missing("t"))('k', { default: __d.a, class: __d.c })`},
-		{"object row shorthand", "t('k', { todo, n })", row, `(__f["t"] || __f.__missing("t"))('k', { todo: s.item, n: __d.n })`},
-		{"empty object", "t('k', {})", nil, `(__f["t"] || __f.__missing("t"))('k', {})`},
+			`__f.get("t")('k', { default: __d.a, class: __d.c })`},
+		{"object row shorthand", "t('k', { todo, n })", row, `__f.get("t")('k', { todo: s.item, n: __d.n })`},
+		{"empty object", "t('k', {})", nil, `__f.get("t")('k', {})`},
 		// Template literals.
 		{"template literal", "`hi ${name}!`", nil, "`hi ${__d.name}!`"},
 		{"template literal row local", "`${todo.id}`", row, "`${s.item?.id}`"},
@@ -173,7 +173,7 @@ func TestLowering(t *testing.T) {
 		{"length inside an arrow", "lists.filter(l => l.length > 0)", nil, "__d.lists?.filter((l) => l?.length > 0)"},
 		{"a size field", "file.size", nil, "__d.file?.size"},
 		{"a root named size", "size", nil, "__d.size"},
-		{"a size key", "t('k', { size: 1 })", nil, `(__f["t"] || __f.__missing("t"))('k', { size: 1 })`},
+		{"a size key", "t('k', { size: 1 })", nil, `__f.get("t")('k', { size: 1 })`},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -297,7 +297,7 @@ func TestHandlerLowering(t *testing.T) {
 		// §9 c: the handler's own call names the view's handler; a call inside
 		// its arguments names the library.
 		{"view handler named like a function", "date(x)", nil, "(event) => this.events.date(__d.x)", false, false},
-		{"library call in an argument", "save(t('saved'))", nil, `(event) => this.events.save((__f["t"] || __f.__missing("t"))('saved'))`, false, false},
+		{"library call in an argument", "save(t('saved'))", nil, `(event) => this.events.save(__f.get("t")('saved'))`, false, false},
 		{"method call in an argument", "save(draft.trim(), items.length)", nil, "(event) => this.events.save(__d.draft?.trim(), __d.items?.length)", false, false},
 		{"arrow in an argument", "save(items.filter(t => t.done))", nil, "(event) => this.events.save(__d.items?.filter((t) => t?.done))", false, false},
 		{"object argument", "save({ id: 1 })", nil, "(event) => this.events.save({ id: 1 })", true, false},
@@ -340,7 +340,7 @@ func TestHandlerLibraryCallBindsRegistry(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(res.JS, "const __f = this.ctx.formatters.getAll();") {
+	if !strings.Contains(res.JS, "const __f = this.ctx.formatters;") {
 		t.Errorf("a library call in a handler argument must bind __f:\n%s", res.JS)
 	}
 	res, err = compileTemplate(t, "<puzzle-view><button @click={ t('saved') }>x</button></puzzle-view>", "")
@@ -479,7 +479,7 @@ func TestEventAsDataAndInAHandlerIsAnError(t *testing.T) {
 }
 
 // An outer {#for} variable named `event` read by an inner loop's key is a loop
-// local, not data: the key's trial lowering (listKeyArrow), which sees only the
+// local, not data: the key's trial lowering (listKeyFn), which sees only the
 // inner row's own names, must not record it as a data read and fail the build
 // beside a DOM-event handler.
 func TestNestedLoopKeyReadingAnOuterEventLoopVariableCompiles(t *testing.T) {

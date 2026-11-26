@@ -4,10 +4,9 @@
  * transforms (constellation/doc/DOC-SPEC.md §6). Apps register theirs under the
  * `functions` config key.
  *
- * Compiled render code receives the RAW function map (getAll()), never the registry
- * instance: it calls `__formatters.escape(...)` and, for every library call,
- * `(__formatters.name || __formatters.__missing('name'))(...)` directly — the
- * __missing typo-guard (v1.12, D43).
+ * Compiled render code holds the registry itself (`const __f = this.ctx.formatters;`)
+ * and makes every library call as `__f.get("name")(...)`, so an unregistered name
+ * reaches the __missing typo-guard (v1.12, D43) inside get().
  *
  * Renamed from FilterRegistry (D7), with the prototype's bugs fixed: null/undefined
  * render as '', `round` returns a number, `number_with_delimiter` keeps decimals.
@@ -161,8 +160,8 @@ export class FormatterRegistry {
 			if (!this.formatters[name]) this.register(name, fn);
 		}
 
-		// Unknown-function guard (v1.12, D43): __missing is a FACTORY. Codegen
-		// emits `(__f.name || __f.__missing('name'))(value, …)`, so an unregistered
+		// Unknown-function guard (v1.12, D43): __missing is a FACTORY. get() falls
+		// back to it and compiled render code calls get(), so an unregistered
 		// name lands here with its own spelling. We log ONE console.error per
 		// unknown name (with a did-you-mean when a registered name is within edit
 		// distance ≤ 2) and return a pass-through function, so a display-only typo
@@ -214,13 +213,13 @@ export class FormatterRegistry {
 
 	/** @param {string} name @returns {Formatter} */
 	get(name) {
-		// Stay consistent with the compiled call form (D43): return a callable for
-		// unknown names too — the __missing factory logs once and yields a
-		// pass-through formatter.
+		// The compiled call form (D43): render code calls `__f.get("name")(…)`, so
+		// this returns a callable for unknown names too — the __missing factory
+		// logs once and yields a pass-through formatter.
 		return this.formatters[name] || this.formatters.__missing(name);
 	}
 
-	// The raw function map — this is what compiled render code receives
+	// The raw function map itself, not a copy. Compiled render code calls get().
 	/** @returns {Record<string, Formatter>} */
 	getAll() {
 		return this.formatters;

@@ -11,29 +11,17 @@ Conditional.prototype.render = function () {
 
   return new ViewNode('puzzle-view', {}, [
     new ViewNode('input', { class: 'before' }, []),
-    ...(__d.selected
-      ? [
-          ...(__d.open
-            ? [
-                __dc(Card, { title: 'selected' }, []),
-              ]
-            : [
-                new ViewNode('p', {}, [
-                  new ViewNode('text', { value: 'closed' }),
-                ]),
-              ]),
-        ]
-      : [
-          ...(__d.open
-            ? [
-                new ViewNode(Card, { title: 'selected' }, []),
-              ]
-            : [
-                new ViewNode('p', {}, [
-                  new ViewNode('text', { value: 'closed' }),
-                ]),
-              ]),
-        ]),
+    __d.selected
+      ? __d.open
+          ? __dc(Card, { title: 'selected' }, [])
+          : new ViewNode('p', {}, [
+              new ViewNode('text', { value: 'closed' }),
+            ])
+      : __d.open
+          ? new ViewNode(Card, { title: 'selected' }, [])
+          : new ViewNode('p', {}, [
+              new ViewNode('text', { value: 'closed' }),
+            ]),
     new ViewNode('input', { class: 'after' }, []),
   ]);
 };

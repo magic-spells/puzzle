@@ -9,11 +9,11 @@ export default class ExprMethods extends PuzzleView {
 
 import { ViewNode, displayValue as __s, listRows as __l } from '@magic-spells/puzzle';
 
-const __L0 = { key: (item) => ViewNode.keyOf(item), counter: true, fields: ['qty'], deep: true };
+const __L0 = { key: ViewNode.keyOf, counter: true, fields: ['qty'], deep: true };
 
 ExprMethods.prototype.render = function () {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
+  const __f = this.ctx.formatters;
 
   return new ViewNode('puzzle-view', { class: 'methods' }, [
     new ViewNode('h1', { title: __d.title?.trim() }, [
@@ -53,23 +53,17 @@ ExprMethods.prototype.render = function () {
       new ViewNode('text', { value: __s(__d.items?.find((item) => item?.qty > 1)?.name, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'items.find(item => item.qty > 1)?.name' : 0) }),
     ]),
     new ViewNode('p', { class: 'label' }, [
-      new ViewNode('text', { value: __s((__f["currency"] || __f.__missing("currency"))(__d.price, '$'), typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'currency(price, \'$\')' : 0) + ' ' + __s((__f["truncate"] || __f.__missing("truncate"))((__f["capitalize"] || __f.__missing("capitalize"))(__d.title), 20), typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'truncate(capitalize(title), 20)' : 0) }),
+      new ViewNode('text', { value: __s(__f.get("currency")(__d.price, '$'), typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'currency(price, \'$\')' : 0) + ' ' + __s(__f.get("truncate")(__f.get("capitalize")(__d.title), 20), typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'truncate(capitalize(title), 20)' : 0) }),
     ]),
-    ...(__d.items?.filter((item) => !item?.done)?.length > 0
-      ? [
-          new ViewNode('ul', {},
-            __l(this, this, 0, __d.items?.filter((item) => !item?.done), (s) =>
-              new ViewNode('li', {
-                key: s.k,
-                class: 'row',
-              }, [
-                new ViewNode('text', { value: __s(s.i + 1, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'i + 1' : 0) + '. ' + __s(s.item?.name?.trim(), typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'item.name.trim()' : 0) + ' — ' + __s(s.item?.tags?.map((tag) => tag?.toUpperCase())?.join('/'), typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'item.tags.map(tag => tag.toUpperCase()).join(\'/\')' : 0) + ' ' + __s(s.item?.qty, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'item.qty' : 0) }),
-              ])
-            , __L0)
-          ),
-        ]
-      : [
-          new ViewNode('#'),
-        ]),
+    __d.items?.filter((item) => !item?.done)?.length > 0
+      ? new ViewNode('ul', {}, __l(this, this, 0, __d.items?.filter((item) => !item?.done), (s) =>
+          new ViewNode('li', {
+            key: s.k,
+            class: 'row',
+          }, [
+            new ViewNode('text', { value: __s(s.i + 1, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'i + 1' : 0) + '. ' + __s(s.item?.name?.trim(), typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'item.name.trim()' : 0) + ' — ' + __s(s.item?.tags?.map((tag) => tag?.toUpperCase())?.join('/'), typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'item.tags.map(tag => tag.toUpperCase()).join(\'/\')' : 0) + ' ' + __s(s.item?.qty, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'item.qty' : 0) }),
+          ])
+        , __L0))
+      : new ViewNode('#'),
   ]);
 };

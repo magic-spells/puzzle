@@ -373,13 +373,13 @@ describe('the link library function with a named target (D196)', () => {
 // ---------------------------------------------------------------------------
 // prerender: hybrid and static output resolve names exactly like the live app.
 
-// renders hrefs the way compiled render code does, through the formatter map
+// renders hrefs the way compiled render code does, through the registry
 class Nav extends PuzzleView {
 	render() {
-		const __f = this.ctx.formatters.getAll();
+		const __f = this.ctx.formatters;
 		return h('nav', {}, [
-			h('a', { class: 'named', href: __f.link({ name: 'album', params: { id: 7 }, hash: 'top' }) }, [text('Album')]),
-			h('a', { class: 'plain', href: __f.link('/about') }, [text('About')]),
+			h('a', { class: 'named', href: __f.get('link')({ name: 'album', params: { id: 7 }, hash: 'top' }) }, [text('Album')]),
+			h('a', { class: 'plain', href: __f.get('link')('/about') }, [text('About')]),
 		]);
 	}
 }
@@ -387,8 +387,8 @@ Nav.__pzlModule = 'app/views/Nav.pzl';
 
 class Plain extends PuzzleView {
 	render() {
-		const __f = this.ctx.formatters.getAll();
-		return h('nav', {}, [h('a', { href: __f.link('/about') }, [text('About')])]);
+		const __f = this.ctx.formatters;
+		return h('nav', {}, [h('a', { href: __f.get('link')('/about') }, [text('About')])]);
 	}
 }
 Plain.__pzlModule = 'app/views/Plain.pzl';

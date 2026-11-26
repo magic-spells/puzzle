@@ -13,33 +13,21 @@ Unless.prototype.render = function () {
   const __d = this.getData();
 
   return new ViewNode('puzzle-view', { class: 'account' }, [
-    ...(!__d.user?.verified
-      ? [
-          new ViewNode('p', { class: 'warn' }, [
-            new ViewNode('text', { value: 'Please verify your account.' }),
-          ]),
-        ]
-      : [
-          new ViewNode('p', { class: 'ok' }, [
-            new ViewNode('text', { value: 'You are verified.' }),
-          ]),
+    !__d.user?.verified
+      ? new ViewNode('p', { class: 'warn' }, [
+          new ViewNode('text', { value: 'Please verify your account.' }),
+        ])
+      : new ViewNode('p', { class: 'ok' }, [
+          new ViewNode('text', { value: 'You are verified.' }),
         ]),
-    ...(!__d.items?.length
-      ? [
-          new ViewNode('div', { class: 'empty' }, [
-            ...(!__d.loading
-              ? [
-                  new ViewNode('span', {}, [
-                    new ViewNode('text', { value: 'No items yet.' }),
-                  ]),
-                ]
-              : [
-                  new ViewNode('#'),
-                ]),
-          ]),
-        ]
-      : [
-          new ViewNode('#'),
-        ]),
+    !__d.items?.length
+      ? new ViewNode('div', { class: 'empty' }, [
+          !__d.loading
+            ? new ViewNode('span', {}, [
+                new ViewNode('text', { value: 'No items yet.' }),
+              ])
+            : new ViewNode('#'),
+        ])
+      : new ViewNode('#'),
   ]);
 };

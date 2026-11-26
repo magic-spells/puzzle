@@ -24,7 +24,7 @@ func TestListBlockSyntheticKey(t *testing.T) {
 	got := compileSrc(t, listSrc("  {#for todo in todos}<li>{ todo.text }</li>{/for}"))
 	// The site meta hoists the D58 resolver out of render(); the row root's
 	// FIRST attribute is the block's resolved key.
-	if !strings.Contains(got, "const __L0 = { key: (todo) => ViewNode.keyOf(todo), fields: ['text'] };") {
+	if !strings.Contains(got, "const __L0 = { key: ViewNode.keyOf, fields: ['text'] };") {
 		t.Errorf("expected the synthetic-key site meta:\n%s", got)
 	}
 	if !strings.Contains(got, "__l(this, this, 0, __d.todos, (s) =>") {
@@ -250,11 +250,11 @@ func TestListBlockNestedLoops(t *testing.T) {
 			"  {/for}",
 	))
 	for _, want := range []string{
-		"const __L0 = { key: (group) => ViewNode.keyOf(group), fields: ['items'] };",
-		"const __L1 = { key: (item) => ViewNode.keyOf(item), fields: ['name'] };",
+		"const __L0 = { key: ViewNode.keyOf, fields: ['items'] };",
+		"const __L1 = { key: ViewNode.keyOf, fields: ['name'] };",
 		"__l(this, this, 0, __d.groups, (s) =>",
 		"__l(this, s, 1, s.item?.items, (s1) =>",
-		"new ViewNode('p', {\n            key: s1.k,",
+		"new ViewNode('p', {\n        key: s1.k,",
 		"'@click': (s1.h0 ??= (event) => this.events.pick(s1.item, s.item)),",
 	} {
 		if !strings.Contains(got, want) {
@@ -324,7 +324,7 @@ func TestListBlockConditionalArityUnchanged(t *testing.T) {
 func TestListBlockByteStable(t *testing.T) {
 	src := listSrc("  {#for a in xs}<li>{ a.n }</li>{/for}\n  {#for b in ys}<li>{ b.n }</li>{/for}")
 	got := compileSrc(t, src)
-	if !strings.Contains(got, "const __L0 = { key: (a) => ViewNode.keyOf(a), fields: ['n'] };\nconst __L1 = { key: (b) => ViewNode.keyOf(b), fields: ['n'] };") {
+	if !strings.Contains(got, "const __L0 = { key: ViewNode.keyOf, fields: ['n'] };\nconst __L1 = { key: ViewNode.keyOf, fields: ['n'] };") {
 		t.Errorf("site metas must be emitted in source order:\n%s", got)
 	}
 	if again := compileSrc(t, src); again != got {
@@ -538,10 +538,10 @@ func TestListMetaEnclosingLocalMakesInnerVolatile(t *testing.T) {
 			"    </section>\n"+
 			"  {/for}",
 	))
-	if !strings.Contains(got, "const __L1 = { key: (item) => ViewNode.keyOf(item), fields: ['name'], volatile: true };") {
+	if !strings.Contains(got, "const __L1 = { key: ViewNode.keyOf, fields: ['name'], volatile: true };") {
 		t.Errorf("the inner site must be volatile:\n%s", got)
 	}
-	if !strings.Contains(got, "const __L0 = { key: (group) => ViewNode.keyOf(group), fields: ['items', 'label'] };") {
+	if !strings.Contains(got, "const __L0 = { key: ViewNode.keyOf, fields: ['items', 'label'] };") {
 		t.Errorf("the owning site records the read as its own field and stays non-volatile:\n%s", got)
 	}
 }
@@ -553,10 +553,10 @@ func TestListMetaEnclosingCounterMakesInnerVolatile(t *testing.T) {
 			"    <section>{#for item in group.items}<p>{ gi }: { item.name }</p>{/for}</section>\n"+
 			"  {/for}",
 	))
-	if !strings.Contains(got, "const __L1 = { key: (item) => ViewNode.keyOf(item), fields: ['name'], volatile: true };") {
+	if !strings.Contains(got, "const __L1 = { key: ViewNode.keyOf, fields: ['name'], volatile: true };") {
 		t.Errorf("a site reading the enclosing counter must be volatile:\n%s", got)
 	}
-	if !strings.Contains(got, "const __L0 = { key: (group) => ViewNode.keyOf(group), counter: true, fields: ['items'] };") {
+	if !strings.Contains(got, "const __L0 = { key: ViewNode.keyOf, counter: true, fields: ['items'] };") {
 		t.Errorf("the owning site records the counter read:\n%s", got)
 	}
 }
@@ -571,13 +571,13 @@ func TestListMetaEnclosingLocalPropagatesThroughMiddleSite(t *testing.T) {
 			"    {/for}</ul>\n"+
 			"  {/for}",
 	))
-	if !strings.Contains(got, "const __L1 = { key: (b) => ViewNode.keyOf(b), fields: ['cs'], volatile: true };") {
+	if !strings.Contains(got, "const __L1 = { key: ViewNode.keyOf, fields: ['cs'], volatile: true };") {
 		t.Errorf("the middle site must be volatile too:\n%s", got)
 	}
-	if !strings.Contains(got, "const __L2 = { key: (c) => ViewNode.keyOf(c), fields: ['n'], volatile: true };") {
+	if !strings.Contains(got, "const __L2 = { key: ViewNode.keyOf, fields: ['n'], volatile: true };") {
 		t.Errorf("the reading site must be volatile:\n%s", got)
 	}
-	if strings.Contains(got, "const __L0 = { key: (a) => ViewNode.keyOf(a), fields: ['bs', 'label'], volatile: true };") {
+	if strings.Contains(got, "const __L0 = { key: ViewNode.keyOf, fields: ['bs', 'label'], volatile: true };") {
 		t.Errorf("the owner must not be marked volatile by its own local:\n%s", got)
 	}
 }

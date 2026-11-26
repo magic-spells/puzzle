@@ -193,11 +193,7 @@ func (c *compiler) emitRawSVG(el *parser.Element, ind, startCol int, scope scope
 		return c.emitSVGRef(el, scope)
 	}
 	tagStr := "'" + el.Tag + "'"
-	multiline, err := c.attrsMultiline(el.Tag, el.Attrs, tagStr, startCol, false, scope, false)
-	if err != nil {
-		return "", err
-	}
-	attrsSeg, err := c.emitAttrs(el.Tag, el.Attrs, ind, multiline, scope, false)
+	attrsSeg, err := c.emitAttrs(el.Tag, tagStr, el.Attrs, ind, startCol, false, scope, false)
 	if err != nil {
 		return "", err
 	}
@@ -320,23 +316,11 @@ func svgAssetModule(attrs []parser.Attr, inner, filename, viewNodeImport string)
 }
 
 // svgAttrsLiteral renders a resolved SVG root's attributes as a single-line JS
-// object literal for the shared module. SVG file attrs are all static, but attrKV
+// object literal for the shared module. SVG file attrs are all static, but attrKVs
 // handles every attr kind (with an empty scope, since no expressions occur).
 func (c *compiler) svgAttrsLiteral(attrs []parser.Attr) (string, error) {
-	attrs = dropReservedLiteralAttrs(attrs)
-	if len(attrs) == 0 {
-		return "{}", nil
-	}
-	scope := scopeMap{}
-	parts := make([]string, 0, len(attrs))
-	for _, a := range attrs {
-		kv, err := c.attrKV("svg", a, scope, false, true)
-		if err != nil {
-			return "", err
-		}
-		parts = append(parts, kv)
-	}
-	return "{ " + strings.Join(parts, ", ") + " }", nil
+	kvs, err := c.attrKVs("svg", attrs, scopeMap{}, false)
+	return attrObject(kvs, 0, true), err
 }
 
 // uniqueSorted dedupes and sorts absolute inlined-file paths for the Result.

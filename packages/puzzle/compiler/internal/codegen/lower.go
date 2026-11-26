@@ -29,7 +29,7 @@ import (
 //	a.b   a?.b                       <a>?.b          every step optional: reads never throw (D173 V4)
 //	a[i]  a?.[i]                     <a>?.[<i>]
 //	(a?.b).c                         (<a?.b>)?.c     a Chain in object position keeps its parentheses
-//	f(a, b), library function        (__f["f"] || __f.__missing("f"))(<a>, <b>)   the D43 guard
+//	f(a, b), library function        __f.get("f")(<a>, <b>)   the D43 guard
 //	a.m(x), method                   <a>?.m(<x>)     a call on a missing receiver is undefined (§9 d)
 //	Math.round(x)  Number(x)         verbatim        a JavaScript global the language allows
 //	Object.keys(x)  values  entries  Object.keys(<x> ?? {})   a missing value is [], never a throw (render target only)
@@ -668,19 +668,13 @@ func (l *lowerer) libraryCall(id *expr.Identifier, args []expr.Node) {
 		l.w.WriteMapped(id.Name, id.Start.Offset)
 		l.w.WriteString("\")")
 	default:
-		l.w.WriteString(registryRef(id.Name))
+		// The registry's own get() (D43): the name is JSON-quoted, since the
+		// registry's keys are arbitrary strings, and an unregistered name
+		// resolves to the __missing factory, which warns once and passes the
+		// value through instead of crashing the view.
+		l.w.WriteString("__f.get(" + strconv.Quote(id.Name) + ")")
 	}
 	l.args(args)
-}
-
-// registryRef is the D43-guarded read of one function from the render's
-// registry: `(__f["name"] || __f.__missing("name"))`. The name is bracketed and
-// JSON-quoted uniformly — the registry's keys are arbitrary strings — and an
-// unregistered name resolves to the __missing factory, which warns once and
-// passes the value through instead of crashing the view.
-func registryRef(name string) string {
-	q := strconv.Quote(name)
-	return "(__f[" + q + "] || __f.__missing(" + q + "))"
 }
 
 func (l *lowerer) args(args []expr.Node) {
