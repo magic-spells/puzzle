@@ -119,8 +119,9 @@ function warnThisHandlers(view) {
 }
 
 /**
- * What the router and parents hand refresh()/preload()/prepareRefresh(): the
- * navigation's params and route snapshot, or a parent's new props.
+ * What the router and parents hand refresh()/preload(): the navigation's params
+ * and route snapshot, or a parent's new props. prepareRefresh() takes the same
+ * object without props.
  * @typedef {{ params?: Record<string, any>, props?: any, route?: any }} RefreshInput
  */
 
@@ -1704,7 +1705,7 @@ export class PuzzleView {
 	 * A SYNCHRONOUS data() throw propagates out of this call exactly as it does out
 	 * of refresh() (withTracking rethrows), already reconciled as a failure.
 	 *
-	 * @param {{ params?: Record<string, any>, route?: any }} [input] the destination
+	 * @param {Omit<RefreshInput, 'props'>} [input] the destination
 	 * @returns {?{ready: Promise<void>, commit: () => void, discard: () => void}}
 	 */
 	prepareRefresh({ params, route } = {}) {
