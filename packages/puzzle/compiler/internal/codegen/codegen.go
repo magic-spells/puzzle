@@ -1325,12 +1325,12 @@ func (c *compiler) emitFor(f *parser.For, ind int, scope scopeMap) (string, erro
 	// render-scope state cannot become a module-scope arrow. All three keep
 	// today's `.map(…)`.
 	if c.snippetDepth == 0 && c.mapDepth == 0 {
-		keyArrow, lowerable, err := c.listKeyArrow(f, scope)
+		keyFn, lowerable, err := c.listKeyFn(f, scope)
 		if err != nil {
 			return "", err
 		}
 		if lowerable {
-			return c.emitListCall(f, ind, scope, keyArrow)
+			return c.emitListCall(f, ind, scope, keyFn)
 		}
 	}
 

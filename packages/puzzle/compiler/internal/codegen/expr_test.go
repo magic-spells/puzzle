@@ -479,7 +479,7 @@ func TestEventAsDataAndInAHandlerIsAnError(t *testing.T) {
 }
 
 // An outer {#for} variable named `event` read by an inner loop's key is a loop
-// local, not data: the key's trial lowering (listKeyArrow), which sees only the
+// local, not data: the key's trial lowering (listKeyFn), which sees only the
 // inner row's own names, must not record it as a data read and fail the build
 // beside a DOM-event handler.
 func TestNestedLoopKeyReadingAnOuterEventLoopVariableCompiles(t *testing.T) {
