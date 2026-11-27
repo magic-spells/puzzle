@@ -28,7 +28,7 @@ The `app-<hash>.js` line is the framework size. `styles.css` is empty by design 
 app has no CSS, so nothing but the runtime is being weighed. The exact number
 tracks whichever `@magic-spells/puzzle` version is installed. The CLI's gzip
 figure can differ by a tenth: both gzip at level 9, but the framework's
-`npm run measure:size` uses Node's zlib, and reports 23.9 KB for this 0.10.0
+`npm run measure:size` uses Node's zlib, and reports 23.7 KB for this 0.10.1
 bundle, the figure the CHANGELOG cites.
 
 ## Files

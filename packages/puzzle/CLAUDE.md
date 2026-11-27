@@ -275,7 +275,8 @@ enforced, not merely advised.
   **23.0 KB gzip**, todos **27.0 KB gzip** (about +1 KB each over 0.8.0,
   mostly the D182–D189 built-in APIs).
 - **`0.10.0` (npm `latest`, tagged `v0.10.0`; `release/0.10.1` is the working
-  branch and is not stamped yet):** forms, server queries, tests and deploys. D190 `env` config values (`import.meta.env.KEY`); D191
+  branch, stamped `0.10.1` and not yet published — its notes are the CHANGELOG's
+  `## 0.10.1` section):** forms, server queries, tests and deploys. D190 `env` config values (`import.meta.env.KEY`); D191
   `setState()`/`getState()` (BREAKING: `setData()` is gone; a `setState()` of
   a key `data()` read re-runs `data()`, D23); D192 the opt-in `/forms`
   subpath (`createForm`); D193 server queries (`findMany` `query`,

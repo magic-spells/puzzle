@@ -14,7 +14,7 @@
     "node": ">=24"
   },
   "dependencies": {
-    "@magic-spells/puzzle": "^0.10.0"
+    "@magic-spells/puzzle": "^0.10.1"
   },
   "devDependencies": {
     "@tailwindcss/cli": "^4.1.14",

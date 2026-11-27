@@ -1,6 +1,6 @@
 {
 	"name": "@magic-spells/eslint-plugin-puzzle",
-	"version": "0.10.0",
+	"version": "0.10.1",
 	"description": "ESLint plugin for Puzzle Framework .pzl files — lints the <script> body as real JS/TS and the <style> body as CSS, and validates section structure",
 	"type": "module",
 	"license": "MIT",
